@@ -14,7 +14,7 @@
 *{box-sizing:border-box;margin:0;padding:0}
 :root{--bg:#fff;--panel:#f7f7f8;--ink:#111827;--muted:#6b7280;--line:#e5e7eb;--gold:#b89a5c;--blue:#2f66b1;--red:#8b1a1a}
 html{scroll-behavior:smooth;height:100%}
-body{font-family:"Gowun Batang","Noto Serif KR",serif;background:var(--bg);color:var(--ink);overflow-x:hidden}
+body{font-family:"Noto Serif KR",serif;background:var(--bg);color:var(--ink);overflow-x:hidden}
 button,input,textarea,select{font:inherit}
 button{cursor:pointer}
 a{color:inherit}
@@ -429,33 +429,7 @@ body.stella-open #stellaButton{display:none!important}
 </style>
 
 <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js">
-(function(){
-  function bindStellaLauncher(){
-    var btn = document.getElementById("stellaButton");
-    if(!btn || btn.dataset.stellaBound === "1") return;
-    btn.dataset.stellaBound = "1";
-    function launch(e){
-      if(e){ e.preventDefault(); e.stopPropagation(); }
-      if(typeof openStella === "function") openStella();
-      else{
-        var stella = document.getElementById("stella");
-        if(stella) stella.classList.add("active");
-        document.body.classList.add("stella-open");
-        btn.style.display = "none";
-        document.body.style.overflow = "hidden";
-      }
-    }
-    btn.addEventListener("click", launch, {passive:false});
-    btn.addEventListener("touchend", launch, {passive:false});
-    btn.onclick = launch;
-  }
-  if(document.readyState === "loading") document.addEventListener("DOMContentLoaded", bindStellaLauncher);
-  else bindStellaLauncher();
-  window.addEventListener("pageshow", bindStellaLauncher);
-})();
-
-</script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
 </head>
 <body>
 
@@ -676,7 +650,7 @@ body.stella-open #stellaButton{display:none!important}
 if (window.pdfjsLib) {
   pdfjsLib.GlobalWorkerOptions.workerSrc = "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js";
 }
-const STELLA_API_URL = "https://stella-api.yesblue0342.workers.dev/api/stella";
+const STELLA_API_URL = "/api/chat";
 const DEFAULT_STELLA_MODEL = "gpt-5.5";
 const STELLA_SYSTEM_PROMPT = [
   "Stella GPT입니다.",
@@ -739,9 +713,8 @@ function setAuthMode(mode){
 
 function openStella(){
   document.body.classList.add("stella-open");
-  const stellaBtn=document.getElementById("stellaButton"); if(stellaBtn) stellaBtn.style.display="none";
-  document.body.classList.add("stella-open");
-  const stellaBtn=document.getElementById("stellaButton"); if(stellaBtn) stellaBtn.style.display="none";
+  const stellaBtn = document.getElementById("stellaButton");
+  if (stellaBtn) stellaBtn.style.display = "none";
   $("#stella").classList.add("active");
   document.body.style.overflow = "hidden";
   currentUser = readJson(storeKeys.current, null);
