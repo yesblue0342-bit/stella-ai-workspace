@@ -1,148 +1,112 @@
 export default async function handler(req, res) {
+  if (req.method !== "GET") {
+    return res.status(405).json({
+      error: "Method not allowed"
+    });
+  }
+
   try {
-    const query = req.query.q;
-    const type = req.query.type || "web";
-    const provider = req.query.provider || "naver";
+    const query = String(req.query.q || "").trim();
+    const type = String(req.query.type || "web").toLowerCase();
+    const provider = String(req.query.provider || "naver").toLowerCase();
 
     if (!query) {
       return res.status(400).json({
-        error: "검색어가 없습니다."
+        error: "검색어가 없습니다.",
+        results: []
       });
     }
 
-    let results = [];
+    const results = await runSearch({
+      query,
+      type,
+      provider
+    });
 
-    if (provider === "naver") {
-      results = await searchNaver(query, type);
-
-      return res.status(200).json({
-        query,
-        provider: "naver",
-        type,
-        results
-      });
-    }
-
-    if (provider === "google") {
-      results = await searchGoogle(query);
-
-      return res.status(200).json({
-        query,
-        provider: "google",
-        type: "web",
-        results
-      });
-    }
-
-    if (provider === "wiki") {
-      results = await searchWikipedia(query);
-
-      return res.status(200).json({
-        query,
-        provider: "wiki",
-        type: "encyclopedia",
-        results
-      });
-    }
-
-    if (provider === "namu") {
-      results = await searchNamuWiki(query);
-
-      return res.status(200).json({
-        query,
-        provider: "namu",
-        type: "wiki",
-        results
-      });
-    }
-
-    if (provider === "knowledge") {
-      const wikiResults = await searchWikipedia(query);
-      const namuResults = await searchNamuWiki(query);
-
-      results = removeDuplicateLinks([
-        ...wikiResults,
-        ...namuResults
-      ]);
-
-      return res.status(200).json({
-        query,
-        provider: "knowledge",
-        type: "wiki",
-        results
-      });
-    }
-
-    if (provider === "all") {
-      const naverResults = await searchNaver(query, type);
-      const googleResults = await searchGoogle(query);
-      const wikiResults = await searchWikipedia(query);
-      const namuResults = await searchNamuWiki(query);
-
-      results = removeDuplicateLinks([
-        ...naverResults,
-        ...googleResults,
-        ...wikiResults,
-        ...namuResults
-      ]);
-
-      return res.status(200).json({
-        query,
-        provider: "all",
-        type,
-        results
-      });
-    }
-
-    return res.status(400).json({
-      error: "지원하지 않는 provider입니다.",
-      allowedProviders: [
-        "naver",
-        "google",
-        "wiki",
-        "namu",
-        "knowledge",
-        "all"
-      ]
+    return res.status(200).json({
+      query,
+      provider,
+      type,
+      count: results.length,
+      results
     });
   } catch (error) {
     return res.status(500).json({
-      error: error.message
+      error: error.message || "Search API Server Error",
+      results: []
     });
   }
 }
 
-/**
- * Naver Search API
- * type:
- * - web
- * - news
- * - blog
- */
+async function runSearch({ query, type, provider }) {
+  if (provider === "naver" || provider === "auto") {
+    return await searchNaver(query, type);
+  }
+
+  if (provider === "google") {
+    return await searchGoogle(query);
+  }
+
+  if (provider === "wiki" || provider === "wikipedia") {
+    return await searchWikipedia(query);
+  }
+
+  if (provider === "namu" || provider === "namuwiki") {
+    return await searchNamuWiki(query);
+  }
+
+  if (provider === "knowledge") {
+    const wikiResults = await searchWikipedia(query);
+    const namuResults = await searchNamuWiki(query);
+
+    return removeDuplicateLinks([
+      ...wikiResults,
+      ...namuResults
+    ]);
+  }
+
+  if (provider === "all") {
+    const naverResults = await searchNaver(query, type);
+    const googleResults = await searchGoogle(query);
+    const wikiResults = await searchWikipedia(query);
+    const namuResults = await searchNamuWiki(query);
+
+    return removeDuplicateLinks([
+      ...naverResults,
+      ...googleResults,
+      ...wikiResults,
+      ...namuResults
+    ]);
+  }
+
+  return [];
+}
+
 async function searchNaver(query, type = "web") {
-  let apiUrl = "";
+  if (
+    !process.env.NAVER_CLIENT_ID ||
+    !process.env.NAVER_CLIENT_SECRET
+  ) {
+    return [];
+  }
+
+  let path = "webkr";
+  let sort = "";
 
   if (type === "news") {
-    apiUrl =
-      "https://openapi.naver.com/v1/search/news.json" +
-      `?query=${encodeURIComponent(query)}` +
-      "&display=5" +
-      "&start=1" +
-      "&sort=date";
+    path = "news";
+    sort = "&sort=date";
   } else if (type === "blog") {
-    apiUrl =
-      "https://openapi.naver.com/v1/search/blog.json" +
-      `?query=${encodeURIComponent(query)}` +
-      "&display=5" +
-      "&start=1" +
-      "&sort=sim";
-  } else {
-    apiUrl =
-      "https://openapi.naver.com/v1/search/webkr.json" +
-      `?query=${encodeURIComponent(query)}` +
-      "&display=5" +
-      "&start=1";
+    path = "blog";
+    sort = "&sort=sim";
   }
+
+  const apiUrl =
+    `https://openapi.naver.com/v1/search/${path}.json` +
+    `?query=${encodeURIComponent(query)}` +
+    "&display=5" +
+    "&start=1" +
+    sort;
 
   const response = await fetch(apiUrl, {
     method: "GET",
@@ -155,24 +119,18 @@ async function searchNaver(query, type = "web") {
   const data = await safeJson(response);
 
   if (!response.ok) {
-    throw new Error(
-      "Naver Search API Error: " + JSON.stringify(data)
-    );
+    return [];
   }
 
   return (data.items || []).map((item) => ({
     source: `naver_${type}`,
     title: removeHtml(item.title),
-    link: item.originallink || item.link,
+    link: item.originallink || item.link || "",
     snippet: removeHtml(item.description),
     date: item.pubDate || item.postdate || null
   }));
 }
 
-/**
- * Wikipedia Search
- * 한국어 위키백과 검색
- */
 async function searchWikipedia(query) {
   const searchUrl =
     "https://ko.wikipedia.org/w/api.php" +
@@ -199,14 +157,14 @@ async function searchWikipedia(query) {
   const items = data.query?.search || [];
 
   return items.map((item) => {
-    const title = item.title;
+    const title = item.title || "";
     const link =
       "https://ko.wikipedia.org/wiki/" +
       encodeURIComponent(title.replaceAll(" ", "_"));
 
     return {
       source: "wikipedia_ko",
-      title,
+      title: removeHtml(title),
       link,
       snippet: removeHtml(item.snippet),
       date: item.timestamp || null
@@ -214,12 +172,6 @@ async function searchWikipedia(query) {
   });
 }
 
-/**
- * Namu Wiki Search
- *
- * 나무위키는 여기서 직접 본문을 긁지 않고,
- * 네이버 웹검색 API로 site:namu.wiki 검색 결과만 가져온다.
- */
 async function searchNamuWiki(query) {
   if (
     !process.env.NAVER_CLIENT_ID ||
@@ -251,28 +203,16 @@ async function searchNamuWiki(query) {
   }
 
   return (data.items || [])
-    .filter((item) => {
-      const link = item.link || "";
-      return link.includes("namu.wiki");
-    })
+    .filter((item) => String(item.link || "").includes("namu.wiki"))
     .map((item) => ({
       source: "namu_wiki",
       title: removeHtml(item.title),
-      link: item.link,
+      link: item.link || "",
       snippet: removeHtml(item.description),
       date: null
     }));
 }
 
-/**
- * Google Custom Search JSON API
- *
- * 필요한 Vercel 환경변수:
- * GOOGLE_API_KEY
- * GOOGLE_CX
- *
- * 아직 구글 API 키가 없으면 빈 배열 반환
- */
 async function searchGoogle(query) {
   if (!process.env.GOOGLE_API_KEY || !process.env.GOOGLE_CX) {
     return [];
@@ -297,9 +237,9 @@ async function searchGoogle(query) {
 
   return (data.items || []).map((item) => ({
     source: "google_web",
-    title: item.title,
-    link: item.link,
-    snippet: item.snippet,
+    title: removeHtml(item.title),
+    link: item.link || "",
+    snippet: removeHtml(item.snippet),
     date: null
   }));
 }
@@ -315,12 +255,14 @@ async function safeJson(response) {
 }
 
 function removeHtml(text = "") {
-  return String(text)
+  return String(text || "")
     .replace(/<[^>]*>/g, "")
-    .replace(/&quot;/g, "\"")
+    .replace(/&#039;/g, "'")
+    .replace(/&quot;/g, '"')
     .replace(/&amp;/g, "&")
     .replace(/&lt;/g, "<")
     .replace(/&gt;/g, ">")
+    .replace(/\s+/g, " ")
     .trim();
 }
 
@@ -328,13 +270,17 @@ function removeDuplicateLinks(results) {
   const seen = new Set();
 
   return results.filter((item) => {
-    if (!item.link) return false;
+    const link = item?.link || "";
 
-    if (seen.has(item.link)) {
+    if (!link) {
       return false;
     }
 
-    seen.add(item.link);
+    if (seen.has(link)) {
+      return false;
+    }
+
+    seen.add(link);
     return true;
   });
 }
