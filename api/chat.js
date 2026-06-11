@@ -29,15 +29,8 @@ export default async function handler(req, res) {
       searchType
     });
 
-    const enhancedMessage = buildEnhancedUserMessage(
-      message,
-      searchPayload
-    );
-
-    const enhancedSystem = buildEnhancedSystemPrompt(
-      system,
-      searchPayload
-    );
+    const enhancedMessage = buildEnhancedUserMessage(message, searchPayload);
+    const enhancedSystem = buildEnhancedSystemPrompt(system, searchPayload);
 
     if (isClaudeModel(model)) {
       return await handleClaude(res, {
@@ -56,7 +49,6 @@ export default async function handler(req, res) {
       system: enhancedSystem,
       searchPayload
     });
-
   } catch (error) {
     return res.status(500).json({
       error: error.message || "Server Error"
@@ -81,7 +73,7 @@ function buildOpenAIMessages(history, message, system) {
   }
 
   if (Array.isArray(history)) {
-    history.forEach(item => {
+    history.forEach((item) => {
       if (!item || !item.content) return;
 
       messages.push({
@@ -103,7 +95,7 @@ function buildClaudeMessages(history, message) {
   const messages = [];
 
   if (Array.isArray(history)) {
-    history.forEach(item => {
+    history.forEach((item) => {
       if (!item || !item.content) return;
 
       const role = item.role === "assistant" ? "assistant" : "user";
@@ -124,10 +116,7 @@ function buildClaudeMessages(history, message) {
     });
   }
 
-  while (
-    messages.length > 0 &&
-    messages[0].role === "assistant"
-  ) {
+  while (messages.length > 0 && messages[0].role === "assistant") {
     messages.shift();
   }
 
@@ -160,11 +149,7 @@ async function handleOpenAI(
 
   const payload = {
     model: normalizeOpenAIModel(model),
-    messages: buildOpenAIMessages(
-      history,
-      message,
-      system
-    ),
+    messages: buildOpenAIMessages(history, message, system),
     temperature: 0.3
   };
 
@@ -185,10 +170,7 @@ async function handleOpenAI(
   if (!response.ok) {
     return res.status(response.status).json({
       provider: "openai",
-      error:
-        data.error?.message ||
-        data.raw ||
-        "OpenAI Error",
+      error: data.error?.message || data.raw || "OpenAI Error",
       requestedModel: payload.model,
       detail: data
     });
@@ -197,9 +179,7 @@ async function handleOpenAI(
   return res.status(200).json({
     provider: "openai",
     model: data.model,
-    text:
-      data.choices?.[0]?.message?.content ||
-      "응답 없음",
+    text: data.choices?.[0]?.message?.content || "응답 없음",
     usage: data.usage,
     searchUsed: searchPayload.used,
     searchQuery: searchPayload.query,
@@ -231,10 +211,7 @@ async function handleClaude(
   const payload = {
     model: normalizeClaudeModel(model),
     max_tokens: 4096,
-    messages: buildClaudeMessages(
-      history,
-      message
-    )
+    messages: buildClaudeMessages(history, message)
   };
 
   if (system) {
@@ -259,10 +236,7 @@ async function handleClaude(
   if (!response.ok) {
     return res.status(response.status).json({
       provider: "claude",
-      error:
-        data.error?.message ||
-        data.raw ||
-        "Claude Error",
+      error: data.error?.message || data.raw || "Claude Error",
       requestedModel: payload.model,
       detail: data
     });
@@ -270,8 +244,8 @@ async function handleClaude(
 
   const text = Array.isArray(data.content)
     ? data.content
-        .filter(item => item.type === "text")
-        .map(item => item.text || "")
+        .filter((item) => item.type === "text")
+        .map((item) => item.text || "")
         .join("\n")
     : "";
 
@@ -300,10 +274,7 @@ async function prepareSearchContext(
   const shouldSearch =
     search === true ||
     search === "true" ||
-    (
-      search === "auto" &&
-      shouldUseSearch(message)
-    );
+    (search === "auto" && shouldUseSearch(message));
 
   if (!shouldSearch) {
     return {
@@ -316,16 +287,8 @@ async function prepareSearchContext(
     };
   }
 
-  const provider = resolveSearchProvider(
-    message,
-    searchProvider
-  );
-
-  const type =
-    searchType === "auto"
-      ? detectSearchType(message)
-      : searchType;
-
+  const provider = resolveSearchProvider(message, searchProvider);
+  const type = searchType === "auto" ? detectSearchType(message) : searchType;
   const query = extractSearchQuery(message);
 
   const results = await callSearchApi(req, {
@@ -373,22 +336,15 @@ async function callSearchApi(
       return [];
     }
 
-    return Array.isArray(data.results)
-      ? data.results
-      : [];
+    return Array.isArray(data.results) ? data.results : [];
   } catch {
     return [];
   }
 }
 
 function getBaseUrl(req) {
-  const host =
-    req.headers["x-forwarded-host"] ||
-    req.headers.host;
-
-  const proto =
-    req.headers["x-forwarded-proto"] ||
-    "https";
+  const host = req.headers["x-forwarded-host"] || req.headers.host;
+  const proto = req.headers["x-forwarded-proto"] || "https";
 
   return `${proto}://${host}`;
 }
@@ -435,38 +391,23 @@ function shouldUseSearch(message) {
     "정보"
   ];
 
-  return keywords.some(keyword =>
-    text.includes(keyword.toLowerCase())
-  );
+  return keywords.some((keyword) => text.includes(keyword.toLowerCase()));
 }
 
-function resolveSearchProvider(
-  message,
-  searchProvider
-) {
-  const requested =
-    String(searchProvider || "auto")
-      .toLowerCase();
+function resolveSearchProvider(message, searchProvider) {
+  const requested = String(searchProvider || "auto").toLowerCase();
 
   if (requested !== "auto") {
     return requested;
   }
 
-  const text =
-    String(message || "")
-      .toLowerCase();
+  const text = String(message || "").toLowerCase();
 
-  if (
-    text.includes("위키백과") &&
-    text.includes("나무위키")
-  ) {
+  if (text.includes("위키백과") && text.includes("나무위키")) {
     return "knowledge";
   }
 
-  if (
-    text.includes("위키") &&
-    text.includes("나무")
-  ) {
+  if (text.includes("위키") && text.includes("나무")) {
     return "knowledge";
   }
 
@@ -483,10 +424,7 @@ function resolveSearchProvider(
     return "knowledge";
   }
 
-  if (
-    text.includes("나무위키") ||
-    text.includes("namu")
-  ) {
+  if (text.includes("나무위키") || text.includes("namu")) {
     return "namu";
   }
 
@@ -571,7 +509,7 @@ function extractSearchQuery(message) {
     "해"
   ];
 
-  removeWords.forEach(word => {
+  removeWords.forEach((word) => {
     text = text.replaceAll(word, " ");
   });
 
@@ -587,10 +525,7 @@ function extractSearchQuery(message) {
   return text;
 }
 
-function buildEnhancedSystemPrompt(
-  system,
-  searchPayload
-) {
+function buildEnhancedSystemPrompt(system, searchPayload) {
   const baseSystem = String(system || "").trim();
 
   if (!searchPayload.used) {
@@ -615,14 +550,8 @@ function buildEnhancedSystemPrompt(
   return searchInstruction.trim();
 }
 
-function buildEnhancedUserMessage(
-  message,
-  searchPayload
-) {
-  if (
-    !searchPayload.used ||
-    !searchPayload.context
-  ) {
+function buildEnhancedUserMessage(message, searchPayload) {
+  if (!searchPayload.used || !searchPayload.context) {
     return String(message);
   }
 
