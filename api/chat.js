@@ -70,6 +70,7 @@ async function handleOpenAI(
 
   if (!apiKey) {
     return res.status(500).json({
+      provider: "openai",
       error: "OPENAI_API_KEY not configured"
     });
   }
@@ -206,7 +207,7 @@ async function handleClaude(
     content: String(message)
   });
 
-  if (messages[0]?.role === "assistant") {
+  while (messages.length > 0 && messages[0].role === "assistant") {
     messages.shift();
   }
 
@@ -214,7 +215,6 @@ async function handleClaude(
     model:
       normalizeClaudeModel(model),
     max_tokens: 4096,
-    temperature: 0.3,
     messages
   };
 
@@ -257,9 +257,9 @@ async function handleClaude(
         data.error?.message ||
         raw ||
         "Claude Error",
-      detail: data,
       requestedModel:
-        payload.model
+        payload.model,
+      detail: data
     });
   }
 
@@ -296,6 +296,10 @@ function normalizeOpenAIModel(model) {
     return "gpt-4o-mini";
   }
 
+  if (value.includes("gpt-4o")) {
+    return "gpt-4o";
+  }
+
   if (value.includes("gpt-5")) {
     return "gpt-4o";
   }
@@ -313,28 +317,28 @@ function normalizeClaudeModel(model) {
       .toLowerCase();
 
   if (value.includes("opus")) {
-    return "claude-opus-4-1-20250805";
+    return "claude-opus-4-8";
   }
 
   if (value.includes("haiku")) {
-    return "claude-3-5-haiku-20241022";
+    return "claude-haiku-4-5-20251001";
   }
 
-  if (value.includes("3-7")) {
-    return "claude-3-7-sonnet-latest";
+  if (value.includes("4.6")) {
+    return "claude-sonnet-4-6";
   }
 
-  if (value.includes("3.7")) {
-    return "claude-3-7-sonnet-latest";
-  }
-
-  if (value.includes("4")) {
-    return "claude-sonnet-4-20250514";
+  if (value.includes("4-6")) {
+    return "claude-sonnet-4-6";
   }
 
   if (value.includes("sonnet")) {
-    return "claude-sonnet-4-20250514";
+    return "claude-sonnet-4-6";
   }
 
-  return "claude-sonnet-4-20250514";
+  if (value.includes("claude")) {
+    return "claude-sonnet-4-6";
+  }
+
+  return "claude-sonnet-4-6";
 }
