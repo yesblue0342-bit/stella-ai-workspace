@@ -1,0 +1,1526 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+<title>Stella Workspace</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Gowun+Batang:wght@400;700&family=Noto+Serif+KR:wght@400;600;700;900&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/mammoth@1.8.0/mammoth.browser.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+:root{--bg:#fff;--panel:#fafafa;--soft:#f3f4f6;--active:#eef2ff;--ink:#111827;--muted:#8b93a1;--line:#e5e7eb;--danger:#b91c1c;--shadow:0 24px 80px rgba(15,23,42,.18)}
+html,body{height:100%;overflow:hidden;background:#fff;color:var(--ink);font-family:"Gowun Batang","Noto Serif KR",serif}
+button,input,textarea,select{font:inherit}button{cursor:pointer;-webkit-tap-highlight-color:transparent}textarea{font-family:inherit}
+.app{height:100dvh;display:grid;grid-template-columns:338px 1fr;background:#fff}
+.sidebar{min-height:0;overflow:auto;-webkit-overflow-scrolling:touch;background:#fbfbfc;border-right:1px solid var(--line);padding-bottom:120px}
+.side-head{padding:18px 18px 12px;border-bottom:1px solid var(--line)}
+.brand{display:flex;align-items:center;gap:12px;margin-bottom:14px}.mark{width:44px;height:44px;border-radius:50%;display:grid;place-items:center;background:#0f172a;color:#fff;font-weight:900}.brand h1{font-size:1.45rem;line-height:1}.brand p{color:#6b7280;font-size:.88rem;margin-top:4px}
+.user-box{display:flex;align-items:center;justify-content:space-between;gap:10px;background:#fff;border:1px solid var(--line);border-radius:16px;padding:12px}.user-box strong{display:block}.user-box span{display:block;color:#8b93a1;font-size:.82rem;max-width:175px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.small-btn{border:1px solid #d1d5db;background:#fff;border-radius:12px;padding:8px 10px;font-weight:800;font-size:.82rem}
+.tools{display:grid;gap:9px;padding:14px 18px;border-bottom:1px solid var(--line)}.tool-btn{border:1px solid #d1d5db;background:#fff;border-radius:16px;padding:13px 14px;text-align:left;font-weight:800;font-size:1.02rem}.tool-btn:hover{background:#f8fafc}
+.section-title{padding:16px 18px 6px;color:#6b7280;font-size:.82rem;font-weight:900}.tree{padding:0 12px 8px}.tree-section{margin:1px 0}.tree-head{width:100%;border:0;background:transparent;border-radius:14px;min-height:42px;padding:8px 10px;display:flex;align-items:center;gap:8px;text-align:left;color:#111827}.tree-head:hover,.tree-head.active{background:var(--active)}.caret{width:16px;color:#64748b;font-size:.86rem}.folder{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-weight:900}.count{color:#8b93a1;font-size:.9rem}.children{display:none;padding:0 0 2px 30px}.tree-section.open>.children{display:block}.item{width:100%;border:0;background:transparent;border-radius:14px;padding:8px 10px;text-align:left;min-height:46px}.item:hover,.item.active{background:var(--active)}.item-title{display:block;font-weight:800;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.item-meta{display:block;color:#9ca3af;font-size:.8rem;margin-top:3px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.empty{color:#a0a7b4;font-size:.86rem;padding:8px 10px}.compact-gap{height:4px}
+.main{min-width:0;min-height:0;height:100dvh;display:flex;flex-direction:column;background:#fff}.top{height:68px;flex:0 0 auto;display:flex;align-items:center;gap:12px;padding:10px 18px;border-bottom:1px solid var(--line);background:rgba(255,255,255,.96);backdrop-filter:blur(14px);z-index:4}.hamb{display:none;width:44px;height:44px;border:1px solid #d1d5db;border-radius:50%;background:#fff;font-size:1.35rem}.title-wrap{min-width:0}.title{font-size:1.25rem;font-weight:900;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.subtitle{color:#8b93a1;font-size:.86rem;margin-top:2px}.top-actions{margin-left:auto;display:flex;gap:8px}.top-btn{border:1px solid #d1d5db;background:#fff;border-radius:12px;padding:8px 11px;font-weight:900;font-size:.86rem}
+.messages{flex:1;min-height:0;overflow:auto;-webkit-overflow-scrolling:touch;padding:26px 26px 18px;display:flex;flex-direction:column;gap:18px}.row{display:flex;width:min(920px,100%);margin:0 auto}.row.user{justify-content:flex-end}.bubble{max-width:min(800px,82vw);line-height:1.78;word-break:break-word;font-size:1.03rem}.row.user .bubble{background:#fff;color:#111827;border:1px solid #d9dee7;border-radius:20px;border-top-right-radius:6px;padding:13px 16px;box-shadow:0 8px 22px rgba(15,23,42,.05);white-space:pre-wrap}.row.ai .bubble{background:#fff;border-radius:14px;padding:4px 8px}.bubble p{margin:0 0 11px}.bubble p:last-child{margin-bottom:0}.download-tools{display:flex;gap:8px;flex-wrap:wrap;margin:0 0 12px;opacity:.82}.download-tools:hover{opacity:1}.download-btn,.table-btn{border:1px solid #cbd5e1;background:#fff;color:#0f172a;border-radius:12px;padding:8px 11px;font-weight:900;font-size:.82rem}.download-btn:hover,.table-btn:hover{background:#f8fafc}.codebox{background:#f8fafc;border:1px solid #e5e7eb;border-radius:14px;padding:12px;overflow:auto;max-height:360px;white-space:pre-wrap;font-family:ui-monospace,SFMono-Regular,Consolas,monospace;font-size:.86rem;margin:10px 0}.tablebox{border:1px solid #e2e8f0;border-radius:14px;overflow:hidden;margin:12px 0}.tabletools{display:flex;align-items:center;gap:8px;padding:10px;background:#f8fafc;border-bottom:1px solid #e5e7eb}.tabletools b{margin-right:auto}.tablescroll{overflow:auto}.answer-table{width:100%;border-collapse:collapse;font-size:.9rem}.answer-table th,.answer-table td{padding:9px 10px;border-bottom:1px solid #e5e7eb;border-right:1px solid #e5e7eb;text-align:left;vertical-align:top}.answer-table th{background:#f1f5f9;font-weight:900}.answer-table tr:nth-child(even) td{background:#fcfcfd}
+.composer{flex:0 0 auto;border-top:1px solid var(--line);background:#fff;padding:10px 20px calc(12px + env(safe-area-inset-bottom))}.chips{width:min(920px,100%);margin:0 auto 8px;display:flex;gap:8px;flex-wrap:wrap;max-height:70px;overflow:auto}.chip{border:1px solid #d1d5db;background:#f9fafb;border-radius:999px;padding:7px 10px;font-size:.82rem;max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.chip button{border:0;background:transparent;color:#6b7280;margin-left:5px}.model-row{width:min(920px,100%);margin:0 auto 8px;display:flex;align-items:center;gap:8px;color:#6b7280;font-size:.86rem}#modelSelect{border:1px solid #d1d5db;border-radius:14px;padding:8px 12px;background:#fff;color:#111827;max-width:82vw}.inputbar{width:min(920px,100%);margin:0 auto;display:flex;gap:10px;align-items:flex-end;border:1px solid #d1d5db;border-radius:24px;padding:10px;background:#fff;box-shadow:0 8px 26px rgba(15,23,42,.04)}.inputbar textarea{flex:1;border:0;outline:0;resize:none;min-height:40px;max-height:140px;line-height:1.65;font-size:1.02rem}.round{width:44px;height:44px;border-radius:50%;border:0;display:grid;place-items:center;flex:0 0 auto}.attach{background:#f3f4f6;font-size:1.4rem}.send{background:#fff;color:#374151;border:1px solid #d1d5db!important;font-size:1.18rem;box-shadow:0 6px 16px rgba(15,23,42,.05)}.send:disabled{background:#f3f4f6;color:#9ca3af}
+.backdrop{display:none;position:fixed;inset:0;background:rgba(15,23,42,.28);backdrop-filter:blur(2px);z-index:90}.backdrop.active{display:block}.sidebar-backdrop{z-index:50}.modal{display:none;position:fixed;inset:0;z-index:100;place-items:center;padding:22px;background:rgba(15,23,42,.32);backdrop-filter:blur(2px)}.modal.active{display:grid}.card{width:min(440px,100%);background:#fff;border:1px solid var(--line);border-radius:24px;padding:24px;box-shadow:var(--shadow)}.card h2{font-size:1.65rem;margin-bottom:8px}.hint{color:#6b7280;line-height:1.65;font-size:.9rem;margin-bottom:14px}.field{margin-bottom:11px}.field label{display:block;font-size:.82rem;font-weight:900;margin-bottom:6px}.field input{width:100%;border:1px solid #d1d5db;border-radius:13px;padding:12px}.primary{width:100%;border:0;border-radius:14px;background:#0f172a;color:#fff;padding:13px;font-weight:900}.link-btn{border:0;background:transparent;color:#2563eb;text-decoration:underline;margin-top:10px}.auth-msg{min-height:20px;color:#b91c1c;font-size:.86rem;margin-top:10px}.tabs{display:grid;grid-template-columns:1fr 1fr;gap:6px;background:#f3f4f6;border-radius:14px;padding:4px;margin:14px 0}.tab{border:0;border-radius:11px;background:transparent;padding:10px;font-weight:900;color:#6b7280}.tab.active{background:#fff;color:#111827;box-shadow:0 1px 5px rgba(15,23,42,.08)}
+.menu-backdrop{position:fixed;inset:0;z-index:110;background:rgba(15,23,42,.28);backdrop-filter:blur(2px);display:none}.menu-backdrop.active{display:block}.bottom-menu{position:absolute;left:12px;right:12px;bottom:calc(12px + env(safe-area-inset-bottom));background:#fff;border:1px solid #e5e7eb;border-radius:22px;box-shadow:var(--shadow);padding:10px}.menu-title{padding:12px 14px 10px;color:#64748b;border-bottom:1px solid #eef2f7;margin-bottom:6px;word-break:break-word}.menu-item{width:100%;border:0;background:#fff;color:#0f172a;border-radius:14px;padding:14px;text-align:left;font-size:1.05rem;font-weight:900}.menu-item:hover,.menu-item:active{background:#f1f5f9}.menu-item.danger{color:var(--danger)}
+.board-panel{position:fixed;right:0;top:0;bottom:0;width:min(560px,100%);z-index:95;background:#fff;border-left:1px solid var(--line);box-shadow:-20px 0 60px rgba(15,23,42,.12);display:none;flex-direction:column}.board-panel.active{display:flex}.board-head{height:66px;display:flex;align-items:center;justify-content:space-between;padding:0 18px;border-bottom:1px solid var(--line)}.board-body{padding:16px;overflow:auto}.board-form{display:grid;gap:9px;margin-bottom:16px}.board-form input,.board-form textarea,.board-form select{border:1px solid #d1d5db;border-radius:13px;padding:12px}.board-form textarea{min-height:96px;resize:vertical}.post{border:1px solid var(--line);border-radius:15px;padding:13px;margin:8px 0;background:#fff}.post p{white-space:pre-wrap;line-height:1.7;color:#374151;margin-top:6px}.post small{display:block;color:#9ca3af;margin-top:8px}.drag-over{outline:2px dashed #2563eb;outline-offset:-8px;background:#eff6ff!important}
+@media(max-width:900px){.app{grid-template-columns:1fr}.sidebar{position:fixed;left:0;top:0;bottom:0;width:min(88vw,360px);z-index:60;transform:translateX(-105%);transition:transform .2s ease;box-shadow:18px 0 50px rgba(15,23,42,.15);padding-bottom:150px}.sidebar.open{transform:translateX(0)}.hamb{display:grid;place-items:center}.top{height:64px;padding:8px 12px}.title{font-size:1.18rem}.subtitle,.top-actions{display:none}.messages{padding:16px 12px 14px;gap:16px}.bubble{max-width:calc(100vw - 30px);font-size:1.06rem;line-height:1.82}.row.user .bubble{max-width:82vw}.composer{padding:9px 11px calc(11px + env(safe-area-inset-bottom))}.inputbar{width:100%;border-radius:24px}.chips,.model-row{width:100%}#modelSelect{min-height:42px;font-size:1rem}.tree-head{min-height:38px;padding:7px 10px}.children{padding-left:24px}.item{min-height:42px;padding:7px 10px}.tools{padding:12px}.section-title{padding-top:12px}.side-head{padding:16px}.board-panel{width:100%}}
+</style>
+
+
+<!-- Stella v68 Auth Scroll + Member Chat Patch -->
+<style>
+/* v68: 모바일 회원가입 화면 스크롤 복구 */
+#authModal.modal.active{
+  display:block!important;
+  overflow-y:auto!important;
+  overflow-x:hidden!important;
+  -webkit-overflow-scrolling:touch!important;
+  padding:24px 18px calc(120px + env(safe-area-inset-bottom))!important;
+}
+#authModal .card{
+  margin:0 auto!important;
+  max-height:none!important;
+}
+@media(max-width:760px){
+  #authModal.modal.active{align-items:flex-start!important;place-items:unset!important;}
+  #authModal .card{width:100%!important;border-radius:22px!important;padding:22px!important;}
+  #authModal .field input{min-height:50px!important;font-size:1rem!important;}
+  #authModal .primary{min-height:50px!important;}
+}
+/* v68: 회원 채팅 */
+.member-panel{position:fixed;right:0;top:0;bottom:0;width:min(560px,100%);z-index:96;background:#fff;border-left:1px solid var(--line);box-shadow:-20px 0 60px rgba(15,23,42,.12);display:none;flex-direction:column}
+.member-panel.active{display:flex}.member-head{height:64px;display:flex;align-items:center;justify-content:space-between;gap:8px;padding:0 16px;border-bottom:1px solid var(--line)}.member-body{flex:1;overflow:auto;padding:14px;-webkit-overflow-scrolling:touch}.member-controls{display:grid;gap:8px;margin-bottom:12px}.member-controls select,.member-controls input,.member-controls textarea{border:1px solid #d1d5db;border-radius:13px;padding:10px;background:#fff}.member-msg-list{display:flex;flex-direction:column;gap:8px;margin:10px 0 14px}.member-msg{border:1px solid #e5e7eb;border-radius:15px;padding:10px;background:#fff;line-height:1.6}.member-msg.me{background:#eef2ff}.member-msg small{display:block;color:#8b93a1;margin-top:4px}.member-file{display:inline-block;margin-top:6px;border:1px solid #cbd5e1;border-radius:10px;padding:6px 8px;text-decoration:none;background:#f8fafc}.member-admin{border-top:1px solid #e5e7eb;margin-top:16px;padding-top:14px}.member-admin-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px}.member-note{font-size:.82rem;color:#6b7280;line-height:1.55}.member-send-row{display:flex;gap:8px;align-items:center}.member-send-row textarea{flex:1;min-height:48px;resize:vertical}.member-send-row button{width:auto;white-space:nowrap}.tool-btn.member-chat-btn{background:#fffdf7;border-color:#e6d6a8}
+@media(max-width:760px){.member-panel{width:100%;border-left:0}.member-head{height:60px}.member-body{padding-bottom:calc(110px + env(safe-area-inset-bottom))}.member-admin-grid{grid-template-columns:1fr}}
+</style>
+
+</head>
+<body>
+<div class="app" id="app" style="display:none">
+  <aside class="sidebar" id="sidebar">
+    <div class="side-head">
+      <div class="brand"><div class="mark">S</div><div><h1>Stella Workspace</h1><p>AI 작업공간</p></div></div>
+      <div class="user-box"><div><strong id="userName">사용자</strong><span id="userEmail"></span></div><button class="small-btn" id="logoutBtn" type="button">로그아웃</button></div>
+    </div>
+    <div class="tools">
+      <button class="tool-btn" id="newChatBtn" type="button">＋ 새 채팅</button>
+      <button class="tool-btn" id="newProjectBtn" type="button">▱ 새 프로젝트</button>
+      <button class="tool-btn" id="openBoardBtn" type="button">게시판</button>
+    </div>
+    <div class="section-title">게시글 카테고리</div>
+    <div class="tree" id="boardTree"></div>
+    <div class="compact-gap"></div>
+    <div class="section-title">프로젝트</div>
+    <div class="tree" id="projectTree"></div>
+  </aside>
+  <main class="main">
+    <header class="top"><button class="hamb" id="hambBtn" type="button">☰</button><div class="title-wrap"><div class="title" id="activeTitle">새 채팅</div><div class="subtitle" id="activeSub">개인 작업공간</div></div><div class="top-actions"><button class="top-btn" id="roomTxtBtn" type="button">TXT</button><button class="top-btn" id="roomMdBtn" type="button">Markdown</button><button class="top-btn" id="deleteRoomTopBtn" type="button">삭제</button></div></header>
+    <section class="messages" id="messages"></section>
+    <section class="composer">
+      <div class="chips" id="chips"></div>
+      <div class="model-row"><span>모델</span><select id="modelSelect"><optgroup label="OpenAI"><option value="gpt-4o" selected>GPT-5.5 최신</option><option value="gpt-4o">GPT-4o 최신</option><option value="gpt-4o-mini">GPT-4o Mini</option><option value="gpt-4.1">GPT-4.1</option><option value="gpt-4.1-mini">GPT-4.1 Mini</option></optgroup><optgroup label="Claude"><option value="claude_sonnet-4.6">Claude Sonnet 4.6</option><option value="claude_opus-4.8">Claude Opus 4.8</option><option value="claude_haiku-4.5">Claude Haiku 4.5</option></optgroup></select></div>
+      <form class="inputbar" id="chatForm"><button class="round attach" id="attachBtn" type="button">+</button><input id="fileInput" type="file" multiple hidden><textarea id="chatInput" rows="1" placeholder="무엇이든 물어보세요."></textarea><button class="round send" id="sendBtn" type="submit">↑</button></form>
+    </section>
+  </main>
+</div>
+<div class="backdrop sidebar-backdrop" id="sidebarBackdrop"></div>
+<div class="modal" id="authModal"><div class="card"><div class="brand"><div class="mark">S</div><div><h1>Stella</h1><p>회원 전용 AI 작업공간</p></div></div><p class="hint">로그인한 사용자마다 채팅, 프로젝트, 게시판 데이터가 따로 저장됩니다.</p><div class="tabs"><button class="tab active" id="loginTab" type="button">로그인</button><button class="tab" id="signupTab" type="button">회원가입</button></div><form id="authForm"><div class="field signup-only" style="display:none"><label>이름</label><input id="authName" type="text" placeholder="이름"></div><div class="field"><label>아이디</label><input id="authId" type="text" required placeholder="아이디"></div><div class="field signup-only" style="display:none"><label>이메일</label><input id="authEmail" type="email" placeholder="가입 이메일"></div><div class="field signup-only" style="display:none"><label>생년월일</label><input id="authBirth" type="text" placeholder="예: 1982-04-30"></div><div class="field"><label>비밀번호</label><input id="authPassword" type="password" required placeholder="비밀번호"></div><button class="primary" id="authSubmit" type="submit">로그인</button><button class="link-btn" id="forgotBtn" type="button">비밀번호를 잊으셨나요?</button><div class="auth-msg" id="authMsg"></div></form></div></div>
+<div class="menu-backdrop" id="menuBackdrop"><div class="bottom-menu" id="bottomMenu"></div></div>
+<div class="backdrop" id="boardBackdrop"></div><section class="board-panel" id="boardPanel"><div class="board-head"><h3>게시판</h3><button class="small-btn" id="closeBoardBtn" type="button">닫기</button></div><div class="board-body"><form class="board-form" id="boardForm"><select id="postCategorySelect"></select><input id="postNewCategory" placeholder="새 카테고리명(선택)"><input id="postTitle" required placeholder="게시글 제목"><textarea id="postBody" required placeholder="게시글 내용"></textarea><button class="primary" type="submit">게시글 등록</button></form><div id="postList"></div></div></section>
+
+
+<div class="backdrop" id="memberBackdrop"></div>
+<section class="member-panel" id="memberPanel" aria-label="회원 채팅">
+  <div class="member-head">
+    <h3>회원 채팅</h3>
+    <button class="small-btn" id="closeMemberBtn" type="button">닫기</button>
+  </div>
+  <div class="member-body">
+    <p class="member-note">회원끼리 1:1 메시지와 파일/Google Drive 링크를 주고받는 화면입니다. 현재 단일 HTML 버전에서는 같은 브라우저 저장소 기준으로 동작합니다.</p>
+    <div class="member-controls">
+      <label>대화 상대</label>
+      <select id="memberToSelect"></select>
+      <div class="member-msg-list" id="memberMsgList"></div>
+      <input id="memberDriveLink" type="url" placeholder="Google Drive 공유 링크 붙여넣기(선택)">
+      <input id="memberFileInput" type="file">
+      <div class="member-send-row">
+        <textarea id="memberText" placeholder="메시지를 입력하세요."></textarea>
+        <button class="primary" id="memberSendBtn" type="button">전송</button>
+      </div>
+    </div>
+    <div class="member-admin" id="memberAdminBox" style="display:none">
+      <h4>관리자 사용자 생성</h4>
+      <p class="member-note">관리자 이메일: yesblue0342@naver.com / yesblue0342@gmail.com</p>
+      <div class="member-admin-grid">
+        <input id="adminNewName" placeholder="이름">
+        <input id="adminNewId" placeholder="아이디">
+        <input id="adminNewEmail" placeholder="이메일">
+        <input id="adminNewBirth" placeholder="생년월일 예: 1982-04-30">
+        <input id="adminNewPw" placeholder="임시 비밀번호" type="password">
+        <button class="primary" id="adminCreateUserBtn" type="button">사용자 생성</button>
+      </div>
+    </div>
+  </div>
+</section>
+
+<script>
+if(window.pdfjsLib){pdfjsLib.GlobalWorkerOptions.workerSrc="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js";}
+const API_URL="/api/chat";
+const ADMIN_EMAILS=["yesblue0342@naver.com","yesblue0342@gmail.com"];
+const K={users:"stella_users_v67",session:"stella_session_v67",rooms:"stella_rooms_v67",projects:"stella_projects_v67",posts:"stella_posts_v67",expanded:"stella_expanded_v67",boardExpanded:"stella_board_expanded_v67"};
+let user=null,users=[],rooms=[],projects=[],posts=[],activeRoomId=null,activeProjectId="all",files=[],authMode="login";
+const $=s=>document.querySelector(s);const $$=s=>Array.from(document.querySelectorAll(s));
+const esc=v=>String(v??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;","'":"&#039;"}[c]));
+const read=(k,d)=>{try{return JSON.parse(localStorage.getItem(k)||JSON.stringify(d))}catch{return d}};const write=(k,v)=>localStorage.setItem(k,JSON.stringify(v));
+const id=()=>Date.now().toString(36)+Math.random().toString(36).slice(2,7);const hash=p=>btoa(unescape(encodeURIComponent(String(p))));
+const expanded=()=>new Set(read(K.expanded,["all","none"]));const saveExpanded=s=>write(K.expanded,[...s]);const boardExpanded=()=>new Set(read(K.boardExpanded,["기본"]));const saveBoardExpanded=s=>write(K.boardExpanded,[...s]);
+function loadData(){users=read(K.users,[]);rooms=read(K.rooms,[]).filter(x=>x.owner===user.id);projects=read(K.projects,[]).filter(x=>x.owner===user.id);posts=read(K.posts,[]).filter(x=>x.owner===user.id)}
+function saveRooms(){const others=read(K.rooms,[]).filter(x=>x.owner!==user.id);write(K.rooms,[...rooms,...others])}function saveProjects(){const others=read(K.projects,[]).filter(x=>x.owner!==user.id);write(K.projects,[...projects,...others])}function savePosts(){const others=read(K.posts,[]).filter(x=>x.owner!==user.id);write(K.posts,[...posts,...others])}
+function showAuth(){authMode="login";setAuthMode("login");$("#authModal").classList.add("active");$("#app").style.display="none"}function showApp(){loadData();$("#authModal").classList.remove("active");$("#app").style.display="grid";$("#userName").textContent=user.name;$("#userEmail").textContent=user.email||user.id;if(!rooms.length)createRoom("새 채팅",false);if(!activeRoomId)activeRoomId=rooms[0]?.id;renderAll()}
+function setAuthMode(m){authMode=m;$$(".signup-only").forEach(e=>e.style.display=m==="signup"?"block":"none");$("#loginTab").classList.toggle("active",m==="login");$("#signupTab").classList.toggle("active",m==="signup");$("#authSubmit").textContent=m==="login"?"로그인":"회원가입";$("#authMsg").textContent=""}
+function initAuth(){const session=read(K.session,null);users=read(K.users,[]);if(session){const found=users.find(u=>u.id===session.id);if(found){user=found;showApp();return}}showAuth()}
+function handleAuth(e){e.preventDefault();users=read(K.users,[]);const uid=$("#authId").value.trim();const pw=$("#authPassword").value;const name=$("#authName").value.trim();const email=$("#authEmail").value.trim().toLowerCase();const birth=$("#authBirth").value.trim();if(!uid||!pw)return;if(authMode==="signup"){if(!name||!email||!birth){$("#authMsg").textContent="이름, 이메일, 생년월일을 입력해 주세요.";return}if(users.some(u=>u.id===uid)){$("#authMsg").textContent="이미 사용 중인 아이디입니다.";return}user={id:uid,name,email,birth,passwordHash:hash(pw),role:ADMIN_EMAILS.includes(email)?"admin":"user",createdAt:new Date().toISOString()};users.push(user);write(K.users,users);write(K.session,{id:user.id});showApp();return}const found=users.find(u=>u.id===uid&&u.passwordHash===hash(pw));if(!found){$("#authMsg").textContent="아이디 또는 비밀번호가 맞지 않습니다.";return}user=found;write(K.session,{id:user.id});showApp()}
+function forgotPassword(){users=read(K.users,[]);const uid=prompt("아이디를 입력하세요.");if(!uid)return;const u=users.find(x=>x.id===uid.trim());if(!u){alert("사용자를 찾을 수 없습니다. 관리자에게 문의하세요.\n관리자: yesblue0342@naver.com / yesblue0342@gmail.com");return}const name=prompt("가입자 이름을 입력하세요.");const email=prompt("가입 이메일을 입력하세요.");const birth=prompt("생년월일을 입력하세요. 예: 1982-04-30");if((name||"").trim()===u.name&&(email||"").trim().toLowerCase()===u.email&&(birth||"").trim()===u.birth){const np=prompt("새 비밀번호를 입력하세요.");if(!np)return;u.passwordHash=hash(np);write(K.users,users);alert("비밀번호가 변경되었습니다.")}else{alert("본인 확인 정보가 맞지 않습니다. 관리자에게 문의하세요.\n관리자: yesblue0342@naver.com / yesblue0342@gmail.com")}}
+function logout(){write(K.session,null);user=null;showAuth()}
+function createRoom(name="새 채팅",select=true){const pid=projects.some(p=>p.id===activeProjectId)?activeProjectId:null;const r={id:"r_"+id(),owner:user.id,projectId:pid,name,messages:[{role:"ai",text:"안녕하세요. Stella입니다. 무엇이든 물어보세요."}],createdAt:new Date().toISOString()};rooms.unshift(r);if(select){activeRoomId=r.id;activeProjectId=pid||"all"}saveRooms();renderAll()}
+function createProject(){const name=prompt("새 프로젝트 폴더명");if(!name?.trim())return;const p={id:"p_"+id(),owner:user.id,name:name.trim(),createdAt:new Date().toISOString()};projects.unshift(p);activeProjectId=p.id;saveProjects();const ex=expanded();ex.add(p.id);saveExpanded(ex);renderAll()}
+function activeRoom(){return rooms.find(r=>r.id===activeRoomId)}function projectRooms(pid){if(pid==="all")return rooms;if(pid==="none")return rooms.filter(r=>!r.projectId);return rooms.filter(r=>r.projectId===pid)}function projectName(pid){if(!pid)return"미분류";return projects.find(p=>p.id===pid)?.name||"미분류"}
+function renderAll(){renderBoardTree();renderProjectTree();renderMessages();renderPostSelect();renderPosts();renderChips();$("#userName").textContent=user?.name||"사용자";$("#userEmail").textContent=user?.email||user?.id||""}
+function renderProjectTree(){const ex=expanded();const sections=[{id:"all",name:"전체 채팅",sys:true,rooms:projectRooms("all")},{id:"none",name:"미분류",sys:true,rooms:projectRooms("none")},...projects.map(p=>({id:p.id,name:p.name,sys:false,rooms:projectRooms(p.id)}))];$("#projectTree").innerHTML=sections.map(s=>`<div class="tree-section ${ex.has(s.id)?"open":""}" data-p="${esc(s.id)}"><button class="tree-head ${activeProjectId===s.id?"active":""}" data-project="${esc(s.id)}"><span class="caret">${ex.has(s.id)?"▾":"▸"}</span><span class="folder">▱ ${esc(s.name)}</span><span class="count">${s.rooms.length}</span></button><div class="children">${s.rooms.length?s.rooms.map(r=>`<button class="item ${activeRoomId===r.id?"active":""}" data-room="${esc(r.id)}"><span class="item-title">${esc(r.name)}</span><span class="item-meta">${(r.messages||[]).length}개 메시지 · ${esc(s.name)}</span></button>`).join(""):`<div class="empty">채팅방이 없습니다.</div>`}</div></div>`).join("");
+$$('[data-project]').forEach(b=>b.onclick=e=>{e.preventDefault();const pid=b.dataset.project;const set=expanded();set.has(pid)?set.delete(pid):set.add(pid);saveExpanded(set);activeProjectId=pid;renderProjectTree()});
+$$('[data-room]').forEach(b=>b.onclick=e=>{e.preventDefault();activeRoomId=b.dataset.room;const r=activeRoom();activeProjectId=r?.projectId||"all";closeSidebar();renderAll()});bindLongPress($("#projectTree"),resolveProjectTarget)}
+function resolveProjectTarget(el){const room=el.closest?.('[data-room]');if(room)return{type:'room',id:room.dataset.room,title:room.querySelector('.item-title')?.textContent||'채팅'};const head=el.closest?.('[data-project]');if(head){const pid=head.dataset.project;if(pid==='all'||pid==='none')return null;return{type:'project',id:pid,title:head.querySelector('.folder')?.textContent.replace(/^▱\s*/,"")||'프로젝트'}}return null}
+function renameProject(pid){const p=projects.find(x=>x.id===pid);if(!p)return;const n=prompt("프로젝트 이름 변경",p.name);if(!n?.trim())return;p.name=n.trim();saveProjects();renderAll()}function deleteProject(pid){const p=projects.find(x=>x.id===pid);if(!p)return;const cnt=rooms.filter(r=>r.projectId===pid).length;if(!confirm(`"${p.name}" 프로젝트를 삭제할까요?\n채팅 ${cnt}개는 미분류로 이동됩니다.`))return;rooms.forEach(r=>{if(r.projectId===pid)r.projectId=null});projects=projects.filter(x=>x.id!==pid);activeProjectId="all";saveProjects();saveRooms();renderAll()}function renameRoom(rid){const r=rooms.find(x=>x.id===rid);if(!r)return;const n=prompt("채팅방 이름 변경",r.name);if(!n?.trim())return;r.name=n.trim();saveRooms();renderAll()}function pickProject(){const list=["0. 미분류",...projects.map((p,i)=>`${i+1}. ${p.name}`)].join("\n");const v=prompt("프로젝트 번호 선택\n\n"+list,"0");if(v===null)return undefined;const n=Number(v);if(!Number.isInteger(n)||n<0||n>projects.length)return undefined;return n===0?null:projects[n-1].id}function moveRoom(rid){const r=rooms.find(x=>x.id===rid);if(!r)return;const p=pickProject();if(p===undefined)return;r.projectId=p;activeRoomId=rid;activeProjectId=p||"none";saveRooms();renderAll();closeSidebar()}function copyRoom(rid){const r=rooms.find(x=>x.id===rid);if(!r)return;const p=pickProject();if(p===undefined)return;const c={...r,id:"r_"+id(),projectId:p,name:r.name+" 복사본",messages:r.messages.map(m=>({...m}))};rooms.unshift(c);activeRoomId=c.id;activeProjectId=p||"none";saveRooms();renderAll();closeSidebar()}function deleteRoom(rid){const r=rooms.find(x=>x.id===rid);if(!r)return;if(!confirm(`"${r.name}" 채팅방을 삭제할까요?`))return;rooms=rooms.filter(x=>x.id!==rid);if(activeRoomId===rid)activeRoomId=rooms[0]?.id||null;saveRooms();renderAll()}
+function renderBoardTree(){const ex=boardExpanded();const cats=[...new Set(["기본",...posts.map(p=>p.category||"기본")])];$("#boardTree").innerHTML=cats.map(c=>{const list=posts.filter(p=>(p.category||"기본")===c);return`<div class="tree-section ${ex.has(c)?"open":""}" data-bcat="${esc(c)}"><button class="tree-head" data-boardcat="${esc(c)}"><span class="caret">${ex.has(c)?"▾":"▸"}</span><span class="folder">▱ ${esc(c)}</span><span class="count">${list.length}</span></button><div class="children">${list.length?list.map(p=>`<button class="item" data-post="${esc(p.id)}"><span class="item-title">${esc(p.title)}</span><span class="item-meta">게시글 · ${esc(c)}</span></button>`).join(""):`<div class="empty">게시글이 없습니다.</div>`}</div></div>`}).join("");
+$$('[data-boardcat]').forEach(b=>b.onclick=e=>{e.preventDefault();const c=b.dataset.boardcat;const set=boardExpanded();set.has(c)?set.delete(c):set.add(c);saveBoardExpanded(set);renderBoardTree()});$$('[data-post]').forEach(b=>b.onclick=e=>{e.preventDefault();openBoard();setTimeout(()=>document.querySelector(`[data-post-card="${b.dataset.post}"]`)?.scrollIntoView({behavior:'smooth',block:'center'}),100);closeSidebar()});bindLongPress($("#boardTree"),resolveBoardTarget)}
+function resolveBoardTarget(el){const post=el.closest?.('[data-post]');if(post){const p=posts.find(x=>x.id===post.dataset.post);return{type:'post',id:post.dataset.post,title:p?.title||'게시글'}}const cat=el.closest?.('[data-boardcat]');if(cat)return{type:'cat',id:cat.dataset.boardcat,title:cat.dataset.boardcat};return null}
+function createBoardCategory(){const c=prompt("게시판 카테고리명");if(!c?.trim())return;posts.unshift({id:"post_"+id(),owner:user.id,category:c.trim(),title:"새 게시글",body:"내용을 입력하세요.",createdAt:new Date().toISOString()});savePosts();const set=boardExpanded();set.add(c.trim());saveBoardExpanded(set);renderAll();openBoard()}function renamePost(pid){const p=posts.find(x=>x.id===pid);if(!p)return;const n=prompt("게시글 제목 변경",p.title);if(!n?.trim())return;p.title=n.trim();savePosts();renderAll()}function deletePost(pid){const p=posts.find(x=>x.id===pid);if(!p)return;if(!confirm(`"${p.title}" 게시글을 삭제할까요?`))return;posts=posts.filter(x=>x.id!==pid);savePosts();renderAll()}function renameCategory(c){const n=prompt("카테고리 이름 변경",c);if(!n?.trim())return;posts.forEach(p=>{if((p.category||"기본")===c)p.category=n.trim()});savePosts();renderAll()}function deleteCategory(c){const cnt=posts.filter(p=>(p.category||"기본")===c).length;if(!confirm(`"${c}" 카테고리를 삭제할까요?\n게시글 ${cnt}개도 함께 삭제됩니다.`))return;posts=posts.filter(p=>(p.category||"기본")!==c);savePosts();renderAll()}
+function openMenu(title,items){const mb=$("#menuBackdrop"),m=$("#bottomMenu");m.innerHTML=`<div class="menu-title">${esc(title)}</div>`+items.map((it,i)=>`<button class="menu-item ${it.danger?'danger':''}" data-mi="${i}">${esc(it.label)}</button>`).join("")+`<button class="menu-item" data-cancel>취소</button>`;m.querySelectorAll('[data-mi]').forEach(b=>b.onclick=()=>{mb.classList.remove('active');items[Number(b.dataset.mi)].action()});m.querySelector('[data-cancel]').onclick=()=>mb.classList.remove('active');mb.classList.add('active')}function bindLongPress(root,resolver){if(!root||root.dataset.lp)return;root.dataset.lp=1;let t=null,info=null,x=0,y=0;const clear=()=>{if(t)clearTimeout(t);t=null;info=null};root.addEventListener('pointerdown',e=>{info=resolver(e.target);if(!info)return;x=e.clientX;y=e.clientY;t=setTimeout(()=>{if(info.type==='project')openMenu(info.title,[{label:'프로젝트 이름 변경',action:()=>renameProject(info.id)},{label:'프로젝트 삭제',danger:true,action:()=>deleteProject(info.id)}]);else if(info.type==='room')openMenu(info.title,[{label:'채팅방 이름 변경',action:()=>renameRoom(info.id)},{label:'프로젝트로 이동',action:()=>moveRoom(info.id)},{label:'프로젝트로 복사',action:()=>copyRoom(info.id)},{label:'채팅방 삭제',danger:true,action:()=>deleteRoom(info.id)}]);else if(info.type==='cat')openMenu(info.title,[{label:'게시글 추가',action:()=>{openBoard();$("#postCategorySelect").value=info.id;$("#postTitle").focus()}},{label:'카테고리 이름 변경',action:()=>renameCategory(info.id)},{label:'카테고리 삭제',danger:true,action:()=>deleteCategory(info.id)}]);else if(info.type==='post')openMenu(info.title,[{label:'게시글 이름 변경',action:()=>renamePost(info.id)},{label:'게시글 삭제',danger:true,action:()=>deletePost(info.id)}]);clear()},650)},true);root.addEventListener('pointermove',e=>{if(t&&(Math.abs(e.clientX-x)>12||Math.abs(e.clientY-y)>12))clear()},true);['pointerup','pointercancel','pointerleave'].forEach(ev=>root.addEventListener(ev,clear,true));root.addEventListener('contextmenu',e=>{const i=resolver(e.target);if(!i)return;e.preventDefault();if(i.type==='room')openMenu(i.title,[{label:'채팅방 이름 변경',action:()=>renameRoom(i.id)},{label:'프로젝트로 이동',action:()=>moveRoom(i.id)},{label:'프로젝트로 복사',action:()=>copyRoom(i.id)},{label:'채팅방 삭제',danger:true,action:()=>deleteRoom(i.id)}])},true)}
+function renderPostSelect(){const cats=[...new Set(["기본",...posts.map(p=>p.category||"기본")])];$("#postCategorySelect").innerHTML=cats.map(c=>`<option>${esc(c)}</option>`).join("")}function renderPosts(){const cats=[...new Set(["기본",...posts.map(p=>p.category||"기본")])];$("#postList").innerHTML=cats.map(c=>`<div class="tree-section open"><button class="tree-head" type="button"><span class="folder">▱ ${esc(c)}</span><span class="count">${posts.filter(p=>(p.category||'기본')===c).length}</span></button>${posts.filter(p=>(p.category||'기본')===c).map(p=>`<article class="post" data-post-card="${esc(p.id)}"><h4>${esc(p.title)}</h4><p>${esc(p.body)}</p><small>${esc(new Date(p.createdAt).toLocaleString())}</small></article>`).join("")||'<div class="empty">게시글이 없습니다.</div>'}</div>`).join("")}
+function openBoard(){$("#boardPanel").classList.add("active");$("#boardBackdrop").classList.add("active");renderPostSelect();renderPosts()}function closeBoard(){$("#boardPanel").classList.remove("active");$("#boardBackdrop").classList.remove("active")}
+function renderMessages(){const r=activeRoom();$("#activeTitle").textContent=r?.name||"채팅방 없음";$("#activeSub").textContent=r?`${r.messages.length}개 메시지 · ${projectName(r.projectId)}`:"";const box=$("#messages");box.innerHTML="";(r?.messages||[]).forEach(m=>addMessage(m.role,m.text,false));box.scrollTop=box.scrollHeight}
+function addMessage(role,text,persist=true,meta={}){const box=$("#messages");const row=document.createElement('div');row.className='row '+role;const b=document.createElement('div');b.className='bubble';role==='ai'?renderAnswer(b,text):b.textContent=text;if(role==='user'&&meta.attachments?.length){const d=document.createElement('div');d.className='attachment-preview';d.style.marginTop='8px';d.textContent=meta.attachments.map(f=>'첨부 '+f.name).join(', ');b.appendChild(d)}row.appendChild(b);box.appendChild(row);box.scrollTop=box.scrollHeight;if(persist){const r=activeRoom();r.messages.push({role,text});if(role==='user'&&(r.name==='새 채팅'||!r.name))r.name=text.slice(0,28)||'첨부 파일 분석';saveRooms();renderProjectTree();$("#activeTitle").textContent=r.name;$("#activeSub").textContent=`${r.messages.length}개 메시지 · ${projectName(r.projectId)}`}}
+function renderAnswer(el,text){addDownloadTools(el,text);parseParts(text).forEach(part=>{if(part.type==='table')el.appendChild(tableEl(part.rows));else if(part.type==='code'){const pre=document.createElement('pre');pre.className='codebox';pre.textContent=part.code;el.appendChild(pre)}else part.text.split(/\n{2,}/).map(x=>x.trim()).filter(Boolean).forEach(p=>{const q=document.createElement('p');q.textContent=p;el.appendChild(q)})})}
+function addDownloadTools(el,text){const tools=document.createElement('div');tools.className='download-tools';const stamp=new Date().toISOString().replace(/[:.]/g,'-').slice(0,19);tools.append(btn('TXT 다운로드',()=>downloadText(`stella-answer-${stamp}.txt`,text,'text/plain;charset=utf-8')));tools.append(btn('Markdown 다운로드',()=>downloadText(`stella-answer-${stamp}.md`,text,'text/markdown;charset=utf-8')));codeBlocks(text).forEach((c,i)=>{const ext={html:'html',javascript:'js',js:'js',css:'css',json:'json',csv:'csv',abap:'abap',sql:'sql'}[c.lang]||'txt';tools.append(btn(`${ext.toUpperCase()} 다운로드`,()=>downloadText(ext==='html'?'index.html':`stella-${stamp}-${i+1}.${ext}`,c.code,'text/plain;charset=utf-8')))});el.appendChild(tools)}
+function btn(t,fn){const b=document.createElement('button');b.className='download-btn';b.type='button';b.textContent=t;b.onclick=fn;return b}function downloadText(name,content,mime){const blob=new Blob([content],{type:mime});const url=URL.createObjectURL(blob);const a=document.createElement('a');a.href=url;a.download=name;document.body.appendChild(a);a.click();setTimeout(()=>{a.remove();URL.revokeObjectURL(url)},1000)}function roomText(r=activeRoom()){return (r?.messages||[]).map(m=>`${m.role==='ai'?'Stella':'나'}:\n${m.text}`).join('\n\n---\n\n')}
+function codeBlocks(text){const out=[];String(text||'').replace(/```([\w-]*)\s*\n([\s\S]*?)```/g,(_,lang,code)=>{out.push({lang:(lang||'txt').toLowerCase(),code:code.trim()})});return out}
+function parseParts(text){const blocks=codeBlocks(text);let clean=String(text||'').replace(/```([\w-]*)\s*\n([\s\S]*?)```/g,'\n');const parts=[];clean.split(/\n/);const lines=clean.split(/\r?\n/);let buf=[];const flush=()=>{const v=buf.join('\n').trim();if(v)parts.push({type:'text',text:v});buf=[]};for(let i=0;i<lines.length;i++){if(/^\s*\|.+\|\s*$/.test(lines[i])){let rows=[];while(i<lines.length&&/^\s*\|.+\|\s*$/.test(lines[i])){if(!/^\s*\|?\s*:?-{3,}:?\s*(\|\s*:?-{3,}:?\s*)+\|?\s*$/.test(lines[i]))rows.push(lines[i].trim().replace(/^\|/,'').replace(/\|$/,'').split('|').map(x=>x.trim()));i++}i--;if(rows.length>=2){flush();parts.push({type:'table',rows});continue}}buf.push(lines[i])}flush();blocks.forEach(b=>parts.push({type:'code',code:b.code}));return parts.length?parts:[{type:'text',text:String(text||'')}]}function tableEl(rows){const box=document.createElement('div');box.className='tablebox';const tools=document.createElement('div');tools.className='tabletools';tools.innerHTML='<b>표 결과</b>';tools.append(btn2('Excel',()=>downloadXlsx(rows)));tools.append(btn2('CSV',()=>downloadCsv(rows)));const scroll=document.createElement('div');scroll.className='tablescroll';const table=document.createElement('table');table.className='answer-table';table.innerHTML='<thead><tr>'+rows[0].map(c=>`<th>${esc(c)}</th>`).join('')+'</tr></thead><tbody>'+rows.slice(1).map(r=>'<tr>'+r.map(c=>`<td>${esc(c)}</td>`).join('')+'</tr>').join('')+'</tbody>';scroll.append(table);box.append(tools,scroll);return box}function btn2(t,fn){const b=document.createElement('button');b.className='table-btn';b.type='button';b.textContent=t;b.onclick=fn;return b}function downloadCsv(rows){downloadText('stella-table.csv','\ufeff'+rows.map(r=>r.map(c=>`"${String(c??'').replace(/"/g,'""')}"`).join(',')).join('\n'),'text/csv;charset=utf-8')}function downloadXlsx(rows){if(!window.XLSX)return downloadCsv(rows);const ws=XLSX.utils.aoa_to_sheet(rows);const wb=XLSX.utils.book_new();XLSX.utils.book_append_sheet(wb,ws,'Stella');const arr=XLSX.write(wb,{bookType:'xlsx',type:'array'});const blob=new Blob([arr],{type:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'});const url=URL.createObjectURL(blob);const a=document.createElement('a');a.href=url;a.download='stella-table.xlsx';document.body.appendChild(a);a.click();setTimeout(()=>{a.remove();URL.revokeObjectURL(url)},1000)}
+async function extractFile(file){const name=file.name||'file';const lower=name.toLowerCase();const type=file.type||'';try{if(type.startsWith('image/')||/\.(png|jpe?g|webp|bmp|gif)$/i.test(lower)){const dataUrl=await readData(file);let text=`[이미지 첨부: ${name}]`;if(window.Tesseract){try{const res=await Tesseract.recognize(dataUrl,'kor+eng');text+='\n\n[OCR 추출 텍스트]\n'+(res?.data?.text?.trim()||'추출된 텍스트 없음')}catch(e){text+='\n\n[OCR 오류] '+(e.message||e)}}return{name,type,size:file.size,dataUrl,text}}if(lower.endsWith('.pdf')&&window.pdfjsLib){const pdf=await pdfjsLib.getDocument({data:await file.arrayBuffer()}).promise;let pages=[];for(let p=1;p<=Math.min(pdf.numPages,50);p++){const page=await pdf.getPage(p);const tc=await page.getTextContent();pages.push(`[PDF ${p}페이지]\n`+tc.items.map(i=>i.str).join(' '))}return{name,type,size:file.size,text:pages.join('\n\n')}}if(/\.docx$/i.test(lower)&&window.mammoth){const r=await mammoth.extractRawText({arrayBuffer:await file.arrayBuffer()});return{name,type,size:file.size,text:r.value||''}}if(/\.pptx$/i.test(lower)&&window.JSZip){const zip=await JSZip.loadAsync(await file.arrayBuffer());const names=Object.keys(zip.files).filter(n=>/^ppt\/slides\/slide\d+\.xml$/i.test(n)).sort((a,b)=>a.localeCompare(b,undefined,{numeric:true}));let parts=[];for(const n of names){const xml=await zip.files[n].async('text');const doc=new DOMParser().parseFromString(xml,'application/xml');const texts=[...doc.getElementsByTagName('a:t')].map(x=>x.textContent).filter(Boolean);if(texts.length)parts.push(`[${n}]\n`+texts.join('\n'))}return{name,type,size:file.size,text:parts.join('\n\n')}}if(/\.(xlsx|xls|xlsm)$/i.test(lower)&&window.XLSX){const wb=XLSX.read(await file.arrayBuffer(),{type:'array'});const parts=wb.SheetNames.map(sn=>`[시트: ${sn}]\n`+XLSX.utils.sheet_to_csv(wb.Sheets[sn]));return{name,type,size:file.size,text:parts.join('\n\n')}}return{name,type,size:file.size,text:await file.text()}}catch(e){return{name,type,size:file.size,text:`파일 읽기 오류: ${e.message||e}`}}}function readData(file){return new Promise((res,rej)=>{const r=new FileReader();r.onload=()=>res(String(r.result||''));r.onerror=()=>rej(r.error);r.readAsDataURL(file)})}async function processFiles(list){const arr=[...list];for(const f of arr)files.push(await extractFile(f));dedupeFiles();renderChips()}function dedupeFiles(){const seen=new Set();files=files.filter(f=>{const k=[f.name,f.size,f.type,String(f.text).slice(0,120)].join('|');if(seen.has(k))return false;seen.add(k);return true})}function renderChips(){$("#chips").innerHTML=files.map((f,i)=>`<span class="chip">첨부 ${esc(f.name.length>28?f.name.slice(0,25)+'...':f.name)} <button data-rmfile="${i}" type="button">×</button></span>`).join('');$$('[data-rmfile]').forEach(b=>b.onclick=()=>{files.splice(Number(b.dataset.rmfile),1);renderChips()})}
+async function send(e){e.preventDefault();const input=$("#chatInput");const msg=input.value.trim();if(!msg&&!files.length)return;const r=activeRoom()||rooms[0];if(!activeRoomId)activeRoomId=r.id;addMessage('user',msg||'[첨부 파일 분석]',true,{attachments:[...files]});input.value='';$("#sendBtn").disabled=true;try{const fileText=files.map(f=>`\n\n[첨부파일: ${f.name}]\n${f.text}`).join('');const history=(activeRoom()?.messages||[]).slice(-10).map(m=>({role:m.role==='ai'?'assistant':'user',content:m.text}));const system="당신은 Stella GPT입니다. 사용자 주제를 홈페이지로 제한하지 말고, SAP/ABAP/개발/문서/이미지/OCR/일반 질문에 성의 있고 실무적으로 답하세요. 다운로드 요청이 있으면 실제 텍스트/코드블록으로 제공하세요.";const res=await fetch(API_URL,{method:'POST',headers:{'Content-Type':'application/json','Cache-Control':'no-store'},body:JSON.stringify({model:$("#modelSelect").value,message:(msg||'첨부 파일을 분석해줘')+fileText,history,system})});const raw=await res.text();let data;try{data=JSON.parse(raw)}catch{data={text:raw}}if(!res.ok)throw new Error(data.error||raw||res.status);addMessage('ai',data.text||data.answer||data.message||'응답 없음',true)}catch(err){addMessage('ai','API 연결 오류: '+(err.message||err),true)}finally{files=[];renderChips();$("#sendBtn").disabled=false}}
+function openSidebar(){$("#sidebar").classList.add('open');$("#sidebarBackdrop").classList.add('active')}function closeSidebar(){$("#sidebar").classList.remove('open');$("#sidebarBackdrop").classList.remove('active')}
+function initEvents(){$("#loginTab").onclick=()=>setAuthMode('login');$("#signupTab").onclick=()=>setAuthMode('signup');$("#authForm").onsubmit=handleAuth;$("#forgotBtn").onclick=forgotPassword;$("#logoutBtn").onclick=logout;$("#newChatBtn").onclick=()=>createRoom('새 채팅');$("#newProjectBtn").onclick=createProject;$("#openBoardBtn").onclick=openBoard;$("#hambBtn").onclick=openSidebar;$("#sidebarBackdrop").onclick=closeSidebar;$("#menuBackdrop").onclick=e=>{if(e.target===$("#menuBackdrop"))$("#menuBackdrop").classList.remove('active')};$("#closeBoardBtn").onclick=closeBoard;$("#boardBackdrop").onclick=closeBoard;$("#roomTxtBtn").onclick=()=>downloadText((activeRoom()?.name||'chat')+'.txt',roomText(),'text/plain;charset=utf-8');$("#roomMdBtn").onclick=()=>downloadText((activeRoom()?.name||'chat')+'.md',roomText(),'text/markdown;charset=utf-8');$("#deleteRoomTopBtn").onclick=()=>activeRoomId&&deleteRoom(activeRoomId);$("#chatForm").onsubmit=send;$("#attachBtn").onclick=()=>$("#fileInput").click();$("#fileInput").onchange=e=>{processFiles(e.target.files);e.target.value=''};$("#chatInput").addEventListener('keydown',e=>{if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();send(e)}});$("#chatInput").addEventListener('input',e=>{e.target.style.height='auto';e.target.style.height=Math.min(e.target.scrollHeight,140)+'px'});$("#chatInput").addEventListener('paste',async e=>{const items=[...(e.clipboardData?.items||[])].filter(i=>i.type.startsWith('image/'));if(!items.length)return;e.preventDefault();const list=items.map(i=>i.getAsFile()).filter(Boolean).map(f=>new File([f],`capture-${Date.now()}.png`,{type:f.type||'image/png'}));await processFiles(list)});$("#messages").addEventListener('dragover',e=>{e.preventDefault();$("#messages").classList.add('drag-over')});$("#messages").addEventListener('dragleave',()=>$("#messages").classList.remove('drag-over'));$("#messages").addEventListener('drop',async e=>{e.preventDefault();$("#messages").classList.remove('drag-over');await processFiles(e.dataTransfer.files)});$("#postNewCategory").addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();$("#postTitle").focus()}});$("#boardForm").onsubmit=e=>{e.preventDefault();const nc=$("#postNewCategory").value.trim();const cat=nc||$("#postCategorySelect").value||'기본';posts.unshift({id:'post_'+id(),owner:user.id,category:cat,title:$("#postTitle").value.trim(),body:$("#postBody").value.trim(),createdAt:new Date().toISOString()});$("#boardForm").reset();savePosts();const set=boardExpanded();set.add(cat);saveBoardExpanded(set);renderAll()}}
+window.addEventListener('DOMContentLoaded',()=>{initEvents();initAuth()});
+</script>
+
+
+<script>
+/* Stella v68: member-to-member chat + auth scroll stability */
+(function(){
+  const MEMBER_KEY = "stella_member_messages_v68";
+  function q(s){return document.querySelector(s)}
+  function qa(s){return Array.from(document.querySelectorAll(s))}
+  function readJson(k,d){try{return JSON.parse(localStorage.getItem(k)||JSON.stringify(d))}catch{return d}}
+  function writeJson(k,v){localStorage.setItem(k,JSON.stringify(v))}
+  function htmlEsc(v){return String(v??"").replace(/[&<>\"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;","'":"&#039;"}[c]))}
+  function uid(){try{return user && user.id}catch{return ""}}
+  function uname(){try{return user && user.name || user.id}catch{return ""}}
+  function isAdmin(){try{return user && (user.role === "admin" || ADMIN_EMAILS.includes(String(user.email||"").toLowerCase()))}catch{return false}}
+  function usersAll(){try{return readJson(K.users,[])}catch{return []}}
+  function msgsAll(){return readJson(MEMBER_KEY,[])}
+  function saveMsgs(arr){writeJson(MEMBER_KEY,arr)}
+  function openMember(){
+    const p=q('#memberPanel'), b=q('#memberBackdrop');
+    if(p) p.classList.add('active'); if(b) b.classList.add('active');
+    renderMemberUsers(); renderMemberMessages();
+    try{ if(typeof closeSidebar==='function') closeSidebar(); }catch(e){}
+  }
+  function closeMember(){const p=q('#memberPanel'), b=q('#memberBackdrop'); if(p)p.classList.remove('active'); if(b)b.classList.remove('active')}
+  function ensureMemberButton(){
+    const tools=q('.tools'); if(!tools || q('#memberChatBtn')) return;
+    const btn=document.createElement('button'); btn.className='tool-btn member-chat-btn'; btn.id='memberChatBtn'; btn.type='button'; btn.textContent='회원 채팅'; btn.onclick=openMember;
+    tools.appendChild(btn);
+  }
+  function renderMemberUsers(){
+    const sel=q('#memberToSelect'); if(!sel) return;
+    const me=uid(); const list=usersAll().filter(u=>u.id!==me);
+    sel.innerHTML=list.length?list.map(u=>`<option value="${htmlEsc(u.id)}">${htmlEsc(u.name||u.id)} (${htmlEsc(u.id)})</option>`).join(''):'<option value="">대화 가능한 회원 없음</option>';
+    const adminBox=q('#memberAdminBox'); if(adminBox) adminBox.style.display=isAdmin()?"block":"none";
+  }
+  function renderMemberMessages(){
+    const box=q('#memberMsgList'), sel=q('#memberToSelect'); if(!box||!sel) return;
+    const me=uid(), other=sel.value;
+    const list=msgsAll().filter(m=>(m.from===me&&m.to===other)||(m.from===other&&m.to===me));
+    box.innerHTML=list.length?list.map(m=>{
+      const cls=m.from===me?'member-msg me':'member-msg';
+      const sender=m.from===me?'나':htmlEsc((usersAll().find(u=>u.id===m.from)||{}).name||m.from);
+      const file=m.fileDataUrl?`<a class="member-file" href="${m.fileDataUrl}" download="${htmlEsc(m.fileName||'file')}">첨부파일 다운로드: ${htmlEsc(m.fileName||'file')}</a>`:'';
+      const drive=m.driveLink?`<a class="member-file" href="${htmlEsc(m.driveLink)}" target="_blank" rel="noopener">Google Drive 열기</a>`:'';
+      return `<div class="${cls}"><b>${sender}</b><div>${htmlEsc(m.text||'')}</div>${file}${drive}<small>${htmlEsc(m.createdAt||'')}</small></div>`;
+    }).join(''):'<p class="member-note">아직 대화가 없습니다.</p>';
+    box.scrollTop=box.scrollHeight;
+  }
+  function fileToDataUrl(file){return new Promise((res,rej)=>{const r=new FileReader();r.onload=()=>res(String(r.result||''));r.onerror=rej;r.readAsDataURL(file)})}
+  async function sendMember(){
+    const sel=q('#memberToSelect'), txt=q('#memberText'), drive=q('#memberDriveLink'), fin=q('#memberFileInput');
+    if(!sel||!sel.value){alert('대화 상대가 없습니다. 먼저 회원을 생성하거나 회원가입해 주세요.');return}
+    const text=(txt.value||'').trim(); const link=(drive.value||'').trim(); const file=fin.files&&fin.files[0];
+    if(!text&&!link&&!file){alert('메시지, 파일, Google Drive 링크 중 하나를 입력해 주세요.');return}
+    let fileDataUrl='', fileName='';
+    if(file){
+      if(file.size>5*1024*1024){alert('단일 HTML 저장소에서는 5MB 이하 파일만 임시 저장합니다. 큰 파일은 Google Drive 링크로 공유하세요.');return}
+      fileDataUrl=await fileToDataUrl(file); fileName=file.name;
+    }
+    const arr=msgsAll(); arr.push({id:'m_'+Date.now(),from:uid(),fromName:uname(),to:sel.value,text,driveLink:link,fileName,fileDataUrl,createdAt:new Date().toLocaleString()}); saveMsgs(arr);
+    txt.value=''; drive.value=''; fin.value=''; renderMemberMessages();
+  }
+  function createUserByAdmin(){
+    if(!isAdmin()){alert('관리자만 사용자 생성이 가능합니다.');return}
+    const name=q('#adminNewName').value.trim(), id=q('#adminNewId').value.trim(), email=q('#adminNewEmail').value.trim().toLowerCase(), birth=q('#adminNewBirth').value.trim(), pw=q('#adminNewPw').value;
+    if(!name||!id||!email||!birth||!pw){alert('이름, 아이디, 이메일, 생년월일, 임시 비밀번호를 모두 입력하세요.');return}
+    const list=usersAll(); if(list.some(u=>u.id===id)){alert('이미 사용 중인 아이디입니다.');return}
+    const pwHash=typeof hash==='function'?hash(pw):btoa(unescape(encodeURIComponent(pw)));
+    list.push({id,name,email,birth,passwordHash:pwHash,role:ADMIN_EMAILS.includes(email)?'admin':'user',createdAt:new Date().toISOString(),createdBy:uid()}); writeJson(K.users,list);
+    ['#adminNewName','#adminNewId','#adminNewEmail','#adminNewBirth','#adminNewPw'].forEach(s=>{const el=q(s); if(el)el.value=''});
+    renderMemberUsers(); alert('사용자를 생성했습니다.');
+  }
+  function patchAuthScroll(){
+    const modal=q('#authModal'); if(!modal) return;
+    modal.addEventListener('touchmove',function(e){}, {passive:true});
+  }
+  function bind(){
+    ensureMemberButton(); patchAuthScroll();
+    const close=q('#closeMemberBtn'), back=q('#memberBackdrop'), send=q('#memberSendBtn'), sel=q('#memberToSelect'), admin=q('#adminCreateUserBtn');
+    if(close && close.dataset.v68!=='1'){close.dataset.v68='1'; close.onclick=closeMember}
+    if(back && back.dataset.v68!=='1'){back.dataset.v68='1'; back.onclick=closeMember}
+    if(send && send.dataset.v68!=='1'){send.dataset.v68='1'; send.onclick=sendMember}
+    if(sel && sel.dataset.v68!=='1'){sel.dataset.v68='1'; sel.onchange=renderMemberMessages}
+    if(admin && admin.dataset.v68!=='1'){admin.dataset.v68='1'; admin.onclick=createUserByAdmin}
+  }
+  const oldRenderAll=window.renderAll;
+  if(typeof oldRenderAll==='function'){
+    window.renderAll=function(){ oldRenderAll.apply(this,arguments); setTimeout(bind,0); };
+  }
+  window.addEventListener('DOMContentLoaded',bind); window.addEventListener('load',bind); window.addEventListener('pageshow',bind); setTimeout(bind,500); setTimeout(bind,1500);
+})();
+</script>
+
+
+<!-- Stella v72 UX redesign patch: compact tree, member chat rooms, admin accordion -->
+<style>
+/* v72 compact sidebar and ChatGPT/Kakao-like refinements */
+.section-title{padding:10px 18px 4px!important}
+.tree{padding:0 10px 4px!important}
+.tree-section{margin:0!important}
+.tree-head{min-height:34px!important;padding:5px 8px!important;border-radius:12px!important}
+.children{padding-left:18px!important}
+.item{min-height:36px!important;padding:6px 8px!important;border-radius:12px!important}
+.item-meta{font-size:.76rem!important;margin-top:1px!important}
+.empty{padding:6px 8px!important;font-size:.8rem!important}
+.tools{gap:7px!important;padding:11px 18px!important}
+.tool-btn{padding:11px 13px!important;border-radius:15px!important}
+.side-head{padding-bottom:10px!important}
+.user-box{padding:10px!important}
+.side-search-wrap{padding:8px 18px!important}
+.side-search{padding:10px 12px!important}
+#projectTree .tree-head .folder::before{content:''}
+#projectTree .tree-section[data-p="all"] .folder{font-weight:900}
+.member-panel{width:min(620px,100%)!important;background:#fff!important}
+.member-body{display:flex!important;flex-direction:column!important;gap:10px!important;padding:12px!important}
+.member-layout{display:grid;grid-template-columns:170px 1fr;gap:10px;min-height:0;flex:1}
+.member-room-list{border:1px solid #e5e7eb;border-radius:16px;background:#fbfbfc;overflow:auto;max-height:calc(100dvh - 160px);padding:8px}
+.member-room{width:100%;border:0;background:transparent;text-align:left;border-radius:12px;padding:9px 10px;margin-bottom:4px;line-height:1.35}
+.member-room.active{background:#eef2ff}.member-room b{display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.member-room small{color:#9ca3af;display:block;margin-top:3px}
+.member-chat-area{border:1px solid #e5e7eb;border-radius:18px;display:flex;flex-direction:column;min-height:420px;overflow:hidden;background:#fff}
+.member-chat-top{display:flex;gap:6px;align-items:center;padding:9px;border-bottom:1px solid #e5e7eb;background:#fff}
+.member-chat-top b{margin-right:auto;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.member-chat-top button{width:auto!important;padding:7px 9px!important;border-radius:10px!important;font-size:.8rem!important}
+.member-msg-list{flex:1!important;min-height:260px!important;max-height:none!important;overflow:auto!important;padding:12px!important;background:#fafafa!important;margin:0!important;display:flex!important;flex-direction:column!important;gap:8px!important}
+.member-msg{max-width:82%;border-radius:17px!important;padding:9px 11px!important;margin:0!important;background:#fff!important;border:1px solid #e5e7eb!important;align-self:flex-start;box-shadow:0 2px 8px rgba(15,23,42,.03)}
+.member-msg.me{background:#dbeafe!important;align-self:flex-end!important;border-color:#bfdbfe!important}.member-msg b{font-size:.78rem;color:#64748b}.member-msg div{word-break:break-word}.member-msg small{font-size:.72rem!important;color:#94a3b8!important}
+.member-compose{border-top:1px solid #e5e7eb;padding:9px;background:#fff;display:grid;gap:7px}.member-compose-row{display:flex;gap:7px;align-items:flex-end}.member-compose textarea{flex:1;min-height:46px;max-height:110px;resize:none;border:1px solid #d1d5db;border-radius:15px;padding:10px}.member-compose button{width:auto!important;min-width:66px}.member-compose input{border:1px solid #d1d5db;border-radius:12px;padding:8px;background:#fff;width:100%}
+.admin-accordion{border-top:1px solid #e5e7eb;margin-top:8px;padding-top:8px}.admin-toggle{width:100%;border:1px solid #d1d5db;background:#fff;border-radius:13px;padding:10px;text-align:left;font-weight:900}.admin-content{display:none;margin-top:8px}.admin-content.open{display:block}.member-admin-grid{grid-template-columns:1fr!important}.member-admin-grid input{min-height:42px}
+.member-note{font-size:.78rem!important}.member-file{font-size:.82rem!important}
+@media(max-width:760px){
+ .sidebar{width:min(82vw,330px)!important}.member-layout{grid-template-columns:1fr}.member-room-list{max-height:130px;display:flex;overflow-x:auto;overflow-y:hidden}.member-room{min-width:145px}.member-chat-area{min-height:calc(100dvh - 245px)}.member-msg-list{min-height:250px!important}.member-chat-top{flex-wrap:wrap}.member-chat-top b{flex:1 0 100%}.member-body{padding-bottom:calc(18px + env(safe-area-inset-bottom))!important}
+ .tree-head{min-height:32px!important}.item{min-height:34px!important}.children{padding-left:16px!important}
+}
+</style>
+<script>
+/* v72 patch */
+(function(){
+  const MEMBER_ROOMS_KEY='stella_member_rooms_v72';
+  let activeMemberRoomId=null;
+  function q(s){return document.querySelector(s)}
+  function qa(s){return Array.from(document.querySelectorAll(s))}
+  function esc2(v){return String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;'}[c]))}
+  function readJson(k,d){try{return JSON.parse(localStorage.getItem(k)||JSON.stringify(d))}catch{return d}}
+  function writeJson(k,v){localStorage.setItem(k,JSON.stringify(v))}
+  function me(){try{return user}catch{return null}}
+  function myId(){return me()?.id||''}
+  function usersAll(){try{return readJson(K.users,[])}catch{return []}}
+  function isAdminNow(){const u=me();try{return !!u&&(u.role==='admin'||ADMIN_EMAILS.includes(String(u.email||'').toLowerCase()))}catch{return false}}
+  function roomsAll(){return readJson(MEMBER_ROOMS_KEY,[])}
+  function saveMemberRooms(v){writeJson(MEMBER_ROOMS_KEY,v)}
+  function roomName(r){return r?.name||'회원 채팅방'}
+  function ensureTools(){
+    const tools=q('.tools'); if(!tools)return;
+    const n=q('#newProjectBtn'); if(n)n.textContent='▱ 새 채팅 카테고리';
+    const openBoard=q('#openBoardBtn'); if(openBoard)openBoard.textContent='게시판';
+    let btn=q('#memberChatBtn');
+    if(!btn){btn=document.createElement('button');btn.className='tool-btn member-chat-btn';btn.id='memberChatBtn';btn.type='button';btn.textContent='회원 채팅';tools.appendChild(btn)}
+    btn.onclick=openMemberV72;
+    const st=qa('.section-title').find(x=>x.textContent.trim()==='프로젝트'); if(st)st.textContent='채팅 카테고리';
+  }
+  function createMemberRoom(){
+    const others=usersAll().filter(u=>u.id!==myId());
+    let name=prompt('새 회원 채팅방 이름','새 회원 채팅'); if(!name)return;
+    let memberIds=[myId()];
+    if(others.length){
+      const list=others.map((u,i)=>`${i+1}. ${u.name||u.id} (${u.id})`).join('\n');
+      const pick=prompt('초대할 회원 번호를 쉼표로 입력하세요.\n나중에 초대도 가능합니다.\n\n'+list,'');
+      if(pick){pick.split(',').map(x=>parseInt(x.trim(),10)-1).forEach(i=>{if(others[i])memberIds.push(others[i].id)})}
+    }
+    const arr=roomsAll(); const r={id:'mr_'+Date.now()+Math.random().toString(36).slice(2,6),name:name.trim(),owner:myId(),members:[...new Set(memberIds)],left:[],messages:[],createdAt:new Date().toISOString()};
+    arr.unshift(r); saveMemberRooms(arr); activeMemberRoomId=r.id; renderMemberV72();
+  }
+  function visibleRooms(){return roomsAll().filter(r=>(r.members||[]).includes(myId()) && !(r.left||[]).includes(myId()))}
+  function activeMRoom(){let list=visibleRooms(); if(!activeMemberRoomId||!list.some(r=>r.id===activeMemberRoomId))activeMemberRoomId=list[0]?.id||null; return list.find(r=>r.id===activeMemberRoomId)||null}
+  function inviteMember(){
+    const r=activeMRoom(); if(!r)return alert('채팅방을 먼저 선택하세요.');
+    const candidates=usersAll().filter(u=>u.id!==myId() && !(r.members||[]).includes(u.id));
+    if(!candidates.length)return alert('초대할 수 있는 회원이 없습니다.');
+    const list=candidates.map((u,i)=>`${i+1}. ${u.name||u.id} (${u.id})`).join('\n');
+    const pick=prompt('초대할 회원 번호를 입력하세요.\n여러 명은 쉼표로 구분합니다.\n\n'+list,''); if(!pick)return;
+    const arr=roomsAll(); const target=arr.find(x=>x.id===r.id); if(!target)return;
+    pick.split(',').map(x=>parseInt(x.trim(),10)-1).forEach(i=>{if(candidates[i])target.members.push(candidates[i].id)});
+    target.members=[...new Set(target.members)]; target.left=(target.left||[]).filter(id=>!target.members.includes(id)); saveMemberRooms(arr); renderMemberV72();
+  }
+  function leaveMemberRoom(){const r=activeMRoom(); if(!r)return; if(!confirm('이 채팅방을 나가시겠습니까?'))return; const arr=roomsAll(); const t=arr.find(x=>x.id===r.id); if(t){t.left=[...new Set([...(t.left||[]),myId()])]; saveMemberRooms(arr); activeMemberRoomId=null; renderMemberV72();}}
+  function fileToDataUrl(file){return new Promise((res,rej)=>{const fr=new FileReader();fr.onload=()=>res(String(fr.result||''));fr.onerror=rej;fr.readAsDataURL(file)})}
+  async function sendMemberV72(){
+    const r=activeMRoom(); if(!r)return alert('회원 채팅방을 먼저 생성하세요.');
+    const text=(q('#memberTextV72')?.value||'').trim(); const link=(q('#memberDriveLinkV72')?.value||'').trim(); const file=q('#memberFileV72')?.files?.[0];
+    if(!text&&!link&&!file)return alert('메시지, 파일, Google Drive 링크 중 하나를 입력해 주세요.');
+    let fileDataUrl='',fileName=''; if(file){ if(file.size>8*1024*1024){alert('8MB 이하 파일만 임시 저장합니다. 큰 파일은 Google Drive 링크로 공유하세요.');return} fileDataUrl=await fileToDataUrl(file); fileName=file.name; }
+    const arr=roomsAll(); const target=arr.find(x=>x.id===r.id); if(!target)return;
+    target.messages=target.messages||[]; target.messages.push({id:'mm_'+Date.now(),from:myId(),fromName:me()?.name||myId(),text,driveLink:link,fileName,fileDataUrl,createdAt:new Date().toLocaleString()}); saveMemberRooms(arr);
+    q('#memberTextV72').value=''; q('#memberDriveLinkV72').value=''; q('#memberFileV72').value=''; renderMemberV72();
+  }
+  function renderMemberV72(){
+    const body=q('#memberPanel .member-body'); if(!body)return;
+    const list=visibleRooms(); const r=activeMRoom();
+    body.innerHTML=`
+      <div class="member-layout">
+        <div class="member-room-list">
+          <button class="member-room" id="createMemberRoomV72"><b>＋ 새 대화방</b><small>카카오톡처럼 회원 초대</small></button>
+          ${list.map(x=>`<button class="member-room ${x.id===activeMemberRoomId?'active':''}" data-mroom="${esc2(x.id)}"><b>${esc2(x.name)}</b><small>${(x.messages||[]).length}개 메시지 · ${(x.members||[]).length}명</small></button>`).join('')}
+        </div>
+        <div class="member-chat-area">
+          <div class="member-chat-top"><b>${esc2(r?roomName(r):'회원 채팅')}</b><button class="small-btn" id="inviteMemberV72" type="button">초대</button><button class="small-btn" id="leaveMemberV72" type="button">나가기</button></div>
+          <div class="member-msg-list" id="memberMsgListV72">
+            ${r?(r.messages||[]).map(m=>{const mine=m.from===myId();const drive=m.driveLink?`<a class="member-file member-drive-link" href="${esc2(m.driveLink)}" target="_blank" rel="noopener" data-drive="${esc2(m.driveLink)}">Google Drive 열기</a>`:'';const file=m.fileDataUrl?`<a class="member-file" href="${m.fileDataUrl}" download="${esc2(m.fileName||'file')}">파일 다운로드: ${esc2(m.fileName||'file')}</a>`:'';return `<div class="member-msg ${mine?'me':''}"><b>${mine?'나':esc2(m.fromName||m.from)}</b><div>${esc2(m.text||'')}</div>${file}${drive}<small>${esc2(m.createdAt||'')}</small></div>`}).join(''):'<p class="member-note">새 대화방을 만들어 회원을 초대하세요.</p>'}
+          </div>
+          <div class="member-compose"><input id="memberDriveLinkV72" type="url" placeholder="Google Drive 공유 링크 붙여넣기(선택)"><input id="memberFileV72" type="file"><div class="member-compose-row"><textarea id="memberTextV72" placeholder="메시지를 입력하세요."></textarea><button class="primary" id="memberSendV72" type="button">전송</button></div></div>
+        </div>
+      </div>
+      ${isAdminNow()?`<div class="admin-accordion"><button class="admin-toggle" id="adminToggleV72" type="button">관리자 사용자 생성 접기/펼치기</button><div class="admin-content" id="adminContentV72"><p class="member-note">관리자 이메일: yesblue0342@naver.com / yesblue0342@gmail.com</p><div class="member-admin-grid"><input id="adminNewNameV72" placeholder="이름"><input id="adminNewIdV72" placeholder="아이디"><input id="adminNewEmailV72" placeholder="이메일"><input id="adminNewBirthV72" placeholder="생년월일 예: 1982-04-30"><input id="adminNewPwV72" placeholder="임시 비밀번호" type="password"><button class="primary" id="adminCreateUserV72" type="button">사용자 생성</button></div></div></div>`:''}
+    `;
+    q('#createMemberRoomV72').onclick=createMemberRoom;
+    qa('[data-mroom]').forEach(b=>b.onclick=()=>{activeMemberRoomId=b.dataset.mroom;renderMemberV72()});
+    const inv=q('#inviteMemberV72'); if(inv)inv.onclick=inviteMember; const le=q('#leaveMemberV72'); if(le)le.onclick=leaveMemberRoom; const send=q('#memberSendV72'); if(send)send.onclick=sendMemberV72;
+    const ta=q('#memberTextV72'); if(ta)ta.addEventListener('keydown',e=>{if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();sendMemberV72()}});
+    const at=q('#adminToggleV72'); if(at)at.onclick=()=>q('#adminContentV72').classList.toggle('open');
+    const ac=q('#adminCreateUserV72'); if(ac)ac.onclick=createUserAdminV72;
+    const msg=q('#memberMsgListV72'); if(msg)msg.scrollTop=msg.scrollHeight;
+    qa('.member-drive-link').forEach(a=>{let t=null;a.addEventListener('pointerdown',e=>{t=setTimeout(()=>{e.preventDefault();openMenu('Google Drive 링크',[{label:'링크 열기',action:()=>window.open(a.dataset.drive,'_blank')},{label:'링크 복사',action:()=>navigator.clipboard?.writeText(a.dataset.drive)}])},550)});['pointerup','pointercancel','pointerleave'].forEach(ev=>a.addEventListener(ev,()=>{if(t)clearTimeout(t)}))});
+  }
+  function createUserAdminV72(){
+    if(!isAdminNow())return alert('관리자만 사용자 생성이 가능합니다.');
+    const name=q('#adminNewNameV72').value.trim(), uid=q('#adminNewIdV72').value.trim(), email=q('#adminNewEmailV72').value.trim().toLowerCase(), birth=q('#adminNewBirthV72').value.trim(), pw=q('#adminNewPwV72').value;
+    if(!name||!uid||!email||!birth||!pw)return alert('모든 항목을 입력하세요.');
+    const list=usersAll(); if(list.some(u=>u.id===uid))return alert('이미 사용 중인 아이디입니다.');
+    const pwHash=(typeof hash==='function')?hash(pw):btoa(unescape(encodeURIComponent(pw)));
+    list.push({id:uid,name,email,birth,passwordHash:pwHash,role:(ADMIN_EMAILS||[]).includes(email)?'admin':'user',createdAt:new Date().toISOString(),createdBy:myId()});
+    writeJson(K.users,list); alert('사용자를 생성했습니다.'); renderMemberV72();
+  }
+  function openMemberV72(){const p=q('#memberPanel'),b=q('#memberBackdrop'); if(p)p.classList.add('active'); if(b)b.classList.add('active'); renderMemberV72(); try{closeSidebar()}catch(e){}}
+  function closeMemberV72(){const p=q('#memberPanel'),b=q('#memberBackdrop'); if(p)p.classList.remove('active'); if(b)b.classList.remove('active')}
+  function patchProjectTreeLongPress(){
+    // Rebind explicit context/long press after every render so rename/move/copy stays alive.
+    const tree=q('#projectTree'); if(!tree)return;
+    qa('[data-room]').forEach(btn=>{btn.oncontextmenu=e=>{e.preventDefault(); const rid=btn.dataset.room; const r=(rooms||[]).find(x=>x.id===rid); openMenu(r?.name||'채팅방',[{label:'채팅방 이름 변경',action:()=>renameRoom(rid)},{label:'프로젝트로 이동',action:()=>moveRoom(rid)},{label:'프로젝트로 복사',action:()=>copyRoom(rid)},{label:'채팅방 삭제',danger:true,action:()=>deleteRoom(rid)}]);};});
+  }
+  function bindV72(){
+    ensureTools(); const btn=q('#memberChatBtn'); if(btn)btn.onclick=openMemberV72; const close=q('#closeMemberBtn'); if(close)close.onclick=closeMemberV72; const back=q('#memberBackdrop'); if(back)back.onclick=closeMemberV72;
+    patchProjectTreeLongPress();
+  }
+  const oldRenderAll=window.renderAll; if(typeof oldRenderAll==='function'){window.renderAll=function(){oldRenderAll.apply(this,arguments);setTimeout(bindV72,0)}}
+  const oldRenderProjectTree=window.renderProjectTree; if(typeof oldRenderProjectTree==='function'){window.renderProjectTree=function(){oldRenderProjectTree.apply(this,arguments);setTimeout(bindV72,0)}}
+  window.addEventListener('DOMContentLoaded',bindV72); window.addEventListener('load',bindV72); setTimeout(bindV72,500); setTimeout(bindV72,1500);
+})();
+</script>
+
+
+
+<!-- Stella v75 안정화 패치: 사이드바/흰색 아이콘/롱프레스/게시판 보강 -->
+<style id="stella-v75-style">
+/* 전체 S 아이콘과 전송 버튼을 흰색 계열로 통일 */
+.mark,
+.avatar,
+.message-avatar,
+.stella-avatar,
+.row.ai::before{
+  background:#fff!important;
+  color:#111827!important;
+  border:1px solid #d1d5db!important;
+  box-shadow:0 4px 12px rgba(15,23,42,.04)!important;
+}
+.send,
+.round.send,
+#sendBtn{
+  background:#fff!important;
+  color:#111827!important;
+  border:1px solid #d1d5db!important;
+  box-shadow:0 6px 16px rgba(15,23,42,.05)!important;
+}
+.send:active,#sendBtn:active{background:#f8fafc!important}
+
+/* 모바일 사이드바 안정화 */
+@media(max-width:900px){
+  .sidebar{
+    width:min(82vw,330px)!important;
+    transform:translateX(-110%)!important;
+    transition:transform .22s ease!important;
+    will-change:transform!important;
+    z-index:80!important;
+  }
+  .sidebar.open,
+  body.sidebar-open .sidebar{
+    transform:translateX(0)!important;
+  }
+  .sidebar-backdrop{
+    display:none!important;
+    position:fixed!important;
+    inset:0!important;
+    z-index:70!important;
+    background:rgba(15,23,42,.26)!important;
+    backdrop-filter:blur(2px)!important;
+  }
+  .sidebar-backdrop.active,
+  body.sidebar-open .sidebar-backdrop{display:block!important}
+  .hamb{
+    background:#fff!important;
+    color:#111827!important;
+    border:1px solid #d1d5db!important;
+    z-index:90!important;
+    flex:0 0 auto!important;
+  }
+}
+
+/* 트리 간격 줄이기 */
+.section-title{padding:9px 18px 3px!important}
+.tree{padding:0 10px 4px!important}
+.tree-head{min-height:32px!important;padding:5px 8px!important;border-radius:12px!important}
+.children{padding-left:15px!important}
+.item{min-height:34px!important;padding:6px 8px!important;border-radius:12px!important}
+.item-meta{font-size:.75rem!important;margin-top:1px!important}
+.empty{padding:5px 8px!important}
+
+/* 관리자 생성 영역은 접혀 있을 때 눈에 덜 띄게 */
+.admin-accordion{border-top:1px solid #e5e7eb;margin-top:10px;padding-top:10px}
+.admin-toggle{background:#fff!important;border:1px solid #d1d5db!important;border-radius:14px!important;padding:10px 12px!important}
+.admin-content{display:none!important}
+.admin-content.open{display:block!important}
+
+/* 답변 다운로드 버튼 중복 시 한 줄만 보이도록 */
+.row.ai .download-tools + .download-tools{display:none!important}
+.download-tools{gap:7px!important;margin-bottom:10px!important}
+.download-btn{background:#fff!important;color:#111827!important;border:1px solid #d1d5db!important}
+
+/* 게시판 패널 스크롤 안정화 */
+.board-panel.active{display:flex!important}
+.board-body{overflow:auto!important;-webkit-overflow-scrolling:touch!important;padding-bottom:120px!important}
+</style>
+
+<script id="stella-v75-patch">
+(function(){
+  function qs(s){return document.querySelector(s)}
+  function qsa(s){return Array.from(document.querySelectorAll(s))}
+  function esc(v){return String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;'}[c]))}
+  function byId(id){return document.getElementById(id)}
+
+  /* 1) 사이드바 열기/닫기 안정화: 기존 패치와 충돌하지 않도록 최종 override */
+  window.openSidebar=function(){
+    const side=byId('sidebar'); const back=byId('sidebarBackdrop');
+    if(side) side.classList.add('open');
+    if(back) back.classList.add('active');
+    document.body.classList.add('sidebar-open');
+  };
+  window.closeSidebar=function(){
+    const side=byId('sidebar'); const back=byId('sidebarBackdrop');
+    if(side) side.classList.remove('open');
+    if(back) back.classList.remove('active');
+    document.body.classList.remove('sidebar-open');
+  };
+  window.toggleSidebar=function(){
+    const side=byId('sidebar');
+    if(side && side.classList.contains('open')) window.closeSidebar();
+    else window.openSidebar();
+  };
+
+  function bindSidebar(){
+    const hamb=byId('hambBtn');
+    if(hamb){
+      hamb.onclick=function(e){e.preventDefault();e.stopPropagation();window.toggleSidebar();};
+      hamb.textContent='☰';
+      hamb.setAttribute('aria-label','메뉴 열기/닫기');
+    }
+    const back=byId('sidebarBackdrop');
+    if(back){back.onclick=function(e){if(e.target===back)window.closeSidebar();};}
+  }
+
+  /* 2) 새 프로젝트/게시판 생성 보강 */
+  function ensureBoardCategoryButton(){
+    const tools=qs('.tools');
+    if(!tools || byId('newBoardCategoryBtn')) return;
+    const btn=document.createElement('button');
+    btn.className='tool-btn';
+    btn.type='button';
+    btn.id='newBoardCategoryBtn';
+    btn.textContent='▱ 새 게시글 카테고리';
+    btn.onclick=function(){
+      if(typeof createBoardCategory==='function') return createBoardCategory();
+      const name=prompt('새 게시글 카테고리명');
+      if(!name) return;
+      try{
+        posts.unshift({id:'post_'+Date.now(),owner:user.id,category:name.trim(),title:'새 게시글',body:'내용을 입력하세요.',createdAt:new Date().toISOString()});
+        savePosts(); renderAll(); openBoard();
+      }catch(e){alert('게시글 카테고리 생성 중 오류: '+(e.message||e));}
+    };
+    const openBoard=byId('openBoardBtn');
+    if(openBoard && openBoard.parentNode) openBoard.parentNode.insertBefore(btn, openBoard.nextSibling);
+    else tools.appendChild(btn);
+  }
+
+  function patchNewProject(){
+    const b=byId('newProjectBtn');
+    if(!b) return;
+    b.textContent='▱ 새 채팅 카테고리';
+    b.onclick=function(e){
+      e.preventDefault();
+      if(typeof createProject==='function') return createProject();
+    };
+  }
+
+  /* 3) 롱프레스 메뉴 안정화: 폴더/채팅/게시글 삭제가 확실히 작동하도록 직접 위임 */
+  let longTimer=null, longTarget=null, sx=0, sy=0;
+  function clearLong(){ if(longTimer) clearTimeout(longTimer); longTimer=null; longTarget=null; }
+  function showMenu(title, items){
+    if(typeof openMenu==='function') return openMenu(title, items);
+    const labels=items.map((x,i)=>`${i+1}. ${x.label}`).join('\n');
+    const n=prompt(title+'\n\n'+labels+'\n\n번호 입력');
+    const idx=Number(n)-1; if(items[idx]) items[idx].action();
+  }
+  function targetFromElement(el){
+    const room=el.closest&&el.closest('[data-room]');
+    if(room){
+      const rid=room.dataset.room; const r=(window.rooms||[]).find(x=>x.id===rid);
+      return {type:'room', id:rid, title:r?.name||room.textContent.trim()||'채팅방'};
+    }
+    const prj=el.closest&&el.closest('[data-project]');
+    if(prj){
+      const pid=prj.dataset.project;
+      if(pid==='all'||pid==='none') return null;
+      const p=(window.projects||projects||[]).find(x=>x.id===pid);
+      return {type:'project', id:pid, title:p?.name||prj.textContent.trim()||'프로젝트'};
+    }
+    const post=el.closest&&el.closest('[data-post]');
+    if(post){
+      const p=(window.posts||posts||[]).find(x=>x.id===post.dataset.post);
+      return {type:'post', id:post.dataset.post, title:p?.title||post.textContent.trim()||'게시글'};
+    }
+    const cat=el.closest&&el.closest('[data-boardcat]');
+    if(cat){return {type:'cat', id:cat.dataset.boardcat, title:cat.dataset.boardcat||'카테고리'};}
+    return null;
+  }
+  function openActionMenu(info){
+    if(!info) return;
+    if(info.type==='room'){
+      showMenu(info.title,[
+        {label:'채팅방 이름 변경',action:()=>typeof renameRoom==='function'&&renameRoom(info.id)},
+        {label:'프로젝트로 이동',action:()=>typeof moveRoom==='function'&&moveRoom(info.id)},
+        {label:'프로젝트로 복사',action:()=>typeof copyRoom==='function'&&copyRoom(info.id)},
+        {label:'채팅방 삭제',danger:true,action:()=>typeof deleteRoom==='function'&&deleteRoom(info.id)}
+      ]);
+    }else if(info.type==='project'){
+      showMenu(info.title,[
+        {label:'프로젝트 이름 변경',action:()=>typeof renameProject==='function'&&renameProject(info.id)},
+        {label:'프로젝트 삭제',danger:true,action:()=>typeof deleteProject==='function'&&deleteProject(info.id)}
+      ]);
+    }else if(info.type==='post'){
+      showMenu(info.title,[
+        {label:'게시글 이름 변경',action:()=>typeof renamePost==='function'&&renamePost(info.id)},
+        {label:'게시글 삭제',danger:true,action:()=>typeof deletePost==='function'&&deletePost(info.id)}
+      ]);
+    }else if(info.type==='cat'){
+      showMenu(info.title,[
+        {label:'게시글 추가',action:()=>{ if(typeof openBoard==='function') openBoard(); const s=byId('postCategorySelect'); if(s) s.value=info.id; const t=byId('postTitle'); if(t) t.focus();}},
+        {label:'카테고리 이름 변경',action:()=>typeof renameCategory==='function'&&renameCategory(info.id)},
+        {label:'카테고리 삭제',danger:true,action:()=>typeof deleteCategory==='function'&&deleteCategory(info.id)}
+      ]);
+    }
+  }
+  function bindLongPressDelegation(){
+    const roots=[byId('projectTree'), byId('boardTree')].filter(Boolean);
+    roots.forEach(root=>{
+      if(root.dataset.v75Long==='1') return;
+      root.dataset.v75Long='1';
+      root.addEventListener('pointerdown',function(e){
+        const info=targetFromElement(e.target); if(!info) return;
+        longTarget=info; sx=e.clientX; sy=e.clientY;
+        longTimer=setTimeout(function(){openActionMenu(longTarget); clearLong();},620);
+      },true);
+      root.addEventListener('pointermove',function(e){ if(longTimer && (Math.abs(e.clientX-sx)>12 || Math.abs(e.clientY-sy)>12)) clearLong();},true);
+      ['pointerup','pointercancel','pointerleave'].forEach(ev=>root.addEventListener(ev,clearLong,true));
+      root.addEventListener('contextmenu',function(e){const info=targetFromElement(e.target); if(!info)return; e.preventDefault(); openActionMenu(info);},true);
+    });
+  }
+
+  /* 4) 다운로드 버튼 중복 제거 */
+  function removeDuplicateDownloadTools(){
+    qsa('.row.ai .bubble').forEach(b=>{
+      const tools=qsa('.download-tools', b);
+      tools.forEach((t,i)=>{ if(i>0) t.remove(); });
+      const labels=new Set();
+      qsa('.download-tools .download-btn', b).forEach(btn=>{
+        const k=btn.textContent.trim();
+        if(labels.has(k)) btn.remove(); else labels.add(k);
+      });
+    });
+  }
+
+  function bindAll(){
+    bindSidebar();
+    ensureBoardCategoryButton();
+    patchNewProject();
+    bindLongPressDelegation();
+    removeDuplicateDownloadTools();
+  }
+
+  /* 기존 renderAll 이후에도 다시 바인딩 */
+  const oldRenderAll=window.renderAll;
+  if(typeof oldRenderAll==='function' && !oldRenderAll.__v75){
+    const wrapped=function(){ const ret=oldRenderAll.apply(this,arguments); setTimeout(bindAll,0); setTimeout(removeDuplicateDownloadTools,50); return ret; };
+    wrapped.__v75=true; window.renderAll=wrapped;
+  }
+  const oldRenderMessages=window.renderMessages;
+  if(typeof oldRenderMessages==='function' && !oldRenderMessages.__v75){
+    const wrapped=function(){ const ret=oldRenderMessages.apply(this,arguments); setTimeout(removeDuplicateDownloadTools,0); return ret; };
+    wrapped.__v75=true; window.renderMessages=wrapped;
+  }
+  window.addEventListener('DOMContentLoaded',bindAll);
+  window.addEventListener('load',bindAll);
+  window.addEventListener('pageshow',bindAll);
+  setTimeout(bindAll,300); setTimeout(bindAll,900); setTimeout(bindAll,1600);
+})();
+</script>
+
+
+
+<!-- Stella v76 최종 레이아웃 패치: 프로젝트 카테고리/채팅 카테고리 분리 + 접기 아이콘 복구 -->
+<style id="stella-v76-final-style">
+/* 접었다/폈다 아이콘을 확실하게 표시 */
+.caret{
+  width:24px!important;
+  height:24px!important;
+  min-width:24px!important;
+  display:inline-grid!important;
+  place-items:center!important;
+  border:1px solid #d1d5db!important;
+  border-radius:50%!important;
+  background:#fff!important;
+  color:#334155!important;
+  font-size:.95rem!important;
+  font-weight:900!important;
+  line-height:1!important;
+}
+.tree-section.open>.tree-head .caret{background:#f8fafc!important;color:#111827!important}
+.tree-head{gap:8px!important}
+.folder-only-tree .tree-head{min-height:36px!important}
+.folder-only-tree .tree-head.active{background:#eef2ff!important}
+.project-category-title{padding-top:12px!important;color:#374151!important}
+.chat-category-title{color:#374151!important}
+/* 사이드바 폭과 우측 여백 안정화 */
+@media(max-width:900px){
+  .sidebar{width:min(80vw,318px)!important;max-width:318px!important}
+  .main{width:100%!important}
+  .sidebar.open{box-shadow:18px 0 50px rgba(15,23,42,.14)!important}
+}
+/* 모든 S/전송 아이콘 흰 바탕 유지 */
+.mark,.avatar,.message-avatar,.stella-avatar,.row.ai::before{
+  background:#fff!important;color:#111827!important;border:1px solid #d1d5db!important;
+}
+#sendBtn,.send,.round.send{background:#fff!important;color:#111827!important;border:1px solid #d1d5db!important}
+/* AI 답변 앞 검은 S 가상 아이콘이 남아 있으면 제거 */
+.row.ai::before{content:none!important;display:none!important}
+/* 다운로드 버튼은 중복 시 첫 번째 묶음만 */
+.row.ai .bubble .download-tools:not(:first-child){display:none!important}
+</style>
+<script id="stella-v76-final-script">
+(function(){
+  function q(s){return document.querySelector(s)}
+  function qa(s){return Array.from(document.querySelectorAll(s))}
+  function esc(v){return String(v??'').replace(/[&<>\"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','\"':'&quot;',"'":'&#039;'}[c]))}
+  function getProjects(){try{return Array.isArray(projects)?projects:[]}catch(e){return []}}
+  function getRooms(){try{return Array.isArray(rooms)?rooms:[]}catch(e){return []}}
+  function getActiveProject(){try{return activeProjectId}catch(e){return null}}
+  function setActiveProject(pid){try{activeProjectId=pid}catch(e){}}
+  function projectRoomCount(pid){return getRooms().filter(r=>r.projectId===pid).length}
+  function saveEx(set){try{saveExpanded(set)}catch(e){try{localStorage.setItem('stella_expanded_v67',JSON.stringify([...set]))}catch(_){}}}
+  function getEx(){try{return expanded()}catch(e){try{return new Set(JSON.parse(localStorage.getItem('stella_expanded_v67')||'[]'))}catch(_){return new Set()}}}
+
+  function after(node,newNode){if(node&&node.parentNode)node.parentNode.insertBefore(newNode,node.nextSibling)}
+
+  function ensureProjectCategoryArea(){
+    const tools=q('.tools'); if(!tools) return;
+
+    let pcTitle=q('#projectCategoryTitle');
+    let pcTree=q('#projectCategoryTree');
+    if(!pcTitle){
+      pcTitle=document.createElement('div');
+      pcTitle.id='projectCategoryTitle';
+      pcTitle.className='section-title project-category-title';
+      pcTitle.textContent='프로젝트 카테고리';
+    }
+    if(!pcTree){
+      pcTree=document.createElement('div');
+      pcTree.id='projectCategoryTree';
+      pcTree.className='tree folder-only-tree';
+    }
+
+    // 기존 게시글 카테고리와 채팅 카테고리 순서 정리
+    const boardTree=q('#boardTree');
+    const boardTitle=qa('.section-title').find(x=>x.textContent.trim().includes('게시글'));
+    const chatTree=q('#projectTree');
+    let chatTitle=qa('.section-title').find(x=>x.textContent.trim()==='프로젝트' || x.textContent.trim()==='채팅 카테고리');
+    if(chatTitle){chatTitle.textContent='채팅 카테고리'; chatTitle.classList.add('chat-category-title')}
+
+    after(tools, pcTitle);
+    after(pcTitle, pcTree);
+    if(chatTitle) after(pcTree, chatTitle);
+    if(chatTree && chatTitle) after(chatTitle, chatTree);
+    if(boardTitle && chatTree) after(chatTree, boardTitle);
+    if(boardTree && boardTitle) after(boardTitle, boardTree);
+
+    const newPrj=q('#newProjectBtn');
+    if(newPrj){
+      newPrj.textContent='▱ 새 프로젝트 카테고리';
+      newPrj.onclick=function(e){e.preventDefault(); if(typeof createProject==='function') createProject(); setTimeout(bindFinal,50)};
+    }
+  }
+
+  function renderProjectCategoryTree(){
+    const tree=q('#projectCategoryTree'); if(!tree) return;
+    const list=getProjects();
+    const ex=getEx();
+    if(!list.length){
+      tree.innerHTML='<div class="empty">프로젝트 카테고리가 없습니다.</div>';
+      return;
+    }
+    tree.innerHTML=list.map(p=>{
+      const opened=ex.has(p.id);
+      const active=getActiveProject()===p.id;
+      return `<div class="tree-section ${opened?'open':''}" data-project-only="${esc(p.id)}">
+        <button class="tree-head ${active?'active':''}" type="button" data-project-only-head="${esc(p.id)}">
+          <span class="caret">${opened?'−':'+'}</span>
+          <span class="folder">▱ ${esc(p.name)}</span>
+          <span class="count">${projectRoomCount(p.id)}</span>
+        </button>
+      </div>`;
+    }).join('');
+
+    qa('[data-project-only-head]').forEach(btn=>{
+      btn.onclick=function(e){
+        e.preventDefault();
+        const pid=btn.dataset.projectOnlyHead;
+        const set=getEx();
+        set.has(pid)?set.delete(pid):set.add(pid);
+        saveEx(set);
+        setActiveProject(pid);
+        try{ if(typeof renderAll==='function') renderAll(); else bindFinal(); }catch(_){ bindFinal(); }
+      };
+      bindOneLongPress(btn,()=>{
+        const pid=btn.dataset.projectOnlyHead;
+        const p=getProjects().find(x=>x.id===pid);
+        openSimpleMenu(p?.name||'프로젝트 카테고리',[
+          {label:'프로젝트 이름 변경',action:()=>typeof renameProject==='function'&&renameProject(pid)},
+          {label:'프로젝트 삭제',danger:true,action:()=>typeof deleteProject==='function'&&deleteProject(pid)}
+        ]);
+      });
+    });
+  }
+
+  function fixCarets(){
+    qa('.tree-section').forEach(sec=>{
+      const head=sec.querySelector('.tree-head');
+      const caret=sec.querySelector('.caret');
+      if(!head||!caret) return;
+      const open=sec.classList.contains('open');
+      caret.textContent=open?'−':'+';
+      caret.setAttribute('aria-hidden','true');
+    });
+  }
+
+  function openSimpleMenu(title,items){
+    if(typeof openMenu==='function') return openMenu(title,items);
+    const n=prompt(title+'\n\n'+items.map((x,i)=>(i+1)+'. '+x.label).join('\n'));
+    const i=Number(n)-1; if(items[i]) items[i].action();
+  }
+  function bindOneLongPress(el,callback){
+    if(!el || el.dataset.v76lp==='1') return;
+    el.dataset.v76lp='1';
+    let timer=null,sx=0,sy=0;
+    const clear=()=>{if(timer)clearTimeout(timer);timer=null};
+    el.addEventListener('pointerdown',e=>{sx=e.clientX;sy=e.clientY;timer=setTimeout(()=>{callback(e);clear()},620)},true);
+    el.addEventListener('pointermove',e=>{if(timer&&(Math.abs(e.clientX-sx)>12||Math.abs(e.clientY-sy)>12))clear()},true);
+    ['pointerup','pointercancel','pointerleave'].forEach(ev=>el.addEventListener(ev,clear,true));
+    el.addEventListener('contextmenu',e=>{e.preventDefault();callback(e)},true);
+  }
+
+  function fixSidebarOpen(){
+    const hamb=q('#hambBtn'), side=q('#sidebar'), back=q('#sidebarBackdrop');
+    if(hamb){
+      hamb.textContent='☰';
+      hamb.onclick=function(e){
+        e.preventDefault();e.stopPropagation();
+        if(side&&side.classList.contains('open')){side.classList.remove('open');back&&back.classList.remove('active');document.body.classList.remove('sidebar-open')}
+        else{side&&side.classList.add('open');back&&back.classList.add('active');document.body.classList.add('sidebar-open')}
+      };
+    }
+    if(back){back.onclick=function(e){if(e.target===back){side&&side.classList.remove('open');back.classList.remove('active');document.body.classList.remove('sidebar-open')}}}
+  }
+
+  function removeDuplicateDownloads(){
+    qa('.row.ai .bubble').forEach(b=>{
+      const tools=qa('.download-tools',b);
+      tools.forEach((t,i)=>{if(i>0)t.remove()});
+      const seen=new Set();
+      qa('.download-tools .download-btn',b).forEach(btn=>{const key=btn.textContent.trim(); if(seen.has(key))btn.remove(); else seen.add(key)});
+    });
+  }
+
+  function bindFinal(){
+    ensureProjectCategoryArea();
+    renderProjectCategoryTree();
+    fixCarets();
+    fixSidebarOpen();
+    removeDuplicateDownloads();
+  }
+
+  const oldRenderAll=window.renderAll;
+  if(typeof oldRenderAll==='function' && !oldRenderAll.__v76){
+    const wrapped=function(){const r=oldRenderAll.apply(this,arguments);setTimeout(bindFinal,0);setTimeout(bindFinal,80);return r};
+    wrapped.__v76=true; window.renderAll=wrapped;
+  }
+  const oldRenderProjectTree=window.renderProjectTree;
+  if(typeof oldRenderProjectTree==='function' && !oldRenderProjectTree.__v76){
+    const wrapped=function(){const r=oldRenderProjectTree.apply(this,arguments);setTimeout(bindFinal,0);return r};
+    wrapped.__v76=true; window.renderProjectTree=wrapped;
+  }
+  const oldRenderBoardTree=window.renderBoardTree;
+  if(typeof oldRenderBoardTree==='function' && !oldRenderBoardTree.__v76){
+    const wrapped=function(){const r=oldRenderBoardTree.apply(this,arguments);setTimeout(bindFinal,0);return r};
+    wrapped.__v76=true; window.renderBoardTree=wrapped;
+  }
+  window.addEventListener('DOMContentLoaded',bindFinal);
+  window.addEventListener('load',bindFinal);
+  window.addEventListener('pageshow',bindFinal);
+  setTimeout(bindFinal,250);setTimeout(bindFinal,900);setTimeout(bindFinal,1800);
+})();
+</script>
+
+
+
+<!-- Stella v77 final order patch: 회원채팅 > 새채팅 > 게시판 > 관리(접기/펼치기) + compact sidebar typography -->
+<style id="stella-v77-final-order-style">
+/* 상단 주요 메뉴 순서/크기 정리 */
+.tools{
+  display:flex!important;
+  flex-direction:column!important;
+  gap:7px!important;
+  padding:10px 16px!important;
+}
+.tool-btn{
+  font-size:.98rem!important;
+  line-height:1.25!important;
+  padding:10px 13px!important;
+  min-height:48px!important;
+  border-radius:15px!important;
+}
+/* 관리 접기/펼치기 */
+.manage-section{
+  border:1px solid #d1d5db;
+  border-radius:15px;
+  background:#fff;
+  overflow:hidden;
+}
+.manage-head{
+  width:100%;
+  border:0;
+  background:#fff;
+  min-height:48px;
+  padding:10px 13px;
+  display:flex;
+  align-items:center;
+  gap:9px;
+  text-align:left;
+  font-weight:900;
+  font-size:.98rem;
+  color:#111827;
+}
+.manage-head .manage-caret{
+  width:22px;
+  height:22px;
+  min-width:22px;
+  display:inline-grid;
+  place-items:center;
+  border:1px solid #d1d5db;
+  border-radius:50%;
+  background:#fff;
+  color:#334155;
+  font-size:.9rem;
+  font-weight:900;
+}
+.manage-children{
+  display:none;
+  border-top:1px solid #e5e7eb;
+  padding:7px;
+  background:#fbfbfc;
+}
+.manage-section.open .manage-children{display:grid;gap:7px;}
+.manage-children .tool-btn{
+  min-height:42px!important;
+  font-size:.9rem!important;
+  padding:9px 11px!important;
+  background:#fff!important;
+  border-radius:13px!important;
+}
+/* 사이드바 카테고리/목록 글자 크기 축소 */
+.section-title{
+  font-size:.76rem!important;
+  line-height:1.25!important;
+  padding:10px 16px 4px!important;
+  color:#6b7280!important;
+}
+.tree{padding:0 10px 5px!important;}
+.tree-head{
+  min-height:32px!important;
+  padding:5px 8px!important;
+  gap:7px!important;
+  border-radius:12px!important;
+}
+.tree-head .folder,
+.folder{
+  font-size:.96rem!important;
+  line-height:1.25!important;
+  font-weight:800!important;
+}
+.tree-head .count,
+.count{
+  font-size:.82rem!important;
+}
+.caret{
+  width:22px!important;
+  height:22px!important;
+  min-width:22px!important;
+  font-size:.86rem!important;
+}
+.children{padding-left:17px!important;}
+.item{
+  min-height:34px!important;
+  padding:6px 8px!important;
+  border-radius:12px!important;
+}
+.item-title{
+  font-size:.93rem!important;
+  line-height:1.25!important;
+  font-weight:800!important;
+}
+.item-meta{
+  font-size:.72rem!important;
+  line-height:1.25!important;
+  margin-top:2px!important;
+}
+.empty{
+  font-size:.78rem!important;
+  padding:6px 8px!important;
+}
+/* 프로젝트 카테고리가 채팅 카테고리 위에 안정적으로 배치 */
+#projectCategoryTitle{order:10;}
+#projectCategoryTree{order:11;}
+.chat-category-title{order:20;}
+#projectTree{order:21;}
+/* 회원 채팅 버튼은 최상단 */
+#memberChatBtn{order:1;background:#fffdf7!important;border-color:#e6d6a8!important;}
+#newChatBtn{order:2;}
+#openBoardBtn{order:3;}
+#manageSectionV77{order:4;}
+@media(max-width:900px){
+  .sidebar{width:min(80vw,318px)!important;max-width:318px!important;}
+  .tools{padding:9px 14px!important;gap:6px!important;}
+  .tool-btn,.manage-head{min-height:45px!important;font-size:.94rem!important;}
+  .manage-children .tool-btn{min-height:39px!important;font-size:.86rem!important;}
+  .section-title{font-size:.74rem!important;padding:9px 14px 3px!important;}
+  .tree-head .folder,.folder{font-size:.92rem!important;}
+  .item-title{font-size:.9rem!important;}
+  .item-meta{font-size:.7rem!important;}
+}
+</style>
+<script id="stella-v77-final-order-script">
+(function(){
+  const MANAGE_KEY='stella_manage_open_v77';
+  function q(s){return document.querySelector(s)}
+  function qa(s){return Array.from(document.querySelectorAll(s))}
+  function ensureButton(id,text,handler){
+    let b=q('#'+id);
+    if(!b){
+      b=document.createElement('button');
+      b.id=id;
+      b.type='button';
+      b.className='tool-btn';
+      const tools=q('.tools');
+      if(tools) tools.appendChild(b);
+    }
+    b.textContent=text;
+    b.onclick=handler;
+    return b;
+  }
+  function ensureFinalOrder(){
+    const tools=q('.tools');
+    if(!tools) return;
+
+    // 1) 회원 채팅 버튼 최상단 보장
+    const memberBtn=ensureButton('memberChatBtn','회원 채팅',function(e){
+      e.preventDefault();
+      if(typeof openMemberV72==='function') return openMemberV72();
+      const panel=q('#memberPanel'), back=q('#memberBackdrop');
+      if(panel) panel.classList.add('active');
+      if(back) back.classList.add('active');
+      try{ if(typeof closeSidebar==='function') closeSidebar(); }catch(_){ }
+    });
+    memberBtn.classList.add('member-chat-btn');
+
+    // 2) 새 채팅
+    const newChat=q('#newChatBtn') || ensureButton('newChatBtn','＋ 새 채팅',function(e){e.preventDefault(); if(typeof createRoom==='function') createRoom('새 채팅')});
+    newChat.textContent='＋ 새 채팅';
+    newChat.onclick=function(e){e.preventDefault(); if(typeof createRoom==='function') createRoom('새 채팅')};
+
+    // 3) 게시판
+    const board=q('#openBoardBtn') || ensureButton('openBoardBtn','게시판',function(e){e.preventDefault(); if(typeof openBoard==='function') openBoard()});
+    board.textContent='게시판';
+    board.onclick=function(e){e.preventDefault(); if(typeof openBoard==='function') openBoard()};
+
+    // 4) 관리 폴더 생성 및 하위로 버튼 이동
+    let manage=q('#manageSectionV77');
+    if(!manage){
+      manage=document.createElement('div');
+      manage.id='manageSectionV77';
+      manage.className='manage-section';
+      manage.innerHTML='<button class="manage-head" id="manageHeadV77" type="button"><span class="manage-caret">+</span><span>관리</span></button><div class="manage-children" id="manageChildrenV77"></div>';
+      tools.appendChild(manage);
+    }
+    const children=q('#manageChildrenV77');
+    let manageOpen=localStorage.getItem(MANAGE_KEY)==='1';
+    manage.classList.toggle('open',manageOpen);
+    const caret=q('#manageHeadV77 .manage-caret');
+    if(caret) caret.textContent=manageOpen?'−':'+';
+    const head=q('#manageHeadV77');
+    if(head && head.dataset.boundV77!=='1'){
+      head.dataset.boundV77='1';
+      head.onclick=function(e){
+        e.preventDefault();
+        const now=!manage.classList.contains('open');
+        manage.classList.toggle('open',now);
+        localStorage.setItem(MANAGE_KEY,now?'1':'0');
+        const c=q('#manageHeadV77 .manage-caret');
+        if(c) c.textContent=now?'−':'+';
+      };
+    }
+
+    let newProject=q('#newProjectBtn');
+    if(!newProject){
+      newProject=document.createElement('button');
+      newProject.id='newProjectBtn';
+      newProject.type='button';
+      newProject.className='tool-btn';
+    }
+    newProject.textContent='▱ 새 프로젝트 카테고리';
+    newProject.onclick=function(e){e.preventDefault(); if(typeof createProject==='function') createProject();};
+    if(children && newProject.parentNode!==children) children.appendChild(newProject);
+
+    let newBoard=q('#newBoardCategoryBtn');
+    if(!newBoard){
+      newBoard=document.createElement('button');
+      newBoard.id='newBoardCategoryBtn';
+      newBoard.type='button';
+      newBoard.className='tool-btn';
+    }
+    newBoard.textContent='▱ 새 게시글 카테고리';
+    newBoard.onclick=function(e){e.preventDefault(); if(typeof createBoardCategory==='function') createBoardCategory();};
+    if(children && newBoard.parentNode!==children) children.appendChild(newBoard);
+
+    // 실제 DOM 순서 고정: 회원 채팅 → 새 채팅 → 게시판 → 관리
+    [memberBtn,newChat,board,manage].forEach(el=>{ if(el && el.parentNode!==tools) tools.appendChild(el); else if(el) tools.appendChild(el); });
+
+    // 밑 영역 순서: 프로젝트 카테고리 → 채팅 카테고리
+    const pcTitle=q('#projectCategoryTitle'), pcTree=q('#projectCategoryTree');
+    const chatTree=q('#projectTree');
+    const chatTitle=qa('.section-title').find(x=>x.textContent.trim()==='채팅 카테고리' || x.textContent.trim()==='프로젝트');
+    if(chatTitle) chatTitle.textContent='채팅 카테고리';
+    if(pcTitle && pcTree && chatTitle && chatTree){
+      const side=q('#sidebar');
+      if(side){
+        if(pcTitle.parentNode!==side) side.appendChild(pcTitle);
+        if(pcTree.parentNode!==side) side.appendChild(pcTree);
+        if(chatTitle.parentNode!==side) side.appendChild(chatTitle);
+        if(chatTree.parentNode!==side) side.appendChild(chatTree);
+        side.insertBefore(pcTitle, chatTitle);
+        side.insertBefore(pcTree, chatTitle);
+      }
+    }
+
+    // 게시글 카테고리는 메뉴 상단에서 제외하고 게시판 버튼 내부에서 사용하도록 아래로 유지/숨김 아님
+    const boardTitle=qa('.section-title').find(x=>x.textContent.trim().includes('게시글'));
+    const boardTree=q('#boardTree');
+    if(boardTitle && chatTree){
+      chatTree.parentNode.insertBefore(boardTitle, chatTree.nextSibling);
+      if(boardTree) boardTitle.parentNode.insertBefore(boardTree, boardTitle.nextSibling);
+    }
+  }
+
+  function compactLabels(){
+    qa('.section-title').forEach(el=>{
+      if(el.textContent.trim()==='프로젝트') el.textContent='채팅 카테고리';
+    });
+    qa('.tree-head .folder,.item-title').forEach(el=>{
+      el.style.letterSpacing='-0.02em';
+    });
+  }
+
+  function bindV77(){
+    ensureFinalOrder();
+    compactLabels();
+  }
+
+  const oldRenderAll=window.renderAll;
+  if(typeof oldRenderAll==='function' && !oldRenderAll.__v77){
+    const wrapped=function(){const r=oldRenderAll.apply(this,arguments);setTimeout(bindV77,0);setTimeout(bindV77,120);return r;};
+    wrapped.__v77=true;
+    window.renderAll=wrapped;
+  }
+  window.addEventListener('DOMContentLoaded',bindV77);
+  window.addEventListener('load',bindV77);
+  window.addEventListener('pageshow',bindV77);
+  setTimeout(bindV77,200);
+  setTimeout(bindV77,900);
+  setTimeout(bindV77,1800);
+})();
+</script>
+
+
+
+<!-- Stella v79 final form fix: stable sidebar, separate project/chat categories, mobile member chat, white chat icons -->
+<style id="stella-v79-final-fix-style">
+/* 1) 모바일 사이드바 열림/닫힘 최종 고정 */
+@media(max-width:900px){
+  #sidebar.sidebar{
+    position:fixed!important;
+    left:0!important;
+    top:0!important;
+    bottom:0!important;
+    width:min(80vw,318px)!important;
+    max-width:318px!important;
+    transform:translate3d(-110%,0,0)!important;
+    transition:transform .22s ease!important;
+    z-index:500!important;
+    background:#fff!important;
+    overflow-y:auto!important;
+    -webkit-overflow-scrolling:touch!important;
+  }
+  #sidebar.sidebar.open,
+  body.sidebar-open #sidebar.sidebar{
+    transform:translate3d(0,0,0)!important;
+  }
+  #sidebarBackdrop{
+    display:none!important;
+    position:fixed!important;
+    inset:0!important;
+    z-index:490!important;
+    background:rgba(15,23,42,.28)!important;
+    backdrop-filter:blur(2px)!important;
+  }
+  #sidebarBackdrop.active,
+  body.sidebar-open #sidebarBackdrop{display:block!important;}
+  #hambBtn{
+    display:grid!important;
+    place-items:center!important;
+    background:#fff!important;
+    color:#111827!important;
+    border:1px solid #d1d5db!important;
+    z-index:520!important;
+    pointer-events:auto!important;
+  }
+}
+/* 2) Stella/채팅 아이콘 흰 바탕 통일 */
+.mark,
+.row.ai .mark,
+.row.ai .avatar,
+.row.ai .message-avatar,
+.row.ai .stella-avatar,
+.message-avatar,
+.stella-avatar,
+.avatar{
+  background:#fff!important;
+  color:#111827!important;
+  border:1px solid #d1d5db!important;
+  box-shadow:0 4px 12px rgba(15,23,42,.04)!important;
+}
+.row.ai::before{content:none!important;display:none!important;}
+#sendBtn,.send,.round.send{
+  background:#fff!important;
+  color:#111827!important;
+  border:1px solid #d1d5db!important;
+  box-shadow:0 6px 16px rgba(15,23,42,.04)!important;
+}
+/* 3) 사이드바 가독성 축소 */
+.section-title{font-size:.74rem!important;line-height:1.25!important;padding:9px 15px 3px!important;color:#6b7280!important;}
+.tree{padding:0 9px 4px!important;}
+.tree-head{min-height:32px!important;padding:5px 7px!important;border-radius:12px!important;gap:7px!important;}
+.tree-head .folder,.folder{font-size:.9rem!important;line-height:1.25!important;font-weight:800!important;}
+.count{font-size:.78rem!important;color:#8b93a1!important;}
+.children{padding-left:16px!important;}
+.item{min-height:34px!important;padding:6px 8px!important;border-radius:12px!important;}
+.item-title{font-size:.88rem!important;line-height:1.25!important;font-weight:800!important;}
+.item-meta{font-size:.68rem!important;line-height:1.25!important;margin-top:2px!important;}
+.caret{width:22px!important;height:22px!important;min-width:22px!important;display:inline-grid!important;place-items:center!important;border:1px solid #d1d5db!important;border-radius:50%!important;background:#fff!important;color:#334155!important;font-size:.84rem!important;font-weight:900!important;}
+/* 4) 회원 채팅 모바일 사이즈 최종 보정 */
+.member-panel{background:#fff!important;}
+.member-panel.active{display:flex!important;}
+.member-body{min-height:0!important;overflow:hidden!important;}
+.member-chat-area{min-height:0!important;}
+.member-msg-list{overflow:auto!important;-webkit-overflow-scrolling:touch!important;}
+@media(max-width:760px){
+  .member-panel{width:100%!important;left:0!important;right:0!important;top:0!important;bottom:0!important;border-left:0!important;}
+  .member-head{height:58px!important;flex:0 0 auto!important;}
+  .member-body{height:calc(100dvh - 58px)!important;padding:10px!important;padding-bottom:calc(12px + env(safe-area-inset-bottom))!important;}
+  .member-layout{display:flex!important;flex-direction:column!important;height:100%!important;gap:8px!important;}
+  .member-room-list{flex:0 0 auto!important;max-height:104px!important;display:flex!important;gap:7px!important;overflow-x:auto!important;overflow-y:hidden!important;padding:7px!important;}
+  .member-room{min-width:138px!important;margin:0!important;}
+  .member-chat-area{flex:1 1 auto!important;min-height:0!important;height:auto!important;display:flex!important;}
+  .member-msg-list{flex:1 1 auto!important;min-height:0!important;max-height:none!important;}
+  .member-compose{flex:0 0 auto!important;}
+  .member-compose input{min-height:40px!important;font-size:.9rem!important;}
+  .member-compose textarea{min-height:44px!important;max-height:96px!important;font-size:.95rem!important;}
+  .member-compose button{min-width:58px!important;padding:10px 12px!important;}
+  .member-admin,.admin-accordion{flex:0 0 auto!important;}
+}
+/* 중복 다운로드 버튼 방지 */
+.row.ai .bubble .download-tools ~ .download-tools{display:none!important;}
+</style>
+<script id="stella-v79-final-fix-script">
+(function(){
+  function q(s){return document.querySelector(s)}
+  function qa(s){return Array.from(document.querySelectorAll(s))}
+  function esc(v){return String(v??'').replace(/[&<>\"']/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','\"':'&quot;',"'":'&#039;'}[c]})}
+  function safeRead(k,d){try{return JSON.parse(localStorage.getItem(k)||JSON.stringify(d))}catch(e){return d}}
+  function safeWrite(k,v){try{localStorage.setItem(k,JSON.stringify(v))}catch(e){}}
+  function currentUserId(){try{return user && user.id}catch(e){return ''}}
+  function saveProjectsSafe(){try{saveProjects()}catch(e){try{const all=safeRead(K.projects,[]).filter(x=>x.owner!==currentUserId());safeWrite(K.projects,[...(projects||[]),...all])}catch(_){}}}
+  function saveRoomsSafe(){try{saveRooms()}catch(e){}}
+  function getExpandedSet(){try{return expanded()}catch(e){return new Set(safeRead(K.expanded,[]))}}
+  function saveExpandedSet(s){try{saveExpanded(s)}catch(e){safeWrite(K.expanded,[...s])}}
+  function isSystemProjectId(pid){return pid==='all'||pid==='none'}
+  function allProjects(){try{return Array.isArray(projects)?projects:[]}catch(e){return []}}
+  function allRooms(){try{return Array.isArray(rooms)?rooms:[]}catch(e){return []}}
+  function getProjectCats(){return allProjects().filter(p=>p.type!=='chat')}
+  function getChatCats(){return allProjects().filter(p=>p.type==='chat')}
+  function projectRoomCount(pid){return allRooms().filter(r=>r.projectId===pid).length}
+  function projectRooms2(pid){
+    if(pid==='all') return allRooms();
+    if(pid==='none') return allRooms().filter(r=>!r.projectId || !getChatCats().some(p=>p.id===r.projectId));
+    return allRooms().filter(r=>r.projectId===pid);
+  }
+
+  /* A. 햄버거 열기 최종 안정화 */
+  window.openSidebar=function(){
+    const side=q('#sidebar'), back=q('#sidebarBackdrop');
+    if(side) side.classList.add('open');
+    if(back) back.classList.add('active');
+    document.body.classList.add('sidebar-open');
+  };
+  window.closeSidebar=function(){
+    const side=q('#sidebar'), back=q('#sidebarBackdrop');
+    if(side) side.classList.remove('open');
+    if(back) back.classList.remove('active');
+    document.body.classList.remove('sidebar-open');
+  };
+  window.toggleSidebar=function(){
+    const side=q('#sidebar');
+    if(side && side.classList.contains('open')) window.closeSidebar();
+    else window.openSidebar();
+  };
+  function bindSidebarFinal(){
+    const h=q('#hambBtn'), b=q('#sidebarBackdrop');
+    if(h){
+      h.textContent='☰';
+      h.onclick=null;
+      h.addEventListener('click',function(e){e.preventDefault();e.stopPropagation();window.toggleSidebar();},{capture:true});
+    }
+    if(b){b.onclick=function(e){if(e.target===b)window.closeSidebar()}}
+  }
+
+  /* B. 새 프로젝트 카테고리 생성은 프로젝트 카테고리에만 */
+  window.createProject=function(){
+    const name=prompt('새 프로젝트 카테고리명');
+    if(!name || !name.trim()) return;
+    const p={id:'p_'+Date.now().toString(36)+Math.random().toString(36).slice(2,7),owner:currentUserId(),name:name.trim(),type:'project',createdAt:new Date().toISOString()};
+    projects.unshift(p);
+    saveProjectsSafe();
+    const ex=getExpandedSet(); ex.add(p.id); saveExpandedSet(ex);
+    try{activeProjectId='all'}catch(e){}
+    renderAllSafe();
+  };
+
+  /* 필요 시 채팅 카테고리 생성 함수 별도 보유: UI에서는 기본적으로 노출하지 않음 */
+  window.createChatCategory=function(){
+    const name=prompt('새 채팅 카테고리명');
+    if(!name || !name.trim()) return;
+    const p={id:'c_'+Date.now().toString(36)+Math.random().toString(36).slice(2,7),owner:currentUserId(),name:name.trim(),type:'chat',createdAt:new Date().toISOString()};
+    projects.unshift(p);
+    saveProjectsSafe();
+    const ex=getExpandedSet(); ex.add(p.id); saveExpandedSet(ex);
+    try{activeProjectId=p.id}catch(e){}
+    renderAllSafe();
+  };
+
+  /* C. 채팅 카테고리 렌더링은 type=chat만 표시 → 프로젝트 카테고리와 중복 방지 */
+  window.renderProjectTree=function(){
+    const tree=q('#projectTree'); if(!tree) return;
+    const ex=getExpandedSet();
+    const sections=[
+      {id:'all',name:'전체 채팅',rooms:projectRooms2('all')},
+      {id:'none',name:'미분류',rooms:projectRooms2('none')},
+      ...getChatCats().map(p=>({id:p.id,name:p.name,rooms:projectRooms2(p.id)}))
+    ];
+    tree.innerHTML=sections.map(function(s){
+      const open=ex.has(s.id);
+      return '<div class="tree-section '+(open?'open':'')+'" data-p="'+esc(s.id)+'">'
+        +'<button class="tree-head '+((typeof activeProjectId!=='undefined'&&activeProjectId===s.id)?'active':'')+'" data-project="'+esc(s.id)+'" type="button">'
+        +'<span class="caret">'+(open?'−':'+')+'</span><span class="folder">▱ '+esc(s.name)+'</span><span class="count">'+s.rooms.length+'</span></button>'
+        +'<div class="children">'+(s.rooms.length?s.rooms.map(function(r){return '<button class="item '+((typeof activeRoomId!=='undefined'&&activeRoomId===r.id)?'active':'')+'" data-room="'+esc(r.id)+'" type="button"><span class="item-title">'+esc(r.name)+'</span><span class="item-meta">'+((r.messages||[]).length)+'개 메시지 · '+esc(s.name)+'</span></button>'}).join(''):'<div class="empty">채팅방이 없습니다.</div>')+'</div></div>';
+    }).join('');
+    qa('[data-project]').forEach(function(btn){
+      btn.onclick=function(e){e.preventDefault();const pid=btn.dataset.project;const set=getExpandedSet();set.has(pid)?set.delete(pid):set.add(pid);saveExpandedSet(set);try{activeProjectId=pid}catch(_){ } renderProjectTree();};
+    });
+    qa('[data-room]').forEach(function(btn){
+      btn.onclick=function(e){e.preventDefault();try{activeRoomId=btn.dataset.room;const r=allRooms().find(x=>x.id===activeRoomId);activeProjectId=(r&&r.projectId&&getChatCats().some(p=>p.id===r.projectId))?r.projectId:'all'}catch(_){ } window.closeSidebar(); renderAllSafe();};
+    });
+    bindLongPressFinal(tree);
+  };
+
+  function renderProjectCategoryTreeFinal(){
+    let tree=q('#projectCategoryTree');
+    const tools=q('.tools');
+    if(!tree){
+      const title=document.createElement('div');title.id='projectCategoryTitle';title.className='section-title';title.textContent='프로젝트 카테고리';
+      tree=document.createElement('div');tree.id='projectCategoryTree';tree.className='tree folder-only-tree';
+      if(tools){tools.insertAdjacentElement('afterend',tree);tools.insertAdjacentElement('afterend',title)}
+    }
+    const list=getProjectCats();
+    const ex=getExpandedSet();
+    tree.innerHTML=list.length?list.map(function(p){
+      const open=ex.has(p.id);
+      return '<div class="tree-section '+(open?'open':'')+'" data-project-only="'+esc(p.id)+'">'
+        +'<button class="tree-head" type="button" data-project-only-head="'+esc(p.id)+'"><span class="caret">'+(open?'−':'+')+'</span><span class="folder">▱ '+esc(p.name)+'</span><span class="count">'+projectRoomCount(p.id)+'</span></button>'
+        +'<div class="children"><div class="empty">프로젝트 자료를 연결할 수 있습니다.</div></div></div>';
+    }).join(''):'<div class="empty">프로젝트 카테고리가 없습니다.</div>';
+    qa('[data-project-only-head]').forEach(function(btn){
+      btn.onclick=function(e){e.preventDefault();const pid=btn.dataset.projectOnlyHead;const set=getExpandedSet();set.has(pid)?set.delete(pid):set.add(pid);saveExpandedSet(set);renderProjectCategoryTreeFinal();};
+    });
+    bindLongPressFinal(tree);
+  }
+
+  /* D. DOM 순서: 회원 채팅 → 새 채팅 → 게시판 → 관리 */
+  function ensureFinalOrder(){
+    const tools=q('.tools'); if(!tools) return;
+    let member=q('#memberChatBtn');
+    if(!member){member=document.createElement('button');member.id='memberChatBtn';member.type='button';member.className='tool-btn member-chat-btn';tools.appendChild(member)}
+    member.textContent='회원 채팅';
+    member.onclick=function(e){e.preventDefault();openMemberPanelFinal()};
+    const newChat=q('#newChatBtn'); if(newChat){newChat.textContent='＋ 새 채팅'; newChat.onclick=function(e){e.preventDefault(); if(typeof createRoom==='function')createRoom('새 채팅')}}
+    const board=q('#openBoardBtn'); if(board){board.textContent='게시판'; board.onclick=function(e){e.preventDefault(); if(typeof openBoard==='function')openBoard()}}
+    let manage=q('#manageSectionV79');
+    if(!manage){
+      manage=document.createElement('div');manage.id='manageSectionV79';manage.className='manage-section';
+      manage.innerHTML='<button class="manage-head" id="manageHeadV79" type="button"><span class="manage-caret">+</span><span>관리</span></button><div class="manage-children" id="manageChildrenV79"></div>';
+      tools.appendChild(manage);
+    }
+    const children=q('#manageChildrenV79');
+    let np=q('#newProjectBtn'); if(!np){np=document.createElement('button');np.id='newProjectBtn';np.type='button';np.className='tool-btn'}
+    np.textContent='▱ 새 프로젝트 카테고리';np.onclick=function(e){e.preventDefault();window.createProject()};
+    let nb=q('#newBoardCategoryBtn'); if(!nb){nb=document.createElement('button');nb.id='newBoardCategoryBtn';nb.type='button';nb.className='tool-btn'}
+    nb.textContent='▱ 새 게시글 카테고리';nb.onclick=function(e){e.preventDefault(); if(typeof createBoardCategory==='function')createBoardCategory()};
+    if(children){children.appendChild(np);children.appendChild(nb)}
+    [member,newChat,board,manage].forEach(function(el){if(el)tools.appendChild(el)});
+    const isOpen=localStorage.getItem('stella_manage_open_v79')==='1';
+    manage.classList.toggle('open',isOpen);
+    const car=q('#manageHeadV79 .manage-caret'); if(car)car.textContent=isOpen?'−':'+';
+    const head=q('#manageHeadV79'); if(head){head.onclick=function(e){e.preventDefault();const now=!manage.classList.contains('open');manage.classList.toggle('open',now);localStorage.setItem('stella_manage_open_v79',now?'1':'0');const c=q('#manageHeadV79 .manage-caret'); if(c)c.textContent=now?'−':'+';}};
+
+    // 제목 순서 보정
+    const side=q('#sidebar');
+    const pcTitle=q('#projectCategoryTitle'), pcTree=q('#projectCategoryTree'), chatTree=q('#projectTree');
+    let chatTitle=qa('.section-title').find(x=>x.textContent.trim()==='프로젝트'||x.textContent.trim()==='채팅 카테고리');
+    if(chatTitle) chatTitle.textContent='채팅 카테고리';
+    if(side&&pcTitle&&pcTree&&chatTitle&&chatTree){
+      side.insertBefore(pcTitle, chatTitle);
+      side.insertBefore(pcTree, chatTitle);
+    }
+  }
+
+  /* E. 회원 채팅 패널 모바일 재구성 */
+  function openMemberPanelFinal(){
+    const p=q('#memberPanel'), b=q('#memberBackdrop');
+    if(p)p.classList.add('active'); if(b)b.classList.add('active');
+    try{if(typeof renderMemberV72==='function')renderMemberV72()}catch(e){}
+    fixMemberLayoutFinal();
+    window.closeSidebar();
+  }
+  window.openMemberPanelFinal=openMemberPanelFinal;
+  function fixMemberLayoutFinal(){
+    const close=q('#closeMemberBtn'), back=q('#memberBackdrop');
+    if(close)close.onclick=function(){const p=q('#memberPanel'),b=q('#memberBackdrop');if(p)p.classList.remove('active');if(b)b.classList.remove('active')};
+    if(back)back.onclick=function(){const p=q('#memberPanel'),b=q('#memberBackdrop');if(p)p.classList.remove('active');if(b)b.classList.remove('active')};
+  }
+
+  /* F. 롱프레스 메뉴 보강 */
+  function openMenuFinal(title,items){
+    if(typeof openMenu==='function')return openMenu(title,items);
+    const n=prompt(title+'\n\n'+items.map((x,i)=>(i+1)+'. '+x.label).join('\n'));
+    const i=Number(n)-1;if(items[i])items[i].action();
+  }
+  function resolveTarget(el){
+    const room=el.closest&&el.closest('[data-room]'); if(room)return{type:'room',id:room.dataset.room,title:room.textContent.trim()||'채팅'};
+    const pc=el.closest&&el.closest('[data-project-only-head]'); if(pc)return{type:'project',id:pc.dataset.projectOnlyHead,title:pc.textContent.trim()||'프로젝트'};
+    const post=el.closest&&el.closest('[data-post]'); if(post)return{type:'post',id:post.dataset.post,title:post.textContent.trim()||'게시글'};
+    const cat=el.closest&&el.closest('[data-boardcat]'); if(cat)return{type:'cat',id:cat.dataset.boardcat,title:cat.dataset.boardcat};
+    return null;
+  }
+  function actionFor(info){
+    if(!info)return;
+    if(info.type==='room')openMenuFinal(info.title,[{label:'채팅방 이름 변경',action:()=>renameRoom&&renameRoom(info.id)},{label:'프로젝트로 이동',action:()=>moveRoom&&moveRoom(info.id)},{label:'프로젝트로 복사',action:()=>copyRoom&&copyRoom(info.id)},{label:'채팅방 삭제',danger:true,action:()=>deleteRoom&&deleteRoom(info.id)}]);
+    if(info.type==='project')openMenuFinal(info.title,[{label:'프로젝트 이름 변경',action:()=>renameProject&&renameProject(info.id)},{label:'프로젝트 삭제',danger:true,action:()=>deleteProject&&deleteProject(info.id)}]);
+    if(info.type==='post')openMenuFinal(info.title,[{label:'게시글 이름 변경',action:()=>renamePost&&renamePost(info.id)},{label:'게시글 삭제',danger:true,action:()=>deletePost&&deletePost(info.id)}]);
+    if(info.type==='cat')openMenuFinal(info.title,[{label:'게시글 추가',action:()=>{openBoard&&openBoard();const s=q('#postCategorySelect');if(s)s.value=info.id;}},{label:'카테고리 이름 변경',action:()=>renameCategory&&renameCategory(info.id)},{label:'카테고리 삭제',danger:true,action:()=>deleteCategory&&deleteCategory(info.id)}]);
+  }
+  function bindLongPressFinal(root){
+    if(!root||root.dataset.v79lp==='1')return;root.dataset.v79lp='1';let timer=null,info=null,sx=0,sy=0;
+    const clear=()=>{if(timer)clearTimeout(timer);timer=null;info=null};
+    root.addEventListener('pointerdown',function(e){info=resolveTarget(e.target);if(!info)return;sx=e.clientX;sy=e.clientY;timer=setTimeout(function(){actionFor(info);clear()},620)},true);
+    root.addEventListener('pointermove',function(e){if(timer&&(Math.abs(e.clientX-sx)>12||Math.abs(e.clientY-sy)>12))clear()},true);
+    ['pointerup','pointercancel','pointerleave'].forEach(ev=>root.addEventListener(ev,clear,true));
+    root.addEventListener('contextmenu',function(e){const i=resolveTarget(e.target);if(!i)return;e.preventDefault();actionFor(i)},true);
+  }
+
+  function removeDupDownloads(){qa('.row.ai .bubble').forEach(function(b){const tools=qa('.download-tools',b);tools.forEach((t,i)=>{if(i>0)t.remove()});const seen=new Set();qa('.download-tools .download-btn',b).forEach(btn=>{const k=btn.textContent.trim();if(seen.has(k))btn.remove();else seen.add(k)})})}
+  function renderAllSafe(){try{if(typeof renderAll==='function')renderAll();else bindFinal()}catch(e){bindFinal()}}
+  function bindFinal(){
+    bindSidebarFinal();
+    ensureFinalOrder();
+    renderProjectCategoryTreeFinal();
+    try{window.renderProjectTree()}catch(e){}
+    fixMemberLayoutFinal();
+    removeDupDownloads();
+  }
+  const oldRenderAll=window.renderAll;
+  if(typeof oldRenderAll==='function'&&!oldRenderAll.__v79){
+    const wrapped=function(){const r=oldRenderAll.apply(this,arguments);setTimeout(bindFinal,0);setTimeout(bindFinal,100);return r};wrapped.__v79=true;window.renderAll=wrapped;
+  }
+  const oldRenderMessages=window.renderMessages;
+  if(typeof oldRenderMessages==='function'&&!oldRenderMessages.__v79){
+    const wrapped=function(){const r=oldRenderMessages.apply(this,arguments);setTimeout(removeDupDownloads,0);return r};wrapped.__v79=true;window.renderMessages=wrapped;
+  }
+  window.addEventListener('DOMContentLoaded',bindFinal);
+  window.addEventListener('load',bindFinal);
+  window.addEventListener('pageshow',bindFinal);
+  setTimeout(bindFinal,250);setTimeout(bindFinal,900);setTimeout(bindFinal,1800);
+})();
+</script>
+
+</body>
+</html>
