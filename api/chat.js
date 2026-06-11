@@ -41,20 +41,17 @@ export default async function handler(req, res) {
 
   } catch (error) {
     return res.status(500).json({
-      error: error.message
+      error: error.message || "Server Error"
     });
   }
 }
 
 function detectProvider(model) {
-
   const value =
     String(model || "")
       .toLowerCase();
 
-  if (
-    value.includes("claude")
-  ) {
+  if (value.includes("claude")) {
     return "claude";
   }
 
@@ -68,14 +65,12 @@ async function handleOpenAI(
   history,
   system
 ) {
-
   const apiKey =
     process.env.OPENAI_API_KEY;
 
   if (!apiKey) {
     return res.status(500).json({
-      error:
-        "OPENAI_API_KEY not configured"
+      error: "OPENAI_API_KEY not configured"
     });
   }
 
@@ -84,29 +79,27 @@ async function handleOpenAI(
   if (system) {
     messages.push({
       role: "system",
-      content: system
+      content: String(system)
     });
   }
 
-  history.forEach(item => {
+  if (Array.isArray(history)) {
+    history.forEach(item => {
+      if (!item || !item.content) return;
 
-    if (!item?.content) {
-      return;
-    }
-
-    messages.push({
-      role:
-        item.role === "assistant"
-          ? "assistant"
-          : "user",
-      content: item.content
+      messages.push({
+        role:
+          item.role === "assistant"
+            ? "assistant"
+            : "user",
+        content: String(item.content)
+      });
     });
-
-  });
+  }
 
   messages.push({
     role: "user",
-    content: message
+    content: String(message)
   });
 
   const response =
@@ -122,25 +115,32 @@ async function handleOpenAI(
         },
         body: JSON.stringify({
           model:
-            normalizeOpenAIModel(
-              model
-            ),
+            normalizeOpenAIModel(model),
           messages,
           temperature: 0.3
         })
       }
     );
 
-  const data =
-    await response.json();
+  const raw =
+    await response.text();
+
+  let data;
+
+  try {
+    data = JSON.parse(raw);
+  } catch {
+    data = { raw };
+  }
 
   if (!response.ok) {
-    return res.status(
-      response.status
-    ).json({
+    return res.status(response.status).json({
+      provider: "openai",
       error:
         data.error?.message ||
-        "OpenAI Error"
+        raw ||
+        "OpenAI Error",
+      detail: data
     });
   }
 
@@ -149,7 +149,8 @@ async function handleOpenAI(
     model: data.model,
     text:
       data.choices?.[0]
-        ?.message?.content || ""
+        ?.message?.content || "응답 없음",
+    usage: data.usage
   });
 }
 
@@ -160,39 +161,66 @@ async function handleClaude(
   history,
   system
 ) {
-
   const apiKey =
     process.env.ANTHROPIC_API_KEY;
 
   if (!apiKey) {
     return res.status(500).json({
-      error:
-        "ANTHROPIC_API_KEY not configured"
+      provider: "claude",
+      error: "ANTHROPIC_API_KEY not configured"
     });
   }
 
   const messages = [];
 
-  history.forEach(item => {
+  if (Array.isArray(history)) {
+    history.forEach(item => {
+      if (!item || !item.content) return;
 
-    if (!item?.content) {
-      return;
-    }
-
-    messages.push({
-      role:
+      const role =
         item.role === "assistant"
           ? "assistant"
-          : "user",
-      content: item.content
-    });
+          : "user";
 
-  });
+      const content =
+        String(item.content || "").trim();
+
+      if (!content) return;
+
+      const last =
+        messages[messages.length - 1];
+
+      if (last && last.role === role) {
+        last.content += "\n\n" + content;
+      } else {
+        messages.push({
+          role,
+          content
+        });
+      }
+    });
+  }
 
   messages.push({
     role: "user",
-    content: message
+    content: String(message)
   });
+
+  if (messages[0]?.role === "assistant") {
+    messages.shift();
+  }
+
+  const payload = {
+    model:
+      normalizeClaudeModel(model),
+    max_tokens: 4096,
+    temperature: 0.3,
+    messages
+  };
+
+  if (system) {
+    payload.system = String(system);
+  }
 
   const response =
     await fetch(
@@ -207,87 +235,106 @@ async function handleClaude(
           "anthropic-version":
             "2023-06-01"
         },
-        body: JSON.stringify({
-          model:
-            "claude-3-5-sonnet-20241022",
-          max_tokens: 4096,
-          messages,
-          system
-        })
+        body: JSON.stringify(payload)
       }
     );
 
-  const data =
-    await response.json();
+  const raw =
+    await response.text();
+
+  let data;
+
+  try {
+    data = JSON.parse(raw);
+  } catch {
+    data = { raw };
+  }
 
   if (!response.ok) {
-    return res.status(
-      response.status
-    ).json({
+    return res.status(response.status).json({
+      provider: "claude",
       error:
         data.error?.message ||
-        "Claude Error"
+        raw ||
+        "Claude Error",
+      detail: data,
+      requestedModel:
+        payload.model
     });
   }
 
   const text =
-    Array.isArray(
-      data.content
-    )
+    Array.isArray(data.content)
       ? data.content
-          .map(
-            item =>
-              item.text || ""
-          )
+          .filter(item => item.type === "text")
+          .map(item => item.text || "")
           .join("\n")
       : "";
 
   return res.status(200).json({
     provider: "claude",
     model: data.model,
-    text
+    text: text || "응답 없음",
+    usage: data.usage
   });
 }
 
-function normalizeOpenAIModel(
-  model
-) {
-
+function normalizeOpenAIModel(model) {
   const value =
     String(model || "")
       .toLowerCase();
 
-  if (
-    value.includes(
-      "gpt-4.1-mini"
-    )
-  ) {
+  if (value.includes("gpt-4.1-mini")) {
     return "gpt-4.1-mini";
   }
 
-  if (
-    value.includes(
-      "gpt-4.1"
-    )
-  ) {
+  if (value.includes("gpt-4.1")) {
     return "gpt-4.1";
   }
 
-  if (
-    value.includes(
-      "gpt-4o-mini"
-    )
-  ) {
+  if (value.includes("gpt-4o-mini")) {
     return "gpt-4o-mini";
   }
 
-  if (
-    value.includes(
-      "gpt-5"
-    )
-  ) {
+  if (value.includes("gpt-5")) {
+    return "gpt-4o";
+  }
+
+  if (value.includes("chatgpt-5")) {
     return "gpt-4o";
   }
 
   return "gpt-4o";
+}
+
+function normalizeClaudeModel(model) {
+  const value =
+    String(model || "")
+      .toLowerCase();
+
+  if (value.includes("opus")) {
+    return "claude-opus-4-1-20250805";
+  }
+
+  if (value.includes("haiku")) {
+    return "claude-3-5-haiku-20241022";
+  }
+
+  if (value.includes("3-7")) {
+    return "claude-3-7-sonnet-latest";
+  }
+
+  if (value.includes("3.7")) {
+    return "claude-3-7-sonnet-latest";
+  }
+
+  if (value.includes("4")) {
+    return "claude-sonnet-4-20250514";
+  }
+
+  if (value.includes("sonnet")) {
+    return "claude-sonnet-4-20250514";
+  }
+
+  return "claude-sonnet-4-20250514";
 }
