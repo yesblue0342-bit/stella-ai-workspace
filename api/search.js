@@ -17,18 +17,22 @@ export default async function handler(req, res) {
       });
     }
 
-    const results = await runSearch({
+    const result = await runSearch({
       query,
       type,
       provider
     });
+
+    const results = Array.isArray(result) ? result : result.results || [];
 
     return res.status(200).json({
       query,
       provider,
       type,
       count: results.length,
-      results
+      results,
+      error: Array.isArray(result) ? null : result.error || null,
+      detail: Array.isArray(result) ? null : result.detail || null
     });
   } catch (error) {
     return res.status(500).json({
@@ -67,7 +71,8 @@ async function runSearch({ query, type, provider }) {
 
   if (provider === "all") {
     const naverResults = await searchNaver(query, type);
-    const googleResults = await searchGoogle(query);
+    const googleResult = await searchGoogle(query);
+    const googleResults = Array.isArray(googleResult) ? googleResult : googleResult.results || [];
     const wikiResults = await searchWikipedia(query);
     const namuResults = await searchNamuWiki(query);
 
@@ -215,13 +220,20 @@ async function searchNamuWiki(query) {
 
 async function searchGoogle(query) {
   if (!process.env.GOOGLE_API_KEY || !process.env.GOOGLE_CX) {
-    return [];
+    return {
+      results: [],
+      error: "GOOGLE_API_KEY 또는 GOOGLE_CX 환경변수가 설정되지 않았습니다.",
+      detail: {
+        hasGoogleApiKey: Boolean(process.env.GOOGLE_API_KEY),
+        hasGoogleCx: Boolean(process.env.GOOGLE_CX)
+      }
+    };
   }
 
   const apiUrl =
     "https://www.googleapis.com/customsearch/v1" +
-    `?key=${process.env.GOOGLE_API_KEY}` +
-    `&cx=${process.env.GOOGLE_CX}` +
+    `?key=${encodeURIComponent(process.env.GOOGLE_API_KEY)}` +
+    `&cx=${encodeURIComponent(process.env.GOOGLE_CX)}` +
     `&q=${encodeURIComponent(query)}` +
     "&num=5";
 
@@ -232,16 +244,37 @@ async function searchGoogle(query) {
   const data = await safeJson(response);
 
   if (!response.ok) {
-    return [];
+    return {
+      results: [],
+      error: data.error?.message || data.raw || "Google Search API Error",
+      detail: {
+        status: response.status,
+        reason: data.error?.errors?.[0]?.reason || data.error?.status || null,
+        googleError: data.error || data.raw || null
+      }
+    };
   }
 
-  return (data.items || []).map((item) => ({
+  const results = (data.items || []).map((item) => ({
     source: "google_web",
     title: removeHtml(item.title),
     link: item.link || "",
     snippet: removeHtml(item.snippet),
     date: null
   }));
+
+  if (results.length === 0) {
+    return {
+      results: [],
+      error: "Google API 호출은 성공했지만 검색 결과가 0건입니다. Programmable Search Engine의 검색 대상 사이트 또는 GOOGLE_CX 값을 확인하세요.",
+      detail: {
+        totalResults: data.searchInformation?.totalResults || "0",
+        searchTime: data.searchInformation?.searchTime || null
+      }
+    };
+  }
+
+  return results;
 }
 
 async function safeJson(response) {
@@ -270,17 +303,9 @@ function removeDuplicateLinks(results) {
   const seen = new Set();
 
   return results.filter((item) => {
-    const link = item?.link || "";
-
-    if (!link) {
-      return false;
-    }
-
-    if (seen.has(link)) {
-      return false;
-    }
-
-    seen.add(link);
+    if (!item || !item.link) return false;
+    if (seen.has(item.link)) return false;
+    seen.add(item.link);
     return true;
   });
 }
