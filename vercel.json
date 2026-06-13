@@ -1,6 +1,22 @@
 {
   "rewrites": [
-    { "source": "/api/:path*", "destination": "/api/:path*" },
+    { "source": "/api/board-list", "destination": "/api/stella?action=board-list" },
+    { "source": "/api/board-save", "destination": "/api/stella?action=board-save" },
+    { "source": "/api/chat-list", "destination": "/api/stella?action=chat-list" },
+    { "source": "/api/chat-save", "destination": "/api/stella?action=chat-save" },
+    { "source": "/api/db-test", "destination": "/api/stella?action=db-test" },
+    { "source": "/api/drive-search", "destination": "/api/stella?action=drive-search" },
+    { "source": "/api/drive-test", "destination": "/api/stella?action=drive-test" },
+    { "source": "/api/member-chat-list", "destination": "/api/stella?action=member-chat-list" },
+    { "source": "/api/member-chat-save", "destination": "/api/stella?action=member-chat-save" },
+    { "source": "/api/place-search", "destination": "/api/stella?action=place-search" },
+    { "source": "/api/weather-search", "destination": "/api/stella?action=weather-search" },
+    { "source": "/api/pwa-manifest", "destination": "/api/stella?action=pwa-manifest" },
+    { "source": "/api/init-db", "destination": "/api/stella?action=init-db" },
+    { "source": "/api/assistant-save", "destination": "/api/stella?action=assistant-save" },
+    { "source": "/api/assistant-list", "destination": "/api/stella?action=assistant-list" },
+    { "source": "/api/db-file-list", "destination": "/api/stella?action=db-file-list" },
+    { "source": "/api/db-list", "destination": "/api/stella?action=db-list" },
     { "source": "/(.*)", "destination": "/index.html" }
   ]
 }
