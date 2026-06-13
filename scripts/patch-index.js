@@ -3,7 +3,7 @@ const file = 'index.html';
 let s = fs.readFileSync(file, 'utf8');
 const before = s;
 
-s = s.replace(/<!-- stella-fixed-[^>]*-->/, '<!-- stella-fixed-2026-06-13-v6-excel-download-link -->');
+s = s.replace(/<!-- stella-fixed-[^>]*-->/, '<!-- stella-fixed-2026-06-13-v7-excel-link-for-tables -->');
 
 const modelBlock = [
 "function ensureModelOptions(){const sel=$('#modelSelect');if(!sel)return;const cur=sel.value||'gpt-5.5';sel.innerHTML='<optgroup label=\"ChatGPT / OpenAI\"><option value=\"gpt-5.5-pro\">GPT-5.5 Pro 최고성능</option><option value=\"gpt-5.5\">GPT-5.5 최신</option><option value=\"gpt-4.1\">GPT-4.1 호환</option><option value=\"gpt-4.1-mini\">GPT-4.1 Mini 빠른 응답</option><option value=\"gpt-4o\">GPT-4o 호환</option><option value=\"gpt-4o-mini\">GPT-4o Mini 빠른 응답</option></optgroup><optgroup label=\"Claude\"><option value=\"claude-opus-4-8\">Claude Opus 4.8 고성능</option><option value=\"claude-sonnet-4-6\">Claude Sonnet 4.6 균형</option><option value=\"claude-haiku-4-5-20251001\">Claude Haiku 4.5 빠른 응답</option><option value=\"claude-3-5-sonnet-20241022\">Claude 3.5 Sonnet 호환</option></optgroup>';if([...sel.options].some(o=>o.value===cur))sel.value=cur;else sel.value='gpt-5.5'}",
@@ -30,7 +30,7 @@ const rich = [
 "function downloadBlobFile(name,content,mime){const url=blobUrl(content,mime);const a=makeDownloadLink('',name,url);document.body.appendChild(a);a.click();setTimeout(function(){a.remove()},1000)}",
 "function downloadDocFromText(name,text){const html='<!doctype html><html><head><meta charset=\"utf-8\"></head><body style=\"font-family:Arial, sans-serif;line-height:1.7;white-space:pre-wrap\">'+mdEscapeHtml(text)+'</body></html>';downloadBlobFile(name,html,'application/msword;charset=utf-8')}",
 "function downloadPptFromText(name,text){const html='<!doctype html><html><head><meta charset=\"utf-8\"></head><body><section style=\"font-family:Arial, sans-serif;font-size:24px;line-height:1.6;white-space:pre-wrap\">'+mdEscapeHtml(text)+'</section></body></html>';downloadBlobFile(name,html,'application/vnd.ms-powerpoint;charset=utf-8')}",
-"function renderAnswer(el,text){const stamp=new Date().toISOString().replace(/[:.]/g,'-').slice(0,19);if(wantsDownload()){const tools=document.createElement('div');tools.className='download-tools';const xl=xlsxUrlFromText(text);tools.append(makeDownloadLink('📥 Excel 파일 다운로드','stella-answer-'+stamp+'.'+xl.ext,xl.url));tools.append(makeDownloadLink('TXT 다운로드','stella-answer-'+stamp+'.txt',blobUrl(text,'text/plain;charset=utf-8')));tools.append(btn('Word 다운로드',function(){downloadDocFromText('stella-answer-'+stamp+'.doc',text)}));tools.append(btn('PPT 다운로드',function(){downloadPptFromText('stella-answer-'+stamp+'.ppt',text)}));tools.append(makeDownloadLink('Markdown 다운로드','stella-answer-'+stamp+'.md',blobUrl(text,'text/markdown;charset=utf-8')));el.appendChild(tools)}renderMarkdownLite(el,text)}",
+"function renderAnswer(el,text){const stamp=new Date().toISOString().replace(/[:.]/g,'-').slice(0,19);const hasTable=tableRowsFromText(text).length>0;if(wantsDownload()||hasTable){const tools=document.createElement('div');tools.className='download-tools';const xl=xlsxUrlFromText(text);tools.append(makeDownloadLink('📥 Excel 파일 다운로드','stella-answer-'+stamp+'.'+xl.ext,xl.url));if(wantsDownload()){tools.append(makeDownloadLink('TXT 다운로드','stella-answer-'+stamp+'.txt',blobUrl(text,'text/plain;charset=utf-8')));tools.append(btn('Word 다운로드',function(){downloadDocFromText('stella-answer-'+stamp+'.doc',text)}));tools.append(btn('PPT 다운로드',function(){downloadPptFromText('stella-answer-'+stamp+'.ppt',text)}));tools.append(makeDownloadLink('Markdown 다운로드','stella-answer-'+stamp+'.md',blobUrl(text,'text/markdown;charset=utf-8')))}el.appendChild(tools)}renderMarkdownLite(el,text)}",
 '/* /stella-rich-answer-download-override */'
 ].join('\n');
 s = s.replace("window.addEventListener('resize',syncSidebarLayout);", rich + "\nwindow.addEventListener('resize',syncSidebarLayout);");
@@ -40,7 +40,7 @@ if (/return\{search:'auto',searchProvider:v/.test(s)) throw new Error('broken se
 
 if (s !== before) {
   fs.writeFileSync(file, s, 'utf8');
-  console.log('patched index.html v6 excel download link');
+  console.log('patched index.html v7 excel link for tables');
 } else {
   console.log('no changes');
 }
