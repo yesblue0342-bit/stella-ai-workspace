@@ -5,6 +5,7 @@ on:
     branches: [main]
     paths:
       - '.github/workflows/patch-index.yml'
+      - 'scripts/patch-index.js'
   workflow_dispatch:
 
 permissions:
@@ -31,4 +32,4 @@ jobs:
           git commit -m "Patch index html UI and auth"
           git push
 
-# trigger: 2026-06-13-5
+# trigger: 2026-06-13-6
