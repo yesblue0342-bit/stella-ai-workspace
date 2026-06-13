@@ -1,7 +1,7 @@
 ﻿<!DOCTYPE html>
 <html lang="ko">
 <head>
-<!-- stella-fixed-2026-06-13-v5-safe -->
+<!-- stella-fixed-2026-06-13-v6-excel-download-link -->
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
 <title>Stella Workspace</title>
@@ -120,19 +120,22 @@ function syncSidebarLayout(){const app=$('#app'),s=$('#sidebar'),b=$('#sidebarBa
 
 
 
+
 /* stella-rich-answer-download-override */
 function lastUserPrompt(){const r=activeRoom&&activeRoom();const arr=(r&&r.messages)||[];for(let i=arr.length-1;i>=0;i--){if(arr[i].role==='user')return String(arr[i].text||'')}const el=document.querySelector('#chatInput');return String((el&&el.value)||'')}
-function wantsDownload(){return /(다운로드|엑셀|excel|xlsx|word|docx|ppt|pptx|파워포인트|txt|텍스트|markdown|md|파일로|첨부파일로|저장)/i.test(lastUserPrompt())}
+function wantsDownload(){return /(다운로드|다운받|내려받|파일|엑셀|excel|xlsx|word|docx|ppt|pptx|파워포인트|txt|텍스트|markdown|md|파일로|첨부파일로|저장)/i.test(lastUserPrompt())}
 function mdEscapeHtml(x){return String(x==null?'':x).replace(/[&<>]/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;'}[c]})}
 function parseMarkdownTables(text){const lines=String(text||'').split('\n');const blocks=[];let i=0;while(i<lines.length){if(/^\s*\|.+\|\s*$/.test(lines[i]||'')&&i+1<lines.length&&/^\s*\|?\s*:?-{3,}:?\s*(\|\s*:?-{3,}:?\s*)+\|?\s*$/.test(lines[i+1]||'')){const start=i;let rows=[lines[i]];i+=2;while(i<lines.length&&/^\s*\|.+\|\s*$/.test(lines[i]||'')){rows.push(lines[i]);i++}blocks.push({start:start,end:i,rows:rows})}else{i++}}return blocks}
 function splitTableRow(line){let t=String(line||'').trim();if(t.startsWith('|'))t=t.slice(1);if(t.endsWith('|'))t=t.slice(0,-1);return t.split('|').map(function(x){return x.trim()})}
-function tableRowsFromText(text){const blocks=parseMarkdownTables(text);if(blocks[0])return blocks[0].rows.map(splitTableRow);return []}
+function tableRowsFromText(text){const blocks=parseMarkdownTables(text);if(blocks[0])return blocks[0].rows.map(splitTableRow);const lines=String(text||'').split('\n').filter(function(l){return l.indexOf('\t')>=0});if(lines.length>1)return lines.map(function(l){return l.split('\t')});return []}
 function renderMarkdownLite(container,text){const src=String(text||'');const blocks=parseMarkdownTables(src);let pos=0;function addParas(chunk){chunk.split(/\n{2,}/).map(function(x){return x.trim()}).filter(Boolean).forEach(function(part){if(/^###\s+/.test(part)){const h=document.createElement('h3');h.textContent=part.replace(/^###\s+/,'');container.appendChild(h);return}if(/^##\s+/.test(part)){const h=document.createElement('h2');h.textContent=part.replace(/^##\s+/,'');container.appendChild(h);return}const p=document.createElement('p');p.textContent=part;container.appendChild(p)})}blocks.forEach(function(b){addParas(src.split('\n').slice(pos,b.start).join('\n'));const table=document.createElement('table');const rows=b.rows.map(splitTableRow);rows.forEach(function(r,idx){const tr=document.createElement('tr');r.forEach(function(cell){const el=document.createElement(idx===0?'th':'td');el.textContent=cell;tr.appendChild(el)});table.appendChild(tr)});container.appendChild(table);pos=b.end});addParas(src.split('\n').slice(pos).join('\n'))}
-function downloadBlobFile(name,content,mime){const blob=new Blob([content],{type:mime});const url=URL.createObjectURL(blob);const a=document.createElement('a');a.href=url;a.download=name;document.body.appendChild(a);a.click();setTimeout(function(){a.remove();URL.revokeObjectURL(url)},1000)}
-function downloadXlsxFromText(name,text){const rows=tableRowsFromText(text);if(window.XLSX&&rows.length){const ws=XLSX.utils.aoa_to_sheet(rows);const wb=XLSX.utils.book_new();XLSX.utils.book_append_sheet(wb,ws,'Stella');XLSX.writeFile(wb,name);return}downloadBlobFile(name.replace(/\.xlsx$/,'.csv'),String(text||''),'text/csv;charset=utf-8')}
+function blobUrl(content,mime){return URL.createObjectURL(new Blob([content],{type:mime}))}
+function makeDownloadLink(label,name,url){const a=document.createElement('a');a.className='download-btn';a.href=url;a.download=name;a.textContent=label;a.addEventListener('click',function(){setTimeout(function(){try{URL.revokeObjectURL(url)}catch(e){}},4000)});return a}
+function xlsxUrlFromText(text){const rows=tableRowsFromText(text);if(window.XLSX&&rows.length){const ws=XLSX.utils.aoa_to_sheet(rows);const wb=XLSX.utils.book_new();XLSX.utils.book_append_sheet(wb,ws,'Stella');const arr=XLSX.write(wb,{bookType:'xlsx',type:'array'});return {url:URL.createObjectURL(new Blob([arr],{type:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'})),ext:'xlsx'}}return {url:blobUrl(String(text||''),'text/csv;charset=utf-8'),ext:'csv'}}
+function downloadBlobFile(name,content,mime){const url=blobUrl(content,mime);const a=makeDownloadLink('',name,url);document.body.appendChild(a);a.click();setTimeout(function(){a.remove()},1000)}
 function downloadDocFromText(name,text){const html='<!doctype html><html><head><meta charset="utf-8"></head><body style="font-family:Arial, sans-serif;line-height:1.7;white-space:pre-wrap">'+mdEscapeHtml(text)+'</body></html>';downloadBlobFile(name,html,'application/msword;charset=utf-8')}
 function downloadPptFromText(name,text){const html='<!doctype html><html><head><meta charset="utf-8"></head><body><section style="font-family:Arial, sans-serif;font-size:24px;line-height:1.6;white-space:pre-wrap">'+mdEscapeHtml(text)+'</section></body></html>';downloadBlobFile(name,html,'application/vnd.ms-powerpoint;charset=utf-8')}
-function renderAnswer(el,text){const stamp=new Date().toISOString().replace(/[:.]/g,'-').slice(0,19);if(wantsDownload()){const tools=document.createElement('div');tools.className='download-tools';tools.append(btn('TXT',function(){downloadBlobFile('stella-answer-'+stamp+'.txt',text,'text/plain;charset=utf-8')}));tools.append(btn('Excel',function(){downloadXlsxFromText('stella-answer-'+stamp+'.xlsx',text)}));tools.append(btn('Word',function(){downloadDocFromText('stella-answer-'+stamp+'.doc',text)}));tools.append(btn('PPT',function(){downloadPptFromText('stella-answer-'+stamp+'.ppt',text)}));tools.append(btn('Markdown',function(){downloadBlobFile('stella-answer-'+stamp+'.md',text,'text/markdown;charset=utf-8')}));el.appendChild(tools)}renderMarkdownLite(el,text)}
+function renderAnswer(el,text){const stamp=new Date().toISOString().replace(/[:.]/g,'-').slice(0,19);if(wantsDownload()){const tools=document.createElement('div');tools.className='download-tools';const xl=xlsxUrlFromText(text);tools.append(makeDownloadLink('📥 Excel 파일 다운로드','stella-answer-'+stamp+'.'+xl.ext,xl.url));tools.append(makeDownloadLink('TXT 다운로드','stella-answer-'+stamp+'.txt',blobUrl(text,'text/plain;charset=utf-8')));tools.append(btn('Word 다운로드',function(){downloadDocFromText('stella-answer-'+stamp+'.doc',text)}));tools.append(btn('PPT 다운로드',function(){downloadPptFromText('stella-answer-'+stamp+'.ppt',text)}));tools.append(makeDownloadLink('Markdown 다운로드','stella-answer-'+stamp+'.md',blobUrl(text,'text/markdown;charset=utf-8')));el.appendChild(tools)}renderMarkdownLite(el,text)}
 /* /stella-rich-answer-download-override */
 window.addEventListener('resize',syncSidebarLayout);
 window.addEventListener('DOMContentLoaded',()=>{ensureModelOptions();initEvents();initAuth();syncSidebarLayout()});
