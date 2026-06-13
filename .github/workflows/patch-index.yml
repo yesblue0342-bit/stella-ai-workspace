@@ -19,15 +19,16 @@ jobs:
           persist-credentials: true
       - name: Run patch script
         run: |
-          node scripts/patch-index.js
+          cp scripts/patch-index.js patch-index.cjs
+          node patch-index.cjs
           if git diff --quiet index.html; then
             echo "No index.html changes"
             exit 0
           fi
-          git config user.name "stella-workspace-bot"
-          git config user.email "stella-workspace-bot@users.noreply.github.com"
+          git config user.name "github-actions"
+          git config user.email "github-actions@github.com"
           git add index.html
           git commit -m "Patch index html UI and auth"
           git push
 
-# trigger: 2026-06-13-3
+# trigger: 2026-06-13-5
