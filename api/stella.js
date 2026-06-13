@@ -1,5 +1,5 @@
-import { saveJsonToDrive, listJsonFromDrive, searchDrive } from "./drive-utils.js";
-import { getPlaceContext, getWeatherContext } from "./place-weather-utils.js";
+import { saveJsonToDrive, listJsonFromDrive, searchDrive, listDriveDirectory } from "../lib/drive-utils.js";
+import { getPlaceContext, getWeatherContext } from "../lib/place-weather-utils.js";
 import { getPool } from "../lib/db.js";
 
 const ROUTE_ACTIONS = {
@@ -20,46 +20,29 @@ const ROUTE_ACTIONS = {
 
 export default async function handler(req, res) {
   const action = getAction(req);
-
   try {
     switch (action) {
-      case "health":
-        return res.status(200).json({ ok: true, service: "stella", message: "Stella 통합 API 정상" });
-      case "pwa-manifest":
-        return sendManifest(res);
-      case "db-test":
-        return await handleDbTest(res);
-      case "drive-test":
-        return await handleDriveTest(req, res);
-      case "drive-search":
-        return await handleDriveSearch(req, res);
-      case "board-save":
-        return await handleBoardSave(req, res);
-      case "board-list":
-        return await handleBoardList(req, res);
-      case "chat-save":
-        return await handleChatSave(req, res);
-      case "chat-list":
-        return await handleChatList(req, res);
-      case "member-chat-save":
-        return await handleMemberChatSave(req, res);
-      case "member-chat-list":
-        return await handleMemberChatList(req, res);
-      case "place-search":
-        return await handlePlaceSearch(req, res);
-      case "weather-search":
-        return await handleWeatherSearch(req, res);
-      case "assistant-save":
-        return await handleAssistantSave(req, res);
-      case "assistant-list":
-        return await handleAssistantList(req, res);
+      case "health": return res.status(200).json({ ok: true, service: "stella", message: "Stella 통합 API 정상" });
+      case "pwa-manifest": return sendManifest(res);
+      case "db-test": return await handleDbTest(res);
+      case "drive-test": return await handleDriveTest(req, res);
+      case "drive-search": return await handleDriveSearch(req, res);
+      case "drive-directory":
+      case "db-directory": return await handleDriveDirectory(req, res);
+      case "board-save": return await handleBoardSave(req, res);
+      case "board-list": return await handleBoardList(req, res);
+      case "chat-save": return await handleChatSave(req, res);
+      case "chat-list": return await handleChatList(req, res);
+      case "member-chat-save": return await handleMemberChatSave(req, res);
+      case "member-chat-list": return await handleMemberChatList(req, res);
+      case "place-search": return await handlePlaceSearch(req, res);
+      case "weather-search": return await handleWeatherSearch(req, res);
+      case "assistant-save": return await handleAssistantSave(req, res);
+      case "assistant-list": return await handleAssistantList(req, res);
       case "db-list":
-      case "db-file-list":
-        return await handleDbFileList(req, res);
-      case "init-db":
-        return res.status(410).json({ ok: false, message: "init-db endpoint disabled. DB table setup is handled by signup/login APIs." });
-      default:
-        return res.status(400).json({ ok: false, message: "Unknown Stella action", action });
+      case "db-file-list": return await handleDbFileList(req, res);
+      case "init-db": return res.status(410).json({ ok: false, message: "init-db endpoint disabled. DB table setup is handled by signup/login APIs." });
+      default: return res.status(400).json({ ok: false, message: "Unknown Stella action", action });
     }
   } catch (error) {
     return res.status(500).json({ ok: false, action, message: "Stella 통합 API 오류", error: error.message });
@@ -69,16 +52,12 @@ export default async function handler(req, res) {
 function getAction(req) {
   const queryAction = clean(req.query?.action || req.body?.action).toLowerCase();
   if (queryAction) return queryAction;
-
   const rawUrl = req.url || "";
   const path = rawUrl.split("?")[0].split("/").filter(Boolean).pop() || "health";
   return ROUTE_ACTIONS[path] || path || "health";
 }
 
-function clean(value = "") {
-  return String(value || "").trim();
-}
-
+function clean(value = "") { return String(value || "").trim(); }
 function getInput(req, names = []) {
   for (const name of names) {
     const value = req.query?.[name] ?? req.body?.[name];
@@ -86,90 +65,53 @@ function getInput(req, names = []) {
   }
   return "";
 }
-
 function safeId(value = "", fallback = "item") {
   const raw = clean(value) || `${fallback}_${Date.now()}`;
   return raw.replace(/[^a-zA-Z0-9가-힣_-]/g, "_").slice(0, 100);
 }
-
 function normalizeMessages(value) {
   if (!Array.isArray(value)) return [];
-  return value
-    .filter((item) => item && (item.content || item.text || item.message))
-    .map((item, index) => ({
-      id: clean(item.id) || `msg_${Date.now()}_${index}`,
-      role: item.role === "assistant" || item.role === "ai" ? "assistant" : "user",
-      content: String(item.content || item.text || item.message || ""),
-      createdAt: clean(item.createdAt) || new Date().toISOString()
-    }));
+  return value.filter((item) => item && (item.content || item.text || item.message)).map((item, index) => ({
+    id: clean(item.id) || `msg_${Date.now()}_${index}`,
+    role: item.role === "assistant" || item.role === "ai" ? "assistant" : "user",
+    content: String(item.content || item.text || item.message || ""),
+    createdAt: clean(item.createdAt) || new Date().toISOString()
+  }));
 }
 
 function sendManifest(res) {
   res.setHeader("Content-Type", "application/manifest+json; charset=utf-8");
-  return res.status(200).send(JSON.stringify({
-    name: "Stella Workspace",
-    short_name: "Stella",
-    start_url: "/",
-    display: "standalone",
-    background_color: "#ffffff",
-    theme_color: "#0f172a",
-    icons: []
-  }));
+  return res.status(200).send(JSON.stringify({ name: "Stella Workspace", short_name: "Stella", start_url: "/", display: "standalone", background_color: "#ffffff", theme_color: "#0f172a", icons: [] }));
 }
-
 async function handleDbTest(res) {
   const pool = await getPool();
   const result = await pool.request().query("SELECT 1 AS ok");
   return res.status(200).json({ ok: true, message: "DB 연결 성공", result: result.recordset });
 }
-
 async function handleDriveTest(req, res) {
-  const saved = await saveJsonToDrive({
-    folderPath: ["SystemTest"],
-    fileName: "drive-test.json",
-    data: {
-      type: "driveTest",
-      message: "Stella Google Drive save test",
-      method: req.method,
-      createdAt: new Date().toISOString()
-    }
-  });
+  const saved = await saveJsonToDrive({ folderPath: ["SystemTest"], fileName: "drive-test.json", data: { type: "driveTest", message: "Stella Google Drive save test", method: req.method, createdAt: new Date().toISOString() } });
   return res.status(200).json({ ok: true, message: "Google Drive 저장 테스트 완료", saved });
 }
-
 function normalizeDriveQuery(value = "") {
-  return String(value || "")
-    .replace(/#DB/gi, "")
-    .replace(/#SAP/gi, "")
-    .replace(/#StellaGPT/gi, "")
-    .replace(/구글\s*드라이브|Drive|Knowledge|내\s*문서|자료\s*기준|폴더에서|검색해줘|찾아줘|검색|찾아/gi, " ")
-    .replace(/\s+/g, " ")
-    .trim();
+  return String(value || "").replace(/#DB/gi, "").replace(/#SAP/gi, "").replace(/#StellaGPT/gi, "").replace(/구글\s*드라이브|Drive|Knowledge|내\s*문서|자료\s*기준|폴더에서|검색해줘|찾아줘|검색|찾아/gi, " ").replace(/\s+/g, " ").trim();
 }
-
 async function handleDriveSearch(req, res) {
-  if (req.method !== "GET" && req.method !== "POST") {
-    res.setHeader("Allow", "GET, POST");
-    return res.status(405).json({ ok: false, message: "Method Not Allowed" });
-  }
+  if (req.method !== "GET" && req.method !== "POST") { res.setHeader("Allow", "GET, POST"); return res.status(405).json({ ok: false, message: "Method Not Allowed" }); }
   const raw = getInput(req, ["q", "query", "message"]);
   const query = normalizeDriveQuery(raw) || clean(raw);
   const limit = Math.min(Number(getInput(req, ["limit"]) || 20), 100);
   if (!query) return res.status(400).json({ ok: false, message: "검색어를 입력하세요." });
   const files = await searchDrive({ query, pageSize: Number.isFinite(limit) ? limit : 20 });
-  return res.status(200).json({
-    ok: true,
-    type: "drive-search",
-    query,
-    files: files.map((file) => ({ id: file.id, name: file.name, mimeType: file.mimeType, link: file.webViewLink, modifiedTime: file.modifiedTime, size: file.size || null }))
-  });
+  return res.status(200).json({ ok: true, type: "drive-search", query, files: files.map(mapDriveFile) });
 }
-
+async function handleDriveDirectory(req, res) {
+  const folderId = clean(getInput(req, ["folderId", "id"]));
+  const limit = Math.min(Number(getInput(req, ["limit"]) || 100), 200);
+  const files = await listDriveDirectory({ folderId: folderId || undefined, pageSize: Number.isFinite(limit) ? limit : 100 });
+  return res.status(200).json({ ok: true, type: "drive-directory", folderId: folderId || "root", files });
+}
 async function handleBoardSave(req, res) {
-  if (req.method !== "POST") {
-    res.setHeader("Allow", "POST");
-    return res.status(405).json({ ok: false, message: "Method Not Allowed" });
-  }
+  if (req.method !== "POST") { res.setHeader("Allow", "POST"); return res.status(405).json({ ok: false, message: "Method Not Allowed" }); }
   const body = req.body || {};
   const title = clean(body.title);
   const content = clean(body.content || body.body || body.text);
@@ -178,48 +120,36 @@ async function handleBoardSave(req, res) {
   const category = clean(body.category || "Board");
   const postId = safeId(body.postId || body.id || title, "post");
   if (!title && !content) return res.status(400).json({ ok: false, message: "제목 또는 내용을 입력하세요." });
-
   const data = { type: "boardPost", postId, title: title || "제목 없음", content, writer, userId, category, attachments: Array.isArray(body.attachments) ? body.attachments : [], createdAt: body.createdAt || new Date().toISOString(), updatedAt: new Date().toISOString() };
   const saved = await saveJsonToDrive({ folderPath: ["Board", category], fileName: `${postId}.json`, data });
   return res.status(200).json({ ok: true, message: "게시글 저장 완료", saved, post: data });
 }
-
 async function handleBoardList(req, res) {
   const category = clean(getInput(req, ["category"]) || "Board");
   const limit = Math.min(Number(getInput(req, ["limit"]) || 50), 100);
   const files = await listJsonFromDrive({ folderPath: ["Board", category], pageSize: Number.isFinite(limit) ? limit : 50 });
   return res.status(200).json({ ok: true, type: "board-list", category, posts: files.map(mapDriveFile) });
 }
-
 async function handleChatSave(req, res) {
-  if (req.method !== "POST") {
-    res.setHeader("Allow", "POST");
-    return res.status(405).json({ ok: false, message: "Method Not Allowed" });
-  }
+  if (req.method !== "POST") { res.setHeader("Allow", "POST"); return res.status(405).json({ ok: false, message: "Method Not Allowed" }); }
   const body = req.body || {};
   const userId = clean(body.userId || body.email || body.user || "guest");
   const chatId = safeId(body.chatId || body.id || body.title, "chat");
   const title = clean(body.title || body.name || "Stella GPT Chat");
   const messages = normalizeMessages(body.messages || body.history);
   if (messages.length === 0) return res.status(400).json({ ok: false, message: "저장할 채팅 메시지가 없습니다." });
-
   const data = { type: "stellaGptChat", userId, chatId, title, model: clean(body.model || ""), messages, messageCount: messages.length, updatedAt: new Date().toISOString() };
   const saved = await saveJsonToDrive({ folderPath: ["ChatHistory", userId], fileName: `${chatId}.json`, data });
   return res.status(200).json({ ok: true, message: "Stella GPT 채팅 저장 완료", saved, chat: data });
 }
-
 async function handleChatList(req, res) {
   const userId = clean(getInput(req, ["userId", "email"]) || "guest");
   const limit = Math.min(Number(getInput(req, ["limit"]) || 50), 100);
   const files = await listJsonFromDrive({ folderPath: ["ChatHistory", userId], pageSize: Number.isFinite(limit) ? limit : 50 });
   return res.status(200).json({ ok: true, message: "Stella GPT 채팅 목록 조회 완료", userId, count: files.length, files });
 }
-
 async function handleMemberChatSave(req, res) {
-  if (req.method !== "POST") {
-    res.setHeader("Allow", "POST");
-    return res.status(405).json({ ok: false, message: "Method Not Allowed" });
-  }
+  if (req.method !== "POST") { res.setHeader("Allow", "POST"); return res.status(405).json({ ok: false, message: "Method Not Allowed" }); }
   const body = req.body || {};
   const roomId = safeId(body.roomId || body.room || body.title, "default-room");
   const title = clean(body.title || body.roomName || roomId);
@@ -228,38 +158,20 @@ async function handleMemberChatSave(req, res) {
   const message = clean(body.message || body.text || body.content);
   const members = Array.isArray(body.members) ? body.members.map(clean).filter(Boolean) : [userId].filter(Boolean);
   if (!message) return res.status(400).json({ ok: false, message: "메시지를 입력하세요." });
-
   const messageItem = { id: `msg_${Date.now()}`, sender, userId, message, createdAt: new Date().toISOString() };
   const data = { type: "memberChat", roomId, title, members, lastMessage: message, updatedAt: new Date().toISOString(), messages: Array.isArray(body.messages) ? [...body.messages, messageItem] : [messageItem] };
   const saved = await saveJsonToDrive({ folderPath: ["MemberChat"], fileName: `${roomId}.json`, data });
   return res.status(200).json({ ok: true, message: "회원 채팅 저장 완료", saved, room: data });
 }
-
 async function handleMemberChatList(req, res) {
   const limit = Math.min(Number(getInput(req, ["limit"]) || 50), 100);
   const files = await listJsonFromDrive({ folderPath: ["MemberChat"], pageSize: Number.isFinite(limit) ? limit : 50 });
   return res.status(200).json({ ok: true, type: "member-chat-list", rooms: files.map(mapDriveFile) });
 }
-
-async function handlePlaceSearch(req, res) {
-  const query = clean(getInput(req, ["q", "query"]));
-  if (!query) return res.status(400).json({ ok: false, message: "q is required" });
-  const result = await getPlaceContext(query);
-  return res.status(200).json({ ok: true, ...result });
-}
-
-async function handleWeatherSearch(req, res) {
-  const query = clean(getInput(req, ["q", "query"]));
-  if (!query) return res.status(400).json({ ok: false, message: "q is required" });
-  const result = await getWeatherContext(query);
-  return res.status(200).json({ ok: true, ...result });
-}
-
+async function handlePlaceSearch(req, res) { const query = clean(getInput(req, ["q", "query"])); if (!query) return res.status(400).json({ ok: false, message: "q is required" }); const result = await getPlaceContext(query); return res.status(200).json({ ok: true, ...result }); }
+async function handleWeatherSearch(req, res) { const query = clean(getInput(req, ["q", "query"])); if (!query) return res.status(400).json({ ok: false, message: "q is required" }); const result = await getWeatherContext(query); return res.status(200).json({ ok: true, ...result }); }
 async function handleAssistantSave(req, res) {
-  if (req.method !== "POST") {
-    res.setHeader("Allow", "POST");
-    return res.status(405).json({ ok: false, message: "Method Not Allowed" });
-  }
+  if (req.method !== "POST") { res.setHeader("Allow", "POST"); return res.status(405).json({ ok: false, message: "Method Not Allowed" }); }
   const body = req.body || {};
   const userId = safeId(body.userId || body.email || "guest", "user");
   const type = safeId(body.type || "memo", "memo");
@@ -268,7 +180,6 @@ async function handleAssistantSave(req, res) {
   const saved = await saveJsonToDrive({ folderPath: ["AssistantMemory", userId, type], fileName: `${itemId}.json`, data });
   return res.status(200).json({ ok: true, message: "개인 비서 메모 저장 완료", saved, item: data });
 }
-
 async function handleAssistantList(req, res) {
   const userId = safeId(getInput(req, ["userId", "email"]) || "guest", "user");
   const type = safeId(getInput(req, ["type"]) || "memo", "memo");
@@ -276,20 +187,13 @@ async function handleAssistantList(req, res) {
   const files = await listJsonFromDrive({ folderPath: ["AssistantMemory", userId, type], pageSize: Number.isFinite(limit) ? limit : 50 });
   return res.status(200).json({ ok: true, message: "개인 비서 메모 목록 조회 완료", userId, type, files });
 }
-
 async function handleDbFileList(req, res) {
   const query = clean(getInput(req, ["q", "query"]));
   const limit = Math.min(Number(getInput(req, ["limit"]) || 50), 100);
-  const files = query ? await searchDrive({ query, pageSize: limit }) : await searchDrive({ query: "StellaGPT DB", pageSize: limit });
-  return res.status(200).json({ ok: true, message: "DB 파일 목록 조회", files: files.map((file) => ({ id: file.id, name: file.name, mimeType: file.mimeType, link: file.webViewLink, modifiedTime: file.modifiedTime, size: file.size || null })) });
+  if (!query) return await handleDriveDirectory(req, res);
+  const files = await searchDrive({ query, pageSize: limit });
+  return res.status(200).json({ ok: true, message: "DB 파일 목록 조회", files: files.map(mapDriveFile) });
 }
-
 function mapDriveFile(file) {
-  return {
-    id: file.id,
-    name: file.name,
-    link: file.webViewLink,
-    modifiedTime: file.modifiedTime,
-    createdTime: file.createdTime
-  };
+  return { id: file.id, name: file.name, mimeType: file.mimeType, isFolder: file.isFolder || file.mimeType === "application/vnd.google-apps.folder", link: file.link || file.webViewLink, modifiedTime: file.modifiedTime, createdTime: file.createdTime, size: file.size || null };
 }
