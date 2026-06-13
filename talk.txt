@@ -1,1 +1,1 @@
-Stella Talk page placeholder
+<!doctype html><html><body><h1>Stella Talk</h1></body></html>
