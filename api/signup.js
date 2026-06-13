@@ -1,13 +1,14 @@
-import { createHash } from "crypto";
+import crypto from "crypto";
 import { getPool, sql } from "../lib/db.js";
-
-function hashPassword(password) {
-  const secret = process.env.AUTH_SECRET || "stella-default-auth-secret";
-  return createHash("sha256").update(`${password}:${secret}`).digest("hex");
-}
 
 function clean(value) {
   return String(value || "").trim();
+}
+
+function hashPassword(password) {
+  const salt = crypto.randomBytes(16).toString("hex");
+  const hash = crypto.pbkdf2Sync(String(password), salt, 100000, 64, "sha512").toString("hex");
+  return `${salt}:${hash}`;
 }
 
 async function ensureUsersTable(pool) {
@@ -43,23 +44,27 @@ IF COL_LENGTH('dbo.users', 'created_at') IS NULL
 export default async function handler(req, res) {
   if (req.method !== "POST") {
     res.setHeader("Allow", "POST");
-    return res.status(405).json({ ok: false, error: "POST method only" });
+    return res.status(405).json({ ok: false, message: "Method Not Allowed" });
   }
 
   try {
     const body = req.body || {};
-    const userId = clean(body.id || body.user_id || body.username || body.email).toLowerCase();
     const email = clean(body.email || body.id || body.username).toLowerCase();
-    const name = clean(body.name) || userId;
+    const userId = clean(body.id || body.user_id || body.username || email).toLowerCase();
+    const name = clean(body.name) || userId || email;
     const birth = clean(body.birth || body.birthdate);
     const password = String(body.password || "");
 
-    if (!userId || !email || !password) {
-      return res.status(400).json({ ok: false, error: "아이디/이메일/비밀번호를 입력해 주세요." });
+    if (!email || !password) {
+      return res.status(400).json({ ok: false, message: "이메일과 비밀번호를 입력하세요." });
+    }
+
+    if (!email.includes("@")) {
+      return res.status(400).json({ ok: false, message: "올바른 이메일 형식이 아닙니다." });
     }
 
     if (password.length < 4) {
-      return res.status(400).json({ ok: false, error: "비밀번호는 최소 4자 이상 입력해 주세요." });
+      return res.status(400).json({ ok: false, message: "비밀번호는 4자 이상 입력하세요." });
     }
 
     const pool = await getPool();
@@ -76,7 +81,7 @@ export default async function handler(req, res) {
       `);
 
     if (exists.recordset.length > 0) {
-      return res.status(409).json({ ok: false, error: "이미 가입된 아이디 또는 이메일입니다." });
+      return res.status(409).json({ ok: false, message: "이미 가입된 아이디 또는 이메일입니다." });
     }
 
     const passwordHash = hashPassword(password);
@@ -89,12 +94,12 @@ export default async function handler(req, res) {
       .input("birth", sql.NVarChar(30), birth || null)
       .query(`
         INSERT INTO dbo.users (user_id, email, password_hash, name, birth)
-        OUTPUT INSERTED.id, INSERTED.user_id, INSERTED.email, INSERTED.name, INSERTED.birth, INSERTED.created_at
+        OUTPUT inserted.id, inserted.user_id, inserted.email, inserted.name, inserted.birth, inserted.created_at
         VALUES (@user_id, @email, @password_hash, @name, @birth)
       `);
 
     const user = result.recordset[0];
-    return res.status(200).json({
+    return res.status(201).json({
       ok: true,
       message: "회원가입 성공",
       user: {
@@ -106,7 +111,7 @@ export default async function handler(req, res) {
         created_at: user.created_at
       }
     });
-  } catch (err) {
-    return res.status(500).json({ ok: false, error: err.message || String(err) });
+  } catch (error) {
+    return res.status(500).json({ ok: false, message: "회원가입 실패", error: error.message });
   }
 }
