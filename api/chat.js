@@ -24,7 +24,7 @@ export default async function handler(req, res) {
       searchType
     });
 
-    const enhancedSystem = buildEnhancedSystemPrompt(system, searchPayload);
+    const enhancedSystem = buildEnhancedSystemPrompt(system, searchPayload, message);
     const enhancedMessage = buildEnhancedUserMessage(message, searchPayload);
 
     if (isClaudeModel(model)) {
@@ -68,7 +68,7 @@ async function callOpenAI(res, { model, message, originalMessage, history, syste
   const payload = {
     model: normalizeOpenAIModel(model),
     messages: buildOpenAIMessages(history, message, system),
-    temperature: 0.3
+    temperature: 0.35
   };
 
   const response = await fetch("https://api.openai.com/v1/chat/completions", {
@@ -167,6 +167,7 @@ function searchMeta(searchPayload) {
     searchQuery: searchPayload.query,
     searchProvider: searchPayload.provider,
     searchType: searchPayload.type,
+    searchIntent: searchPayload.intent,
     searchResults: searchPayload.results,
     searchError: searchPayload.error || null
   };
@@ -196,7 +197,6 @@ function buildClaudeMessages(history, message) {
 
   for (const item of history) {
     if (!item || !item.content) continue;
-
     const role = item.role === "assistant" ? "assistant" : "user";
     const content = String(item.content || "").trim();
     if (!content) continue;
@@ -218,36 +218,25 @@ function buildClaudeMessages(history, message) {
 }
 
 async function prepareSearchContext({ message, search = "auto", searchProvider = "auto", searchType = "auto" }) {
+  const intent = detectIntent(message);
   const shouldSearch =
     search === true ||
     search === "true" ||
     (String(search).toLowerCase() === "auto" && shouldUseSearch(message));
 
   if (!shouldSearch) {
-    return {
-      used: false,
-      query: null,
-      provider: null,
-      type: null,
-      results: [],
-      error: null,
-      context: ""
-    };
+    return emptySearchPayload(intent);
   }
 
-  const resolvedProvider = resolveSearchProvider(message, searchProvider);
-  const resolvedType = String(searchType || "auto") === "auto" ? detectSearchType(message) : String(searchType || "web");
-  const searchQuery = extractSearchQuery(message);
+  const resolvedProvider = resolveSearchProvider(message, searchProvider, intent);
+  const resolvedType = String(searchType || "auto") === "auto" ? detectSearchType(message, intent) : String(searchType || "web");
+  const searchQuery = extractSearchQuery(message, intent);
 
   let results = [];
   let searchError = null;
 
   try {
-    results = await runSearchProvider({
-      provider: resolvedProvider,
-      query: searchQuery,
-      type: resolvedType
-    });
+    results = await runSearchProvider({ provider: resolvedProvider, query: searchQuery, type: resolvedType, intent });
   } catch (error) {
     searchError = error.message || "Search Error";
     results = [];
@@ -260,24 +249,37 @@ async function prepareSearchContext({ message, search = "auto", searchProvider =
     query: searchQuery,
     provider: resolvedProvider,
     type: resolvedType,
+    intent,
     results: limitedResults,
     error: searchError,
     context: buildSearchContext(limitedResults, searchError)
   };
 }
 
-async function runSearchProvider({ provider, query, type }) {
-  if (provider === "google") {
-    return await searchGoogle(query);
+function emptySearchPayload(intent = "general") {
+  return {
+    used: false,
+    query: null,
+    provider: null,
+    type: null,
+    intent,
+    results: [],
+    error: null,
+    context: ""
+  };
+}
+
+async function runSearchProvider({ provider, query, type, intent }) {
+  if (intent === "local_food") {
+    const naverBlog = await safeSearch(() => searchNaver(query, "blog"));
+    const naverWeb = await safeSearch(() => searchNaver(query, "web"));
+    const googleWeb = await safeSearch(() => searchGoogle(query));
+    return removeDuplicateLinks([...naverBlog, ...naverWeb, ...googleWeb]);
   }
 
-  if (provider === "wiki" || provider === "wikipedia") {
-    return await searchWikipedia(query);
-  }
-
-  if (provider === "namu" || provider === "namuwiki") {
-    return await searchNamuWiki(query);
-  }
+  if (provider === "google") return await searchGoogle(query);
+  if (provider === "wiki" || provider === "wikipedia") return await searchWikipedia(query);
+  if (provider === "namu" || provider === "namuwiki") return await searchNamuWiki(query);
 
   if (provider === "knowledge") {
     const [wikiResults, namuResults] = await Promise.all([
@@ -308,63 +310,26 @@ async function safeSearch(fn) {
   }
 }
 
+function detectIntent(message) {
+  const text = String(message || "").toLowerCase();
+  if (text.includes("맛집") || text.includes("식당") || text.includes("밥집") || text.includes("카페") || text.includes("먹을")) return "local_food";
+  if (/#db|#sap|#stellagpt|구글\s*드라이브|knowledge|내\s*문서|자료\s*기준|폴더에서/i.test(text)) return "drive_knowledge";
+  return "general";
+}
+
 function shouldUseSearch(message) {
   const text = String(message || "").toLowerCase();
   const keywords = [
-    "검색",
-    "찾아",
-    "찾아봐",
-    "찾아줘",
-    "최신",
-    "최근",
-    "이번 달",
-    "오늘",
-    "뉴스",
-    "기사",
-    "속보",
-    "현재",
-    "블로그",
-    "후기",
-    "리뷰",
-    "맛집",
-    "여행",
-    "숙소",
-    "가격",
-    "주가",
-    "일정",
-    "날씨",
-    "공식",
-    "문서",
-    "api",
-    "github",
-    "오류",
-    "error",
-    "구글",
-    "google",
-    "네이버",
-    "naver",
-    "위키",
-    "위키백과",
-    "wikipedia",
-    "나무위키",
-    "namu",
-    "프로필",
-    "인물",
-    "작가",
-    "소설가",
-    "뜻",
-    "정의",
-    "누구",
-    "무엇",
-    "정보"
+    "검색", "찾아", "찾아봐", "찾아줘", "최신", "최근", "이번 달", "오늘", "뉴스", "기사", "속보", "현재",
+    "블로그", "후기", "리뷰", "맛집", "식당", "카페", "여행", "숙소", "가격", "주가", "일정", "날씨",
+    "공식", "문서", "api", "github", "오류", "error", "구글", "google", "네이버", "naver", "위키",
+    "위키백과", "wikipedia", "나무위키", "namu", "프로필", "인물", "작가", "소설가", "뜻", "정의", "누구", "무엇", "정보", "#db", "#sap", "#stellagpt"
   ];
-
   return keywords.some((keyword) => text.includes(keyword.toLowerCase()));
 }
 
-function resolveSearchProvider(message, searchProvider) {
+function resolveSearchProvider(message, searchProvider, intent) {
   const requested = String(searchProvider || "auto").toLowerCase();
-
   if (["naver", "google", "wiki", "wikipedia", "namu", "namuwiki", "knowledge", "all"].includes(requested)) {
     return requested === "wikipedia" ? "wiki" : requested === "namuwiki" ? "namu" : requested;
   }
@@ -375,79 +340,31 @@ function resolveSearchProvider(message, searchProvider) {
   const wantsGoogle = text.includes("구글") || text.includes("google");
   const wantsNaver = text.includes("네이버") || text.includes("naver");
 
+  if (intent === "local_food") return "all";
   if ((wantsWiki && wantsNamu) || text.includes("지식검색") || text.includes("knowledge")) return "knowledge";
   if ((wantsGoogle && wantsNaver) || text.includes("전체 검색") || text.includes("통합 검색")) return "all";
   if (wantsGoogle) return "google";
   if (wantsWiki) return "wiki";
   if (wantsNamu) return "namu";
   if (text.includes("프로필") || text.includes("인물") || text.includes("작가") || text.includes("소설가") || text.includes("뜻") || text.includes("정의") || text.includes("누구") || text.includes("무엇")) return "knowledge";
-
   return "naver";
 }
 
-function detectSearchType(message) {
+function detectSearchType(message, intent) {
   const text = String(message || "").toLowerCase();
-
-  if (text.includes("뉴스") || text.includes("기사") || text.includes("속보") || text.includes("최근") || text.includes("오늘") || text.includes("이번 달")) {
-    return "news";
-  }
-
-  if (text.includes("블로그") || text.includes("후기") || text.includes("리뷰") || text.includes("맛집") || text.includes("여행") || text.includes("숙소")) {
-    return "blog";
-  }
-
+  if (intent === "local_food") return "local_food";
+  if (text.includes("뉴스") || text.includes("기사") || text.includes("속보") || text.includes("최근") || text.includes("오늘") || text.includes("이번 달")) return "news";
+  if (text.includes("블로그") || text.includes("후기") || text.includes("리뷰") || text.includes("맛집") || text.includes("여행") || text.includes("숙소")) return "blog";
   return "web";
 }
 
-function extractSearchQuery(message) {
+function extractSearchQuery(message, intent) {
   let text = String(message || "").trim();
   const removeWords = [
-    "오늘",
-    "최근",
-    "최신",
-    "현재",
-    "지금",
-    "이번 달",
-    "이번달",
-    "뉴스",
-    "기사",
-    "속보",
-    "블로그",
-    "후기",
-    "리뷰",
-    "구글",
-    "google",
-    "네이버",
-    "naver",
-    "위키백과",
-    "wikipedia",
-    "나무위키",
-    "namu",
-    "위키",
-    "지식검색",
-    "knowledge",
-    "검색해서",
-    "검색해줘",
-    "검색하고",
-    "검색",
-    "찾아서",
-    "찾아줘",
-    "찾아보고",
-    "요약해서",
-    "요약해줘",
-    "요약",
-    "한 문단으로",
-    "한문단으로",
-    "정리해서",
-    "정리해줘",
-    "정리",
-    "알려줘",
-    "분석해줘",
-    "설명해줘",
-    "해줘",
-    "해 봐",
-    "해봐",
-    "해"
+    "오늘", "최근", "최신", "현재", "지금", "이번 달", "이번달", "뉴스", "기사", "속보", "블로그", "후기", "리뷰",
+    "구글", "google", "네이버", "naver", "위키백과", "wikipedia", "나무위키", "namu", "위키", "지식검색", "knowledge",
+    "검색해서", "검색해줘", "검색하고", "검색", "찾아서", "찾아줘", "찾아보고", "요약해서", "요약해줘", "요약",
+    "한 문단으로", "한문단으로", "정리해서", "정리해줘", "정리", "알려줘", "분석해줘", "설명해줘"
   ];
 
   for (const word of removeWords) {
@@ -455,26 +372,52 @@ function extractSearchQuery(message) {
   }
 
   text = text.replace(/[?.!,]/g, " ").replace(/\s+/g, " ").trim();
+
+  if (intent === "local_food" && !/인천|송도|연수구|한라웨스턴파크/.test(text)) {
+    text = `${text} 인천 송도 맛집`;
+  }
+
   return text || String(message || "").trim();
 }
 
-function buildEnhancedSystemPrompt(system, searchPayload) {
+function buildEnhancedSystemPrompt(system, searchPayload, originalMessage) {
   const baseSystem = String(system || "").trim();
-  if (!searchPayload.used) return baseSystem;
+  const stellaSystem = `
+당신은 Stella GPT입니다. 사용자의 질문 의도를 먼저 파악하고, ChatGPT처럼 자연스럽고 실용적으로 답변하세요.
+답변은 한국어로 하며, 불필요하게 검색 결과 원문을 길게 붙여넣지 마세요.
+사용자가 추천을 요청하면 결론을 먼저 말하고, 상황별 추천과 이유를 간단히 정리하세요.
+`.trim();
+
+  if (!searchPayload.used) {
+    return [baseSystem, stellaSystem].filter(Boolean).join("\n\n");
+  }
 
   const searchInstruction = `
 검색 결과가 제공된 경우 다음 원칙을 지켜 답변하세요.
 
-1. 검색 결과를 우선 근거로 사용하세요.
-2. 검색 결과에 없는 내용은 단정하지 마세요.
-3. 최신 정보는 검색 결과 기준으로 설명하세요.
-4. 검색 결과가 부족하면 부족하다고 말하세요.
-5. 가능한 경우 마지막에 참고 링크를 간단히 정리하세요.
-6. 뉴스는 날짜가 있는 항목을 우선 사용하세요.
-7. 위키백과와 나무위키는 참고자료로 사용하고, 서로 다른 내용은 구분하세요.
-`;
+1. 검색 결과는 근거로만 사용하고, 검색 결과 목록을 그대로 복사하지 마세요.
+2. 사용자가 원하는 것은 링크 모음이 아니라 판단과 추천입니다. 먼저 결론을 말하세요.
+3. 검색 결과가 부족하거나 상가 임대글, 광고성 글처럼 질문과 맞지 않으면 제외하거나 신뢰도를 낮게 보세요.
+4. 최신 정보는 변동될 수 있으므로 영업시간, 휴무, 평점은 방문 전 지도에서 확인하라고 짧게 안내하세요.
+5. 마지막에 참고 링크는 2~4개만 간단히 정리하세요.
+`.trim();
 
-  return baseSystem ? `${baseSystem}\n\n${searchInstruction}`.trim() : searchInstruction.trim();
+  const localFoodInstruction = searchPayload.intent === "local_food" ? `
+맛집/식당 추천 질문입니다.
+- "검색 결과를 바탕으로" 같은 말로 시작하지 말고 바로 추천하세요.
+- 기준 위치를 중심으로 "바로 근처", "차로 5~10분", "가볍게", "제대로 식사"처럼 사용자가 선택하기 쉽게 묶으세요.
+- 가능하면 표 형태로 상황 / 추천 / 이유를 정리하세요.
+- 거리와 영업 여부는 검색 결과만으로 확정하지 말고 "지도 확인 필요"라고 짧게 덧붙이세요.
+- 검색 결과가 애매하면, 애매하다고 말한 뒤 일반적인 선택 기준을 제안하세요.
+`.trim() : "";
+
+  const driveInstruction = searchPayload.intent === "drive_knowledge" ? `
+Google Drive/Knowledge 검색 요청입니다.
+#DB, #SAP, #StellaGPT 같은 태그가 있으면 사용자가 내부 자료 검색을 원한다는 뜻입니다.
+검색 결과가 없으면 내부 자료가 아직 연결되지 않았거나 배포 전일 수 있다고 안내하세요.
+`.trim() : "";
+
+  return [baseSystem, stellaSystem, searchInstruction, localFoodInstruction, driveInstruction].filter(Boolean).join("\n\n");
 }
 
 function buildEnhancedUserMessage(message, searchPayload) {
@@ -493,8 +436,11 @@ ${searchPayload.provider}
 검색 Type:
 ${searchPayload.type}
 
-아래 검색 결과를 참고해서 답변해줘.
-검색 결과에 없는 내용은 추측하지 말고, 필요한 경우 "검색 결과만으로는 부족하다"고 말해줘.
+검색 Intent:
+${searchPayload.intent}
+
+아래 검색 결과를 참고해서 사용자가 바로 이해하고 선택할 수 있게 답변해줘.
+검색 결과를 그대로 나열하지 말고, 질문 의도에 맞게 선별해서 요약해줘.
 
 검색 결과:
 ${searchPayload.context}
@@ -530,7 +476,7 @@ async function searchNaver(query, type = "web") {
   const apiUrl =
     `https://openapi.naver.com/v1/search/${path}.json` +
     `?query=${encodeURIComponent(query)}` +
-    "&display=5" +
+    "&display=8" +
     "&start=1" +
     sort;
 
@@ -564,7 +510,7 @@ async function searchGoogle(query) {
     `?key=${encodeURIComponent(process.env.GOOGLE_API_KEY)}` +
     `&cx=${encodeURIComponent(process.env.GOOGLE_CX)}` +
     `&q=${encodeURIComponent(query)}` +
-    "&num=5";
+    "&num=8";
 
   const response = await fetch(apiUrl, { method: "GET" });
   const data = await safeJson(response);
