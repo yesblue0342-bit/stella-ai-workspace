@@ -77,6 +77,7 @@ s = s.replace(/function syncSidebarLayout\(\)\{[\s\S]*?\}\nwindow\.addEventListe
 s = s.replace("window.addEventListener('DOMContentLoaded',()=>{initEvents();initAuth();syncSidebarLayout()});", "window.addEventListener('DOMContentLoaded',()=>{ensureModelOptions();initEvents();initAuth();syncSidebarLayout()});");
 s = s.replace("window.addEventListener('DOMContentLoaded',()=>{ensureModelOptions?.();initEvents();initAuth();syncSidebarLayout()});", "window.addEventListener('DOMContentLoaded',()=>{ensureModelOptions();initEvents();initAuth();syncSidebarLayout()});");
 
+// trigger: 2026-06-13-v3-direct-update
 if (s !== before) {
   fs.writeFileSync(file, s, 'utf8');
   console.log('patched index.html clean downloads/table/ocr/sidebar v3');
