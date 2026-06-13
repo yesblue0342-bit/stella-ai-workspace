@@ -1,5 +1,7 @@
 {
   "rewrites": [
+    { "source": "/db", "destination": "/db.html" },
+    { "source": "/talk", "destination": "/talk.html" },
     { "source": "/api/board-list", "destination": "/api/stella?action=board-list" },
     { "source": "/api/board-save", "destination": "/api/stella?action=board-save" },
     { "source": "/api/chat-list", "destination": "/api/stella?action=chat-list" },
