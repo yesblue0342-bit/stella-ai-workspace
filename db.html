@@ -1,10 +1,237 @@
-<!doctype html><html lang="ko"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><title>Stella DB</title><style>*{box-sizing:border-box}body{margin:0;padding:18px;background:#fff;color:#111827;font-family:system-ui,-apple-system,BlinkMacSystemFont,'Noto Sans KR',sans-serif}h1{font-size:34px;margin:24px 0 14px}.top{display:flex;gap:8px;align-items:center}.top h1{flex:1}.card{border:1px solid #e5e7eb;border-radius:22px;padding:18px;margin:14px 0;background:#fff;box-shadow:0 8px 26px rgba(15,23,42,.05)}input,button{font:inherit}input{width:100%;border:1px solid #d1d5db;border-radius:16px;padding:14px;margin:8px 0;font-size:17px}button{border:1px solid #d1d5db;background:#fff;border-radius:15px;padding:12px 14px;font-weight:900}.primary{background:#0f172a;color:#fff}.muted{color:#6b7280;font-size:13px}.hidden{display:none}.danger{color:#b91c1c}.row{display:flex;gap:8px;flex-wrap:wrap}.file{display:flex;gap:12px;align-items:center;border-top:1px solid #f1f5f9;padding:13px 0}.icon{width:54px;height:54px;border-radius:16px;background:#f3f4f6;display:grid;place-items:center;font-size:28px}.crumb button{font-size:13px;padding:7px 9px;margin:3px}.grid{display:grid;grid-template-columns:1fr;gap:4px}@media(min-width:640px){.grid{grid-template-columns:1fr 1fr}}</style></head><body><div class="top"><h1>Stella DB</h1><button onclick="location.href='/'">Stella GPT</button></div><div id="gate" class="card"><b>DB 접속</b><input id="loginId" placeholder="아이디 또는 이메일" autocomplete="username"><input id="pw" type="password" placeholder="비밀번호" autocomplete="current-password"><div class="row"><button class="primary" onclick="enterDb()">로그인 접속</button><button onclick="location.href='/'">Stella GPT로 돌아가기</button></div><div id="msg" class="danger"></div></div><div id="app" class="hidden"><div class="card"><div class="row"><button class="primary" onclick="connectRoot()">접속</button><button onclick="goUp()">상위 폴더</button><button onclick="logoutDb()">나가기</button></div><div id="userLine" class="muted"></div><div id="crumb" class="crumb"></div></div><div class="card"><b>Google Drive / StellaGPT</b><div id="out" class="muted">접속 버튼을 누르면 폴더가 표시됩니다.</div></div></div><script>const SK='stella_session_final_v82';let stack=[];function $(id){return document.getElementById(id)}
-const DB_ADMINS=['admin','admin@stella.local','yesblue0342','yesblue0342@naver.com','yesblue0342@gmail.com','김경훈','이후'];function isDbAdmin(u){if(!u)return false;return DB_ADMINS.includes(String(u.id||'').toLowerCase())||DB_ADMINS.includes(String(u.email||'').toLowerCase())||DB_ADMINS.includes(String(u.name||''))||String(u.id)==='admin'||String(u.role)==='admin';}function validUser(){try{const s=JSON.parse(localStorage.getItem(SK)||'null');if(s&&s.user&&s.user.id)return s.user}catch(e){}return null}
-function guess(){const u=validUser();if(u&&isDbAdmin(u)){$('gate').classList.add('hidden');$('app').classList.remove('hidden');$('userLine').textContent='관리자: '+(u.name||u.email||u.id);connectRoot();}else if(u){$('gate').classList.remove('hidden');$('msg').textContent='이 계정은 DB 열람 권한이 없습니다. 관리자(admin) 또는 yesblue0342로 로그인하세요.';}}
-async function enterDb(){const id=$('loginId').value.trim();const pw=$('pw').value;if(!id||!pw){$('msg').textContent='아이디와 비밀번호를 입력하세요.';return}$('msg').textContent='접속 중...';
- if(id==='admin'&&pw==='admin'){const u={id:'admin',name:'관리자',email:'admin@stella.local'};localStorage.setItem(SK,JSON.stringify({id:'admin',user:u,savedAt:-1}));$('gate').classList.add('hidden');$('app').classList.remove('hidden');$('userLine').textContent='관리자';connectRoot();return}
- try{const r=await fetch('/api/auth/login',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({id,password:pw})});const d=await r.json();if(!r.ok||d.ok===false){$('msg').textContent=d.message||'로그인 실패';return}localStorage.setItem(SK,JSON.stringify({id:d.user.id,user:d.user,savedAt:-1}));if(!isDbAdmin(d.user)){$('msg').textContent='이 계정은 DB 열람 권한이 없습니다.';return;}$('gate').classList.add('hidden');$('app').classList.remove('hidden');$('userLine').textContent='관리자: '+(d.user.name||d.user.email||d.user.id);connectRoot()}catch(e){$('msg').textContent=e.message}}
-function logoutDb(){localStorage.removeItem(SK);location.reload()}
-async function connectRoot(){stack=[];await loadFolder('','StellaGPT')}async function loadFolder(folderId,name){$('out').textContent='폴더를 불러오는 중...';const url='/api/stella?action=db-directory'+(folderId?'&folderId='+encodeURIComponent(folderId):'');try{const r=await fetch(url,{cache:'no-store'});const d=await r.json();if(!d.ok){$('out').innerHTML='<span class="danger">접속 실패: '+(d.error||d.message||'오류')+'</span>';return}if(folderId)stack.push({id:folderId,name:name||'폴더'});renderCrumb();renderFiles(d.files||[])}catch(e){$('out').innerHTML='<span class="danger">접속 실패: '+e.message+'</span>'}}function renderCrumb(){$('crumb').innerHTML='<button onclick="connectRoot()">StellaGPT</button>'+stack.map((x,i)=>'<button onclick="jump('+i+')">'+esc(x.name)+'</button>').join('')}function jump(i){const item=stack[i];stack=stack.slice(0,i);loadFolder(item.id,item.name)}function goUp(){if(stack.length<=1){connectRoot();return}stack.pop();const p=stack.pop();if(p)loadFolder(p.id,p.name);else connectRoot()}function renderFiles(files){if(!files.length){$('out').textContent='폴더가 비어 있습니다.';return}const arr=files.filter(f=>f.isFolder).concat(files.filter(f=>!f.isFolder));$('out').innerHTML='<div class="grid">'+arr.map(f=>'<div class="file" '+(f.isFolder?'onclick="loadFolder(\''+f.id+'\',\''+safeAttr(f.name)+'\')"':'')+'><div class="icon">'+(f.isFolder?'▰':'□')+'</div><div><b>'+esc(f.name)+'</b><br><span class="muted">'+(f.isFolder?'폴더':(f.mimeType||'파일'))+'</span><br>'+(!f.isFolder&&f.link?'<a href="'+f.link+'" target="_blank">열기/다운로드</a>':'')+'</div></div>').join('')+'</div>'}function esc(s){return String(s||'').replace(/[&<>]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;'}[c]))}function safeAttr(s){return String(s||'').replace(/[\\'"<>]/g,'')}guess();</script></body></html>
+<!doctype html><html lang="ko"><head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Stella DB</title>
+<link rel="manifest" href="/manifest-gpt.json">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<style>
+*{box-sizing:border-box}
+body{margin:0;font-family:system-ui,'Noto Sans KR',sans-serif;background:#0d1117;color:#e6edf3;min-height:100dvh}
+.top{display:flex;align-items:center;gap:10px;padding:14px 18px;background:#161b22;border-bottom:1px solid #30363d}
+.top h1{margin:0;font-size:1.1rem;color:#e6edf3;flex:1}
+.btn{border:1px solid #30363d;background:#21262d;color:#c9d1d9;border-radius:10px;padding:7px 14px;cursor:pointer;font-size:.85rem;font-weight:700}
+.btn:hover{background:#2d333b}
+.btn.primary{background:#1f6feb;color:#fff;border-color:#1f6feb}
+.btn.primary:hover{background:#388bfd}
+.breadcrumb{padding:10px 18px;font-size:.82rem;color:#8b949e;background:#161b22;border-bottom:1px solid #30363d;display:flex;align-items:center;gap:6px;flex-wrap:wrap}
+.breadcrumb span{cursor:pointer;color:#58a6ff}
+.breadcrumb span:hover{text-decoration:underline}
+.breadcrumb .sep{color:#484f58}
+.toolbar{display:flex;gap:8px;padding:10px 18px;background:#0d1117;border-bottom:1px solid #21262d;flex-wrap:wrap}
+.file-list{padding:0}
+.file-item{display:flex;align-items:center;gap:12px;padding:11px 18px;border-bottom:1px solid #21262d;cursor:pointer}
+.file-item:hover{background:#161b22}
+.file-icon{font-size:1.2rem;width:28px;text-align:center;flex-shrink:0}
+.file-name{flex:1;font-size:.92rem;color:#c9d1d9;font-weight:600;word-break:break-all}
+.file-meta{font-size:.75rem;color:#6b7280;white-space:nowrap}
+.file-actions{display:flex;gap:6px;opacity:0;transition:opacity .15s}
+.file-item:hover .file-actions{opacity:1}
+.act-btn{background:#21262d;color:#c9d1d9;border:1px solid #30363d;border-radius:8px;padding:4px 10px;cursor:pointer;font-size:.75rem}
+.act-btn:hover{background:#2d333b}
+.empty{padding:40px;text-align:center;color:#484f58;font-size:.9rem}
+#gate{position:fixed;inset:0;background:#0d1117;display:flex;align-items:center;justify-content:center;z-index:9999;padding:24px}
+.gate-card{width:min(400px,100%);background:#161b22;border:1px solid #30363d;border-radius:20px;padding:28px}
+.gate-card h2{margin:0 0 6px;color:#e6edf3}
+.gate-card p{margin:0 0 18px;color:#8b949e;font-size:.88rem}
+.gate-card input{width:100%;background:#0d1117;border:1px solid #30363d;border-radius:12px;padding:12px;color:#e6edf3;font-size:.95rem;margin-bottom:10px}
+.gate-card input::placeholder{color:#484f58}
+.err{color:#f85149;font-size:.82rem;min-height:18px;margin-top:4px}
+.status-bar{padding:8px 18px;font-size:.78rem;color:#8b949e;background:#161b22;border-bottom:1px solid #21262d}
+</style>
+</head>
+<body>
+<div id="gate">
+  <div class="gate-card">
+    <h2>🗄 Stella DB</h2>
+    <p>관리자 계정으로 로그인하세요</p>
+    <input id="gId" placeholder="아이디 (admin 또는 yesblue0342)" autocomplete="username">
+    <input id="gPw" type="password" placeholder="비밀번호" autocomplete="current-password">
+    <button class="btn primary" style="width:100%;margin-top:4px" onclick="dbLogin()">접속</button>
+    <button class="btn" style="width:100%;margin-top:8px" onclick="location.href='/'">Stella GPT로 돌아가기</button>
+    <div class="err" id="gErr"></div>
+  </div>
+</div>
 
+<div id="appWrap" style="display:none">
+  <div class="top">
+    <h1>🗄 Stella DB</h1>
+    <span id="userLabel" style="font-size:.8rem;color:#8b949e"></span>
+    <button class="btn" onclick="goUp()" id="upBtn" title="상위 폴더">⬆ 상위</button>
+    <button class="btn" onclick="refresh()">↻</button>
+    <button class="btn" onclick="location.href='/'">GPT</button>
+    <button class="btn" onclick="dbLogout()">나가기</button>
+  </div>
+  <div class="breadcrumb" id="breadcrumb"></div>
+  <div class="toolbar">
+    <input id="filterInput" placeholder="파일/폴더 필터..." style="background:#0d1117;border:1px solid #30363d;border-radius:10px;padding:7px 12px;color:#e6edf3;font-size:.85rem;width:200px" oninput="filterFiles()">
+    <button class="btn" onclick="sortBy('name')">이름순</button>
+    <button class="btn" onclick="sortBy('date')">날짜순</button>
+  </div>
+  <div class="status-bar" id="statusBar">StellaGPT 폴더 로딩 중...</div>
+  <div class="file-list" id="fileList"></div>
+</div>
 
+<script>
+const SK='stella_session_final_v82';
+const DB_ADMINS=['admin','admin@stella.local','yesblue0342','yesblue0342@naver.com','yesblue0342@gmail.com','김경훈','이후'];
+let _user=null, _stack=[], _files=[], _sortKey='name';
+
+function isAdmin(u){if(!u)return false;const id=String(u.id||'').toLowerCase();const em=String(u.email||'').toLowerCase();return DB_ADMINS.some(a=>a.toLowerCase()===id||a.toLowerCase()===em)||id==='admin'||String(u.role)==='admin';}
+
+function getSession(){try{const s=JSON.parse(localStorage.getItem(SK)||'null');if(s&&s.user&&s.user.id)return s.user;}catch(e){}return null;}
+
+function saveSession(u){localStorage.setItem(SK,JSON.stringify({id:u.id,user:u,savedAt:-1}));}
+
+async function dbLogin(){
+  const id=document.getElementById('gId').value.trim();
+  const pw=document.getElementById('gPw').value;
+  const err=document.getElementById('gErr');
+  if(!id||!pw){err.textContent='아이디와 비밀번호를 입력하세요.';return;}
+  err.textContent='접속 중...';
+  // admin 하드코딩
+  if(id==='admin'&&pw==='admin'){
+    const u={id:'admin',name:'관리자',email:'admin@stella.local',role:'admin'};
+    saveSession(u);enterApp(u);return;
+  }
+  try{
+    const r=await fetch('/api/auth/login',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({id,password:pw})});
+    const d=await r.json();
+    if(!r.ok||d.ok===false){err.textContent=d.message||'로그인 실패';return;}
+    if(!isAdmin(d.user)){err.textContent='DB 열람 권한이 없습니다. admin 또는 yesblue0342로 로그인하세요.';return;}
+    saveSession(d.user);enterApp(d.user);
+  }catch(e){err.textContent=e.message;}
+}
+
+function enterApp(u){
+  _user=u;
+  document.getElementById('gate').style.display='none';
+  document.getElementById('appWrap').style.display='block';
+  document.getElementById('userLabel').textContent='관리자: '+(u.name||u.id);
+  // StellaGPT 폴더 바로 진입
+  loadFolder('','StellaGPT');
+}
+
+function dbLogout(){
+  localStorage.removeItem(SK);
+  location.reload();
+}
+
+// 폴더 로드
+async function loadFolder(folderId, name){
+  const status=document.getElementById('statusBar');
+  const list=document.getElementById('fileList');
+  status.textContent='로딩 중...';
+  list.innerHTML='';
+  try{
+    const url='/api/stella?action=db-directory'+(folderId?'&folderId='+encodeURIComponent(folderId):'');
+    const r=await fetch(url,{cache:'no-store'});
+    const d=await r.json();
+    if(!d.ok){status.textContent='오류: '+(d.message||'로드 실패');return;}
+    _files=d.files||[];
+    const currentId=folderId||'StellaGPT';
+    if(!_stack.length||_stack[_stack.length-1].id!==currentId){
+      _stack.push({id:currentId,name:name||folderId||'StellaGPT'});
+    }
+    renderBreadcrumb();
+    renderFiles(_files);
+    status.textContent=`📁 ${name||'StellaGPT'} — ${_files.length}개 항목`;
+  }catch(e){status.textContent='오류: '+e.message;}
+}
+
+function renderBreadcrumb(){
+  const el=document.getElementById('breadcrumb');
+  el.innerHTML=_stack.map((s,i)=>`<span onclick="gotoStack(${i})">${s.name}</span>${i<_stack.length-1?'<span class="sep">›</span>':''}`).join('');
+  document.getElementById('upBtn').disabled=_stack.length<=1;
+}
+
+function gotoStack(idx){
+  _stack=_stack.slice(0,idx+1);
+  const s=_stack[_stack.length-1];
+  _stack.pop();
+  loadFolder(s.id==='StellaGPT'?'':s.id, s.name);
+}
+
+function goUp(){
+  if(_stack.length<=1)return;
+  _stack.pop();
+  const s=_stack[_stack.length-1];
+  _stack.pop();
+  loadFolder(s.id==='StellaGPT'?'':s.id, s.name);
+}
+
+function refresh(){
+  if(!_stack.length)return;
+  const s=_stack[_stack.length-1];
+  _stack.pop();
+  loadFolder(s.id==='StellaGPT'?'':s.id, s.name);
+}
+
+function getIcon(f){
+  if(f.mimeType&&f.mimeType.includes('folder'))return'📁';
+  const n=String(f.name||'');
+  if(n.endsWith('.json'))return'📋';
+  if(n.endsWith('.html'))return'🌐';
+  if(n.endsWith('.js'))return'⚡';
+  if(n.endsWith('.pdf'))return'📄';
+  if(n.endsWith('.png')||n.endsWith('.jpg')||n.endsWith('.jpeg'))return'🖼';
+  if(n.endsWith('.xlsx')||n.endsWith('.csv'))return'📊';
+  return'📃';
+}
+
+function fmtDate(d){if(!d)return'';const dt=new Date(d);return dt.toLocaleDateString('ko-KR')+' '+dt.toLocaleTimeString('ko-KR',{hour:'2-digit',minute:'2-digit'});}
+function fmtSize(s){if(!s)return'';const n=Number(s);if(n<1024)return n+'B';if(n<1048576)return(n/1024).toFixed(1)+'KB';return(n/1048576).toFixed(1)+'MB';}
+
+function renderFiles(files){
+  const q=(document.getElementById('filterInput').value||'').toLowerCase();
+  let list=files.filter(f=>!q||String(f.name||'').toLowerCase().includes(q));
+  list=[...list].sort((a,b)=>{
+    const af=a.mimeType&&a.mimeType.includes('folder');
+    const bf=b.mimeType&&b.mimeType.includes('folder');
+    if(af!==bf)return af?-1:1;
+    if(_sortKey==='date')return new Date(b.modifiedTime||0)-new Date(a.modifiedTime||0);
+    return String(a.name||'').localeCompare(String(b.name||''));
+  });
+  const el=document.getElementById('fileList');
+  if(!list.length){el.innerHTML='<div class="empty">📭 항목이 없습니다.</div>';return;}
+  el.innerHTML=list.map(f=>`
+    <div class="file-item" onclick="openItem('${f.id}','${(f.name||'').replace(/'/g,"\\'")}','${f.mimeType||''}')">
+      <div class="file-icon">${getIcon(f)}</div>
+      <div>
+        <div class="file-name">${f.name||'(이름없음)'}</div>
+        <div class="file-meta">${fmtDate(f.modifiedTime)}${f.size?' · '+fmtSize(f.size):''}</div>
+      </div>
+      <div class="file-actions">
+        ${!(f.mimeType&&f.mimeType.includes('folder'))?`<button class="act-btn" onclick="event.stopPropagation();copyName('${(f.name||'').replace(/'/g,"\\'")}')">복사</button>`:''}
+      </div>
+    </div>
+  `).join('');
+}
+
+function openItem(id,name,mime){
+  if(mime&&mime.includes('folder')){loadFolder(id,name);}
+  else{
+    // 파일: 링크 미사용, 이름 복사
+    copyName(name);
+    document.getElementById('statusBar').textContent='📋 파일명 복사됨: '+name;
+  }
+}
+
+function copyName(name){
+  navigator.clipboard.writeText(name).catch(()=>{
+    const el=document.createElement('textarea');
+    el.value=name;el.style.position='fixed';el.style.opacity='0';
+    document.body.appendChild(el);el.select();document.execCommand('copy');
+    document.body.removeChild(el);
+  });
+}
+
+function filterFiles(){renderFiles(_files);}
+function sortBy(k){_sortKey=k;renderFiles(_files);}
+
+// 초기: 이미 세션 있으면 바로 진입
+window.onload=function(){
+  const u=getSession();
+  if(u&&isAdmin(u)){enterApp(u);}
+};
+</script>
+</body></html>
