@@ -113,11 +113,30 @@ function resolveOpenAIModel(model) {
   return "gpt-4o";
 }
 
+// 공식 Claude 모델 ID 정확 매핑 (2026-06 기준)
+const CLAUDE_MODELS = {
+  "claude-fable-5":            "claude-fable-5",
+  "claude-opus-4-8":           "claude-opus-4-8",
+  "claude-opus-4-7":           "claude-opus-4-7",
+  "claude-opus-4-6":           "claude-opus-4-6",
+  "claude-sonnet-4-6":         "claude-sonnet-4-6",
+  "claude-haiku-4-5-20251001": "claude-haiku-4-5-20251001"
+};
+
 function resolveClaudeModel(model) {
-  const m = String(model || "").toLowerCase();
-  if (m === "claude-opus-4-8" || m.includes("opus")) return "claude-opus-4-8";
-  if (m === "claude-haiku-4-5-20251001" || m.includes("haiku")) return "claude-haiku-4-5-20251001";
-  if (m === "claude-sonnet-4-6" || m.includes("sonnet") || m.includes("4-6") || m.includes("4.6")) return "claude-sonnet-4-6";
+  const m = String(model || "").toLowerCase().trim();
+  // 정확 매핑 우선
+  if (CLAUDE_MODELS[m]) return CLAUDE_MODELS[m];
+  // 키워드 폴백
+  if (m.includes("fable"))  return "claude-fable-5";
+  if (m.includes("opus")) {
+    if (m.includes("4.8") || m.includes("4-8")) return "claude-opus-4-8";
+    if (m.includes("4.7") || m.includes("4-7")) return "claude-opus-4-7";
+    if (m.includes("4.6") || m.includes("4-6")) return "claude-opus-4-6";
+    return "claude-opus-4-8"; // 최신 opus 기본값
+  }
+  if (m.includes("haiku"))  return "claude-haiku-4-5-20251001";
+  if (m.includes("sonnet")) return "claude-sonnet-4-6";
   if (m.includes("claude")) return "claude-sonnet-4-6";
   return "claude-sonnet-4-6";
 }
