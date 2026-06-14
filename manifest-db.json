@@ -1,0 +1,17 @@
+{
+  "name": "Stella DB",
+  "short_name": "Stella DB",
+  "description": "Stella 구글 드라이브 파일 관리자",
+  "start_url": "/db",
+  "scope": "/db",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#0d1117",
+  "theme_color": "#0d1117",
+  "lang": "ko",
+  "categories": ["productivity"],
+  "icons": [
+    { "src": "/icons/db-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any maskable" },
+    { "src": "/icons/db-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any maskable" }
+  ]
+}
