@@ -1,8 +1,12 @@
 <!doctype html><html lang="ko"><head>
 <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <title>Stella DB</title>
-<link rel="manifest" href="/manifest-gpt.json">
+<link rel="manifest" href="/manifest-db.json">
+<meta name="theme-color" content="#0d1117">
 <meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Stella DB">
+<link rel="apple-touch-icon" href="/icons/db-192.png">
 <style>
 *{box-sizing:border-box;margin:0;padding:0}
 :root{--bg:#0d1117;--bg2:#161b22;--bg3:#21262d;--border:#30363d;--text:#e6edf3;--text2:#8b949e;--text3:#c9d1d9;--accent:#e6edf3;--danger:#f85149;--primary:#1f6feb}
@@ -81,6 +85,7 @@ body{font-family:system-ui,'Noto Sans KR',sans-serif;background:var(--bg);color:
 <button class="btn" onclick="refresh()">↻</button>
 <button class="btn" onclick="toggleTheme()" id="themeBtn">☀️</button>
 <button class="btn" onclick="location.href='/'">GPT</button>
+<button class="btn" id="installBtn" onclick="installPWA()" style="display:none">📲 설치</button>
 <button class="btn" onclick="dbLogout()">나가기</button>
 </div>
 
@@ -392,6 +397,26 @@ async function uploadFiles(fileList){
   document.getElementById('fileUploadIn').value='';
   status('⬆ 업로드 완료: '+ok+'/'+fileList.length+'개');
   refresh();
+}
+
+// ── PWA 설치 ──
+let _deferredPrompt=null;
+window.addEventListener('beforeinstallprompt',function(e){
+  e.preventDefault();_deferredPrompt=e;
+  const btn=document.getElementById('installBtn');
+  if(btn)btn.style.display='';
+});
+window.addEventListener('appinstalled',function(){
+  _deferredPrompt=null;
+  const btn=document.getElementById('installBtn');
+  if(btn)btn.style.display='none';
+  status('✅ 앱이 설치되었습니다!');
+});
+async function installPWA(){
+  if(!_deferredPrompt)return;
+  _deferredPrompt.prompt();
+  const{outcome}=await _deferredPrompt.userChoice;
+  if(outcome==='accepted'){_deferredPrompt=null;document.getElementById('installBtn').style.display='none';}
 }
 
 // ── 초기화 ──
