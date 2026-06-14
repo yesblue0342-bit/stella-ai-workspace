@@ -1,4 +1,4 @@
-﻿<!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="ko">
 <head>
 <!-- stella-fixed-2026-06-13-v7-excel-link-for-tables -->
@@ -110,7 +110,14 @@ body.dark .sidebarBackdrop{background:rgba(0,0,0,.7)!important}
 </style>
 </head>
 <body>
-<div class="app" id="app" style="display:none"><aside class="sidebar" id="sidebar"><div class="side-head"><div class="brand"><div class="mark">S</div><div><h1>Stella Workspace</h1><p>AI 작업공간</p></div></div><div class="user-box"><div><strong id="userName">사용자</strong><span id="userEmail"></span></div><button class="small-btn" id="logoutBtn" type="button">로그아웃</button></div></div><div class="tools"><button class="tool-btn" id="talkBtn" type="button" onclick="location.href='/talk'">💬 Stella Talk</button><button class="tool-btn" id="newChatBtn" type="button">＋ 새 채팅</button><button class="tool-btn" id="openBoardBtn" type="button">게시판</button><div class="manage" id="manageBox"><button class="manage-head" id="manageHead" type="button"><span class="circle-caret" id="manageCaret">+</span><span>관리</span></button><div class="manage-body"><button class="tool-btn" id="newProjectBtn" type="button">▱ 새 프로젝트 카테고리</button><button class="tool-btn" id="newBoardCategoryBtn" type="button">▱ 새 게시글 카테고리</button></div></div></div><div class="side-search-wrap"><input class="side-search" onclick="event.stopPropagation()" onfocus="event.stopPropagation()" id="sideSearch" placeholder="게시글/회의록/채팅 검색"><button class="search-icon-btn" id="sideSearchBtn" type="button">⌕</button></div><div class="section-title">프로젝트 카테고리</div><div class="tree" id="projectCategoryTree"></div><div class="section-title">채팅 카테고리</div><div class="tree" id="chatCategoryTree"></div><div class="section-title">게시판 카테고리</div><div class="tree" id="boardTree"></div><div class="section-label" style="margin-top:14px;font-size:.72rem;color:#9ca3af;font-weight:800;padding:0 4px">바로가기</div><a class="tree" href="/db" style="display:block;text-decoration:none;color:inherit;padding:8px 10px;border-radius:10px">🗄 Stella DB</a><a class="tree" href="/cloud" style="display:block;text-decoration:none;color:inherit;padding:8px 10px;border-radius:10px">☁ Stella Cloud</a><a class="tree" href="/talk" style="display:block;text-decoration:none;color:inherit;padding:8px 10px;border-radius:10px">💬 Stella Talk</a></aside><div class="backdrop sidebar-backdrop" id="sidebarBackdrop"></div><main class="main"><header class="top"><button class="hamb" id="hambBtn" type="button">☰</button><div class="title-wrap"><div class="title" id="activeTitle">새 채팅</div><div class="subtitle" id="activeSub">개인 작업공간</div></div><div class="top-actions"><button class="top-btn" id="roomTxtBtn" type="button">TXT</button><button class="top-btn" id="roomMdBtn" type="button">MD</button><button class="top-btn" id="deleteRoomTopBtn" type="button">삭제</button></div></header><section class="messages" id="messages"></section><form class="composer" id="chatForm"><div class="chips" id="chips"></div><div class="model-row"><button type="button" class="theme-toggle" id="themeToggle" title="다크/흰색 모드">🌙</button><span>모델</span><select id="modelSelect"><optgroup label="OpenAI"><option value="gpt-5.5-pro">GPT-5.5 Pro 최고성능</option><option value="gpt-5.5" selected>GPT-5.5 최신</option><option value="gpt-5.4">GPT-5.4 이전 고성능</option><option value="gpt-5.4-mini">GPT-5.4 Mini 빠른 응답</option><option value="gpt-4.1">GPT-4.1 호환</option><option value="gpt-4o">GPT-4o 호환</option></optgroup><optgroup label="Claude"><option value="claude-fable-5">Claude Fable 5 최고성능</option><option value="claude-opus-4-8">Claude Opus 4.8 고성능</option><option value="claude-sonnet-4-6">Claude Sonnet 4.6 균형</option><option value="claude-haiku-4-5-20251001">Claude Haiku 4.5 빠른 응답</option></optgroup></select></div><div class="inputbar"><button type="button" class="round attach" id="attachBtn">＋</button><textarea id="chatInput" rows="1" placeholder="메시지 입력 (전송은 ↑ 버튼)" enterkeyhint="enter"></textarea><button class="round send" id="sendBtn" type="submit">↑</button><input type="file" id="fileInput" multiple hidden></div></form></main></div>
+<div class="app" id="app" style="display:none"><aside class="sidebar" id="sidebar"><div class="side-head"><div class="brand"><div class="mark">S</div><div><h1>Stella Workspace</h1><p>AI 작업공간</p></div></div><div class="user-box"><div><strong id="userName">사용자</strong><span id="userEmail"></span></div><button class="small-btn" id="logoutBtn" type="button">로그아웃</button></div></div><div class="tools"><button class="tool-btn" id="newChatBtn" type="button">＋ 새 채팅</button><button class="tool-btn" id="openBoardBtn" type="button">게시판</button><div class="manage" id="manageBox"><button class="manage-head" id="manageHead" type="button"><span class="circle-caret" id="manageCaret">+</span><span>관리</span></button><div class="manage-body"><button class="tool-btn" id="newProjectBtn" type="button">▱ 새 프로젝트 카테고리</button><button class="tool-btn" id="newBoardCategoryBtn" type="button">▱ 새 게시글 카테고리</button></div></div></div><div class="side-search-wrap"><input class="side-search" onclick="event.stopPropagation()" onfocus="event.stopPropagation()" onkeydown="event.stopPropagation();if(event.key==='Enter')doSideSearch()" oninput="event.stopPropagation()" id="sideSearch" placeholder="검색 입력 후 Enter"><button class="search-icon-btn" id="sideSearchBtn" type="button" onclick="event.stopPropagation();doSideSearch()">⌕</button></div><div class="section-title">프로젝트 카테고리</div><div class="tree" id="projectCategoryTree"></div><div class="section-title">채팅 카테고리</div><div class="tree" id="chatCategoryTree"></div><div class="section-title">게시판 카테고리</div><div class="tree" id="boardTree"></div><div class="section-label" style="margin-top:14px;font-size:.72rem;color:#9ca3af;font-weight:800;padding:0 4px">바로가기</div><a class="tree" href="/db" style="display:block;text-decoration:none;color:inherit;padding:8px 10px;border-radius:10px">🗄 Stella DB</a><a class="tree" href="/cloud" style="display:block;text-decoration:none;color:inherit;padding:8px 10px;border-radius:10px">☁ Stella Cloud</a><a class="tree" href="/talk" style="display:block;text-decoration:none;color:inherit;padding:8px 10px;border-radius:10px">💬 Stella Talk</a></aside><div class="backdrop sidebar-backdrop" id="sidebarBackdrop"></div><main class="main"><header class="top"><button class="hamb" id="hambBtn" type="button">☰</button><div class="title-wrap"><div class="title" id="activeTitle">새 채팅</div><div class="subtitle" id="activeSub">개인 작업공간</div></div><div class="top-actions"><button class="top-btn" id="roomTxtBtn" type="button">TXT</button><button class="top-btn" id="roomMdBtn" type="button">MD</button><button class="top-btn" id="deleteRoomTopBtn" type="button">삭제</button></div></header><div id="searchPanel" style="display:none;position:absolute;top:66px;left:0;right:0;bottom:0;z-index:200;overflow-y:auto;padding:20px;background:var(--bg,#fff)">
+<div style="display:flex;align-items:center;gap:12px;margin-bottom:16px;border-bottom:1px solid #e5e7eb;padding-bottom:12px">
+  <span id="searchPanelTitle" style="font-weight:800;font-size:1rem">검색 결과</span>
+  <button onclick="closeSearchPanel()" style="margin-left:auto;border:1px solid #d1d5db;background:transparent;border-radius:10px;padding:6px 14px;cursor:pointer;font-weight:700">✕ 닫기</button>
+</div>
+<div id="searchPanelList"></div>
+</div>
+<section class="messages" id="messages"></section><form class="composer" id="chatForm"><div class="chips" id="chips"></div><div class="model-row"><button type="button" class="theme-toggle" id="themeToggle" title="다크/흰색 모드">🌙</button><span>모델</span><select id="modelSelect"><optgroup label="OpenAI"><option value="gpt-5.5-pro">GPT-5.5 Pro 최고성능</option><option value="gpt-5.5" selected>GPT-5.5 최신</option><option value="gpt-5.4">GPT-5.4 이전 고성능</option><option value="gpt-5.4-mini">GPT-5.4 Mini 빠른 응답</option><option value="gpt-4.1">GPT-4.1 호환</option><option value="gpt-4o">GPT-4o 호환</option></optgroup><optgroup label="Claude"><option value="claude-fable-5">Claude Fable 5 최고성능</option><option value="claude-opus-4-8">Claude Opus 4.8 고성능</option><option value="claude-sonnet-4-6">Claude Sonnet 4.6 균형</option><option value="claude-haiku-4-5-20251001">Claude Haiku 4.5 빠른 응답</option></optgroup></select></div><div class="inputbar"><button type="button" class="round attach" id="attachBtn">＋</button><textarea id="chatInput" rows="1" placeholder="메시지 입력 (전송은 ↑ 버튼)" enterkeyhint="enter"></textarea><button class="round send" id="sendBtn" type="submit">↑</button><input type="file" id="fileInput" multiple hidden></div></form></main></div>
 <div class="modal" id="authModal"><div class="card"><div class="brand"><div class="mark">S</div><div><h1>Stella</h1><p>회원 전용 AI 작업공간</p></div></div><p class="hint">로그인한 사용자마다 채팅, 프로젝트, 게시판 데이터가 따로 저장됩니다.</p><div class="tabs"><button class="tab active" id="loginTab" type="button">로그인</button><button class="tab" id="signupTab" type="button">회원가입</button></div><form id="authForm"><div class="field signup-only hidden"><label>이름</label><input id="authName" type="text" placeholder="이름"></div><div class="field"><label>아이디 또는 이메일</label><input id="authId" type="text" required placeholder="아이디 또는 이메일"></div><div class="field signup-only hidden"><label>이메일</label><input id="authEmail" type="email" placeholder="가입 이메일"></div><div class="field signup-only hidden"><label>생년월일</label><input id="authBirth" type="text" placeholder="예: 1982-04-30"></div><div class="field"><label>비밀번호</label><input id="authPassword" type="password" required placeholder="비밀번호"></div><button class="primary" id="authSubmit" type="submit">로그인</button><button class="link-btn" id="forgotBtn" type="button">비밀번호를 잊으셨나요?</button><div class="auth-msg" id="authMsg"></div></form></div></div>
 <div class="menu-backdrop" id="menuBackdrop"><div class="bottom-menu" id="bottomMenu"></div></div>
 <div class="backdrop" id="boardBackdrop"></div><section class="panel" id="boardPanel"><div class="panel-head"><h3>게시판</h3><button class="small-btn" id="closeBoardBtn" type="button">닫기</button></div><div class="panel-body"><form class="board-form" id="boardForm"><select id="postCategorySelect"></select><input id="postNewCategory" placeholder="새 카테고리명(선택)"><input id="postTitle" required placeholder="게시글 제목"><textarea id="postBody" required placeholder="게시글 내용"></textarea><button class="primary" type="submit">게시글 등록</button></form><div id="postList"></div></div></section>
@@ -148,6 +155,75 @@ function renderChatTree(){const s=exp();const sections=[{id:'all',name:'전체 �
 function roomItem(r,cat){return `<button class="item ${activeRoomId===r.id?'active':''}" data-room="${esc(r.id)}"><span class="item-title">${esc(r.name)}</span><span class="item-meta">${(r.messages||[]).length}개 메시지 · ${esc(cat)}</span></button>`}
 function bindRoomClick(b){b.onclick=e=>{e.preventDefault();activeRoomId=b.dataset.room;activeView='chat';const r=activeRoom();activeProjectId=r?.projectId||'all';closeSidebar();renderAll()}}
 function targetFromProject(el){const room=el.closest?.('[data-room]');if(room){const r=rooms.find(x=>x.id===room.dataset.room);return{type:'room',id:room.dataset.room,title:r?.name||'채팅방'}}const p=el.closest?.('[data-proj]');if(p){const pr=projects.find(x=>x.id===p.dataset.proj);return{type:'project',id:p.dataset.proj,title:pr?.name||'프로젝트'}}return null}
+function closeSearchPanel(){document.getElementById('searchPanel').style.display='none';}
+
+function doSideSearch(){
+  var q=(document.getElementById('sideSearch').value||'').trim().toLowerCase();
+  if(!q)return;
+  var panel=document.getElementById('searchPanel');
+  var list=document.getElementById('searchPanelList');
+  var title=document.getElementById('searchPanelTitle');
+  panel.style.display='block';
+  panel.style.background=document.body.classList.contains('dark')?'#0d1117':'#fff';
+  panel.style.color=document.body.classList.contains('dark')?'#e6edf3':'#111827';
+  title.textContent='"'+q+'" 검색 결과';
+  var html=[];var found=0;
+
+  // 게시글 검색
+  var matchedPosts=(typeof posts!=='undefined'?posts:[]).filter(function(p){
+    return ((p.title||'')+' '+(p.body||'')+' '+(p.category||'')).toLowerCase().includes(q);
+  });
+  if(matchedPosts.length){
+    html.push('<div style="font-weight:800;font-size:.82rem;color:#6b7280;margin:12px 0 6px">📋 게시글 ('+matchedPosts.length+')</div>');
+    matchedPosts.forEach(function(p){
+      var div=document.createElement('div');
+      div.style.cssText='padding:10px 14px;border-radius:12px;cursor:pointer;border:1px solid #e5e7eb;margin-bottom:6px';
+      div.innerHTML='<div style="font-weight:700;font-size:.9rem">'+esc(p.title||'제목없음')+'</div>'+
+        '<div style="font-size:.78rem;color:#6b7280;margin-top:2px">'+(p.category||'기본')+'</div>'+
+        (p.body?'<div style="font-size:.8rem;color:#374151;margin-top:4px;overflow:hidden;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical">'+esc(p.body.slice(0,100))+'</div>':'');
+      div.addEventListener('click',function(){openBoard();closeSearchPanel();});
+      html.push(div.outerHTML);
+      found++;
+    });
+  }
+
+  // 채팅방 검색
+  var allRooms=[];
+  try{allRooms=(typeof rooms!=='undefined'?rooms:(JSON.parse(localStorage.getItem('stella_rooms_final_v82')||'[]')));}catch(e){}
+  var matchedRooms=allRooms.filter(function(r){
+    var msgs=(r.messages||[]).map(function(m){return m.content||m.text||m.role||'';}).join(' ');
+    return ((r.name||r.title||'')+' '+msgs).toLowerCase().includes(q);
+  });
+  if(matchedRooms.length){
+    html.push('<div style="font-weight:800;font-size:.82rem;color:#6b7280;margin:12px 0 6px">💬 채팅 ('+matchedRooms.length+')</div>');
+    matchedRooms.forEach(function(r){
+      var rid=r.id;
+      html.push('<div data-sroom="'+esc(rid)+'" style="padding:10px 14px;border-radius:12px;cursor:pointer;border:1px solid #e5e7eb;margin-bottom:6px">'+
+        '<div style="font-weight:700;font-size:.9rem">'+esc(r.name||r.title||'채팅방')+'</div>'+
+        '<div style="font-size:.78rem;color:#6b7280;margin-top:2px">'+((r.messages||[]).length)+'개 메시지</div>'+
+        '</div>');
+      found++;
+    });
+  }
+
+  if(!found){
+    list.innerHTML='<div style="padding:40px;text-align:center;color:#9ca3af">검색 결과 없음: "'+q+'"</div>';
+    return;
+  }
+
+  list.innerHTML=html.join('');
+  // 채팅방 클릭 이벤트 위임
+  list.querySelectorAll('[data-sroom]').forEach(function(el){
+    el.addEventListener('click',function(){
+      var rid=el.getAttribute('data-sroom');
+      if(typeof openRoom==='function')openRoom(rid);
+      closeSearchPanel();
+    });
+  });
+}
+
+
+
 function renderBoardTree(){const st=bexp(),cats=[...new Set(['기본',...posts.map(p=>p.category||'기본')])];const q=($('#sideSearch').value||'').trim().toLowerCase();$('#boardTree').innerHTML=cats.map(c=>{let list=posts.filter(p=>(p.category||'기본')===c);if(q)list=list.filter(p=>(p.title+' '+p.body+' '+c).toLowerCase().includes(q));const open=st.has(c);return `<div class="tree-section ${open?'open':''}"><button class="tree-head" data-bcat="${esc(c)}"><span class="circle-caret">${open?'−':'+'}</span><span class="folder">▱ ${esc(c)}</span><span class="count">${list.length}</span></button><div class="children">${list.length?list.map(p=>`<button class="item" data-post="${esc(p.id)}"><span class="item-title">${esc(p.title)}</span><span class="item-meta">게시글 · ${esc(c)}</span></button>`).join(''):'<div class="empty">게시글이 없습니다.</div>'}</div></div>`}).join('');$$('[data-bcat]').forEach(b=>b.onclick=e=>{e.preventDefault();const c=b.dataset.bcat;const s=bexp();s.has(c)?s.delete(c):s.add(c);saveBexp(s);renderBoardTree()});$$('[data-post]').forEach(b=>b.onclick=e=>{e.preventDefault();openBoard();setTimeout(()=>document.querySelector(`[data-post-card="${b.dataset.post}"]`)?.scrollIntoView({behavior:'smooth',block:'center'}),80);closeSidebar()});bindLongPress($('#boardTree'),targetFromBoard)}
 function targetFromBoard(el){const post=el.closest?.('[data-post]');if(post){const p=posts.find(x=>x.id===post.dataset.post);return{type:'post',id:post.dataset.post,title:p?.title||'게시글'}}const cat=el.closest?.('[data-bcat]');if(cat)return{type:'cat',id:cat.dataset.bcat,title:cat.dataset.bcat};return null}
 function openMenu(title,items){const mb=$('#menuBackdrop'),m=$('#bottomMenu');m.innerHTML=`<div class="menu-title">${esc(title)}</div>`+items.map((it,i)=>`<button class="menu-item ${it.danger?'danger':''}" data-mi="${i}">${esc(it.label)}</button>`).join('')+`<button class="menu-item" data-cancel>취소</button>`;m.querySelectorAll('[data-mi]').forEach(b=>b.onclick=()=>{mb.classList.remove('active');items[Number(b.dataset.mi)].action()});m.querySelector('[data-cancel]').onclick=()=>mb.classList.remove('active');mb.classList.add('active')}
@@ -214,6 +290,7 @@ window.addEventListener('DOMContentLoaded',()=>{ensureModelOptions();initEvents(
 </script>
 <script>if('serviceWorker' in navigator){navigator.serviceWorker.register('/sw.js').catch(function(){});}var _dp=null;window.addEventListener('beforeinstallprompt',function(e){e.preventDefault();_dp=e;_si();});function _si(){if(document.getElementById('pwaInstall'))return;var b=document.createElement('button');b.id='pwaInstall';b.textContent='\u2b07 \uc571 \uc124\uce58';b.style.cssText='position:fixed;right:14px;bottom:90px;z-index:9998;background:#0f172a;color:#fff;border:0;border-radius:24px;padding:12px 18px;font-weight:900;box-shadow:0 8px 24px rgba(0,0,0,.25);cursor:pointer';b.onclick=function(){if(!_dp)return;_dp.prompt();_dp.userChoice.then(function(){_dp=null;b.remove();});};document.body.appendChild(b);}window.addEventListener('appinstalled',function(){var b=document.getElementById('pwaInstall');if(b)b.remove();});</script></body>
 </html>
+
 
 
 
