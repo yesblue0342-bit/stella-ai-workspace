@@ -20,16 +20,33 @@ IF COL_LENGTH('dbo.users','created_at') IS NULL ALTER TABLE dbo.users ADD create
 IF COL_LENGTH('dbo.users','updated_at') IS NULL ALTER TABLE dbo.users ADD updated_at DATETIME2 NULL;
 `); }
 
-function payload(u){ const id=u.user_id || u.email || String(u.id); return { id, db_id:u.id, email:u.email || id, name:u.name || id, birth:u.birth || "", drive_user_folder_id:u.drive_user_folder_id||null, created_at:u.created_at }; }
+function payload(u){ const id=u.user_id || u.email || String(u.id||""); return { id, db_id:u.id||null, email:u.email || id, name:u.name || id, birth:u.birth || "", drive_user_folder_id:u.drive_user_folder_id||null, created_at:u.created_at||new Date().toISOString() }; }
 
-// Drive 폴더 생성은 백그라운드 부가 작업 - 절대 회원가입을 막지 않음
 async function tryCreateDriveFolders(userId) {
   try {
     const { createStellaDriveFolders } = await import("./drive-init-folders.js");
     return await createStellaDriveFolders(userId);
-  } catch {
-    return [];
-  }
+  } catch { return []; }
+}
+
+// Drive 폴백: Azure SQL 불가 시 Google Drive auth/users 폴더에 회원정보 저장
+async function driveFallbackSignup(userId, email, name, birth, password) {
+  const { saveJsonToDrive, readJsonFromDrive } = await import("../lib/drive-utils.js");
+  const safe = String(userId||email).toLowerCase().replace(/[^a-zA-Z0-9@._-]/g,"_").slice(0,120);
+  // 중복 확인
+  try {
+    const existing = await readJsonFromDrive({ folderPath: ["auth","users"], fileName: safe });
+    if (existing?.data) {
+      if (verify(password, existing.data.password_hash)) {
+        return { ok:true, dup:true, user: payload(existing.data) };
+      }
+      return { ok:false, dup:true };
+    }
+  } catch {}
+  const data = { type:"stella_member", id:userId||email, user_id:userId||email, email:email||userId, name, birth, password_hash: makeHash(password), created_at:new Date().toISOString() };
+  await saveJsonToDrive({ folderPath:["auth","users"], fileName: safe, data });
+  tryCreateDriveFolders(userId||email).catch(()=>{});
+  return { ok:true, dup:false, user: payload(data) };
 }
 
 export default async function handler(req,res){
@@ -44,22 +61,30 @@ export default async function handler(req,res){
 
   if(!userId && !email) return res.status(400).json({ok:false,message:"아이디 또는 이메일을 입력하세요."});
   if(!password || password.length<4) return res.status(400).json({ok:false,message:"비밀번호는 4자 이상 입력하세요."});
+  if(userId === "admin" || email === "admin") return res.status(409).json({ok:false,message:"예약된 아이디입니다. 다른 아이디를 사용해주세요."});
 
-  // ADMIN 예약 계정 보호
-  if(userId === "admin" || email === "admin") {
-    return res.status(409).json({ok:false,message:"예약된 아이디입니다. 다른 아이디를 사용해주세요."});
-  }
-
-  // 1) DB 연결 (실패 시 환경변수 안내)
-  let pool;
+  // 1) Azure SQL 시도
+  let pool=null, dbError=null;
   try {
     pool = await getPool();
     await ensure(pool);
-  } catch (dbErr) {
-    return res.status(500).json({ok:false,message:"DB 연결 실패. Azure SQL 환경변수를 확인하세요.",error:dbErr.message,code:dbErr.code||"DB_CONNECT"});
+  } catch (e) {
+    dbError = e.message;
   }
 
-  // 2) 중복 확인
+  // 2) DB 연결 실패 → Google Drive 폴백으로 회원가입 진행
+  if (!pool) {
+    try {
+      const fb = await driveFallbackSignup(userId, email, name, birth, password);
+      if (fb.ok && fb.dup) return res.status(200).json({ok:true,message:"이미 가입된 계정입니다. 자동 로그인합니다.",user:fb.user,store:"drive"});
+      if (fb.ok) return res.status(201).json({ok:true,message:"회원가입 성공",user:fb.user,store:"drive"});
+      return res.status(409).json({ok:false,message:"이미 가입된 아이디 또는 이메일입니다. 로그인 탭에서 로그인하세요."});
+    } catch (fbErr) {
+      return res.status(500).json({ok:false,message:"회원가입 실패 (DB·Drive 모두 불가)",error:`DB:${dbError} / Drive:${fbErr.message}`});
+    }
+  }
+
+  // 3) DB 정상 → 중복 확인
   const found=await pool.request()
     .input("uid",sql.NVarChar(100),userId)
     .input("email",sql.NVarChar(255),email)
@@ -68,14 +93,13 @@ export default async function handler(req,res){
   if(found.recordset.length){
     const u=found.recordset[0];
     if(verify(password,u.password_hash)){
-      // 이미 가입 + 비번 일치 → 자동 로그인
       tryCreateDriveFolders(u.user_id||u.email).catch(()=>{});
       return res.status(200).json({ok:true,message:"이미 가입된 계정입니다. 자동 로그인합니다.",user:payload(u)});
     }
     return res.status(409).json({ok:false,message:"이미 가입된 아이디 또는 이메일입니다. 로그인 탭에서 로그인하세요."});
   }
 
-  // 3) DB INSERT (핵심 - 이게 성공하면 회원가입 성공)
+  // 4) DB INSERT
   let inserted;
   try {
     const result=await pool.request()
@@ -90,18 +114,8 @@ export default async function handler(req,res){
     return res.status(500).json({ok:false,message:"회원 정보 저장 실패",error:insErr.message,code:insErr.code||"DB_INSERT"});
   }
 
-  // 4) Drive 폴더 생성은 응답 후 백그라운드 (회원가입 성공에 영향 없음)
-  tryCreateDriveFolders(userId||email).then(async (folders)=>{
-    try {
-      const pf=folders.find(x=>x.path===`users/${userId||email}/profile`)||folders[0];
-      if(pf?.id){
-        await pool.request().input("id",sql.Int,inserted.id).input("fid",sql.NVarChar(255),pf.id)
-          .query(`UPDATE dbo.users SET drive_user_folder_id=@fid,updated_at=SYSUTCDATETIME() WHERE id=@id`);
-      }
-    } catch {}
-  }).catch(()=>{});
-
-  return res.status(201).json({ok:true,message:"회원가입 성공",user:payload(inserted)});
+  tryCreateDriveFolders(userId||email).catch(()=>{});
+  return res.status(201).json({ok:true,message:"회원가입 성공",user:payload(inserted),store:"azure"});
  }catch(e){
    return res.status(500).json({ok:false,message:"회원가입 실패",error:e.message,code:e.code||null});
  }
