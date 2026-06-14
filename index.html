@@ -107,6 +107,16 @@ body.dark a{color:#58a6ff!important}
 body.dark pre.codeblock{background:#010409!important;border:1px solid #30363d}
 body.dark table td,body.dark table th{border-color:#30363d!important;color:#e6edf3!important}
 body.dark .sidebarBackdrop{background:rgba(0,0,0,.7)!important}
+body.dark .inputbar{background:#161b22!important;border-color:#30363d!important}
+body.dark #chatInput{background:#161b22!important;color:#e6edf3!important;caret-color:#e6edf3!important}
+body.dark #chatInput::placeholder{color:#484f58!important}
+body.dark .round.attach{background:#21262d!important;color:#c9d1d9!important;border:1px solid #30363d!important}
+body.dark .model-row{background:#161b22!important;color:#8b949e!important}
+body.dark .messages{background:#0d1117!important}
+body.dark #searchPanel{background:#0d1117!important;color:#e6edf3!important}
+body.dark #searchPanel button{background:#21262d!important;color:#c9d1d9!important;border-color:#30363d!important}
+body.dark header{background:#161b22!important;border-color:#30363d!important}
+body.dark section{background:#0d1117!important}
 </style>
 </head>
 <body>
@@ -290,6 +300,7 @@ window.addEventListener('DOMContentLoaded',()=>{ensureModelOptions();initEvents(
 </script>
 <script>if('serviceWorker' in navigator){navigator.serviceWorker.register('/sw.js').catch(function(){});}var _dp=null;window.addEventListener('beforeinstallprompt',function(e){e.preventDefault();_dp=e;_si();});function _si(){if(document.getElementById('pwaInstall'))return;var b=document.createElement('button');b.id='pwaInstall';b.textContent='\u2b07 \uc571 \uc124\uce58';b.style.cssText='position:fixed;right:14px;bottom:90px;z-index:9998;background:#0f172a;color:#fff;border:0;border-radius:24px;padding:12px 18px;font-weight:900;box-shadow:0 8px 24px rgba(0,0,0,.25);cursor:pointer';b.onclick=function(){if(!_dp)return;_dp.prompt();_dp.userChoice.then(function(){_dp=null;b.remove();});};document.body.appendChild(b);}window.addEventListener('appinstalled',function(){var b=document.getElementById('pwaInstall');if(b)b.remove();});</script></body>
 </html>
+
 
 
 
