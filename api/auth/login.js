@@ -86,45 +86,59 @@ export default async function handler(req, res) {
     }
     // ────────────────────────────────────────────────────
 
-    const pool = await getPool();
-    await ensureUsersTable(pool);
+    let user = null, dbError = null;
+    try {
+      const pool = await getPool();
+      await ensureUsersTable(pool);
+      const result = await pool.request()
+        .input("login_id", sql.NVarChar(255), loginId)
+        .query(`
+          SELECT TOP 1 id, user_id, email, password_hash, name, birth, created_at
+          FROM dbo.users
+          WHERE LOWER(ISNULL(email, '')) = @login_id
+             OR LOWER(ISNULL(user_id, '')) = @login_id
+             OR LOWER(ISNULL(name, '')) = @login_id
+          ORDER BY id DESC
+        `);
+      if (result.recordset.length) user = result.recordset[0];
+    } catch (e) {
+      dbError = e.message;
+    }
 
-    const result = await pool.request()
-      .input("login_id", sql.NVarChar(255), loginId)
-      .query(`
-        SELECT TOP 1 id, user_id, email, password_hash, name, birth, created_at
-        FROM dbo.users
-        WHERE LOWER(ISNULL(email, '')) = @login_id
-           OR LOWER(ISNULL(user_id, '')) = @login_id
-           OR LOWER(ISNULL(name, '')) = @login_id
-        ORDER BY id DESC
-      `);
+    // DB 미연결 또는 사용자 없음 → Google Drive 폴백 조회
+    if (!user) {
+      try {
+        const { readJsonFromDrive } = await import("../../lib/drive-utils.js");
+        const safe = String(loginId).toLowerCase().replace(/[^a-zA-Z0-9@._-]/g, "_").slice(0, 120);
+        const file = await readJsonFromDrive({ folderPath: ["auth", "users"], fileName: safe });
+        if (file?.data) user = { id: null, user_id: file.data.user_id || file.data.id, email: file.data.email, password_hash: file.data.password_hash, name: file.data.name, birth: file.data.birth, created_at: file.data.created_at };
+      } catch (e) { /* drive 조회 실패 무시 */ }
+    }
 
-    if (result.recordset.length === 0) {
+    if (!user) {
       return res.status(401).json({ ok: false, message: "가입 정보가 없습니다. 회원가입 후 같은 아이디/이메일로 로그인하세요." });
     }
 
-    const user = result.recordset[0];
     const ok = verifyPassword(pw, user.password_hash);
-
     if (!ok) {
       return res.status(401).json({ ok: false, message: "비밀번호가 올바르지 않습니다." });
     }
 
-    const outId = user.user_id || user.email || String(user.id);
+    const outId = user.user_id || user.email || String(user.id || "");
     return res.status(200).json({
       ok: true,
       message: "로그인 성공",
       user: {
         id: outId,
-        db_id: user.id,
+        db_id: user.id || null,
         email: user.email || outId,
         name: user.name || user.email || outId,
         birth: user.birth || "",
-        created_at: user.created_at
+        created_at: user.created_at || new Date().toISOString()
       }
     });
   } catch (error) {
     return res.status(500).json({ ok: false, message: "로그인 실패", error: error.message });
   }
 }
+
