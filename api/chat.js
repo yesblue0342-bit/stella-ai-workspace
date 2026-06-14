@@ -154,6 +154,7 @@ export default async function handler(req, res) {
     const history = Array.isArray(body.history) ? body.history : [];
     const model = body.model || "gpt-4o-mini";
     const system = body.system || STELLA_SYSTEM_PROMPT;
+    const images = Array.isArray(body.images) ? body.images.slice(0, 4) : [];
 
     // ① 날씨 직접 처리
     const weatherKw = ["날씨","기온","우산","weather","forecast"];
@@ -204,10 +205,10 @@ export default async function handler(req, res) {
     let provider;
     if (isClaudeModel) {
       provider = "claude";
-      answer = await callClaude({ model, system: prompt, history, message });
+      answer = await callClaude({ model, system: prompt, history, message, images });
     } else {
       provider = "openai";
-      answer = await callOpenAI({ model, system: prompt, history, message });
+      answer = await callOpenAI({ model, system: prompt, history, message, images });
     }
     return res.status(200).json({ ok: true, text: answer, provider, searchContext });
   } catch (error) {
@@ -287,7 +288,7 @@ function resolveClaudeModel(model) {
   return "claude-sonnet-4-6";
 }
 
-async function callOpenAI({ model, system, history, message }) {
+async function callOpenAI({ model, system, history, message, images = [] }) {
   const apiKey = process.env.OPENAI_API_KEY;
   if (!apiKey) throw new Error("OPENAI_API_KEY not configured");
   const selectedModel = resolveOpenAIModel(model);
@@ -300,7 +301,10 @@ async function callOpenAI({ model, system, history, message }) {
       messages: [
         { role: "system", content: system },
         ...history.slice(-12).map(m => ({ role: m.role === "assistant" ? "assistant" : "user", content: String(m.content || "") })),
-        { role: "user", content: "[표+요약 형식으로 답변] " + String(message || "") }
+        { role: "user", content: images.length > 0
+          ? [{ type:"text", text:"[표+요약 형식으로 답변] "+String(message||"") },
+             ...images.map(u=>({ type:"image_url", image_url:{ url:u, detail:"auto" } }))]
+          : "[표+요약 형식으로 답변] "+String(message||"") }
       ]
     })
   });
@@ -309,7 +313,7 @@ async function callOpenAI({ model, system, history, message }) {
   return data.choices?.[0]?.message?.content || "응답 없음";
 }
 
-async function callClaude({ model, system, history, message }) {
+async function callClaude({ model, system, history, message, images = [] }) {
   const apiKey = process.env.ANTHROPIC_API_KEY;
   if (!apiKey) throw new Error("ANTHROPIC_API_KEY not configured");
   const selectedModel = resolveClaudeModel(model);
@@ -322,7 +326,9 @@ async function callClaude({ model, system, history, message }) {
       system,
       messages: [
         ...history.slice(-12).map(m => ({ role: m.role === "assistant" ? "assistant" : "user", content: String(m.content || "") })),
-        { role: "user", content: "[표+요약 형식으로 답변] " + String(message || "") }
+        { role: "user", content: images.length > 0
+          ? [...images.map(u=>{ const mx=u.match(/^data:([^;]+);base64,(.+)$/); return mx?{ type:"image", source:{ type:"base64", media_type:mx[1], data:mx[2] } }:null; }).filter(Boolean), { type:"text", text:String(message||"") }]
+          : String(message||"") }
       ]
     })
   });
@@ -330,6 +336,7 @@ async function callClaude({ model, system, history, message }) {
   if (!response.ok) throw new Error(data.error?.message || "Claude API error");
   return data.content?.map(c => c.text || "").join("\n") || "응답 없음";
 }
+
 
 
 
