@@ -1,4 +1,16 @@
-// OAuth2 access token 획득 (fetch 기반, Vercel 완전 호환)
+import { google } from "googleapis";
+
+// googleapis 기반 drive 인스턴스
+function getDriveClient() {
+  const clientId = process.env.GOOGLE_CLIENT_ID || process.env.GOOGLE_OAUTH_CLIENT_ID;
+  const clientSecret = process.env.GOOGLE_CLIENT_SECRET || process.env.GOOGLE_OAUTH_CLIENT_SECRET;
+  const refreshToken = process.env.GOOGLE_REFRESH_TOKEN || process.env.GOOGLE_DRIVE_REFRESH_TOKEN || process.env.GOOGLE_OAUTH_REFRESH_TOKEN;
+  const auth = new google.auth.OAuth2(clientId, clientSecret);
+  auth.setCredentials({ refresh_token: refreshToken });
+  return google.drive({ version: "v3", auth });
+}
+
+// OAuth2 access token 획득 (fetch 기반)
 async function getAccessToken() {
   const clientId = process.env.GOOGLE_CLIENT_ID || process.env.GOOGLE_OAUTH_CLIENT_ID;
   const clientSecret = process.env.GOOGLE_CLIENT_SECRET || process.env.GOOGLE_OAUTH_CLIENT_SECRET;
@@ -20,7 +32,7 @@ async function getAccessToken() {
   return d.access_token;
 }
 
-// fetch 기반 멀티파트 업로드 (Vercel serverless 완전 호환)
+// fetch 기반 멀티파트 업로드
 async function uploadFileToDrive({ parentId, fileName, mimeType, base64data }) {
   const token = await getAccessToken();
   const buf = Buffer.from(base64data, "base64");
@@ -29,21 +41,8 @@ async function uploadFileToDrive({ parentId, fileName, mimeType, base64data }) {
   const boundary = "stella_upload_" + Date.now();
   const metadata = JSON.stringify({ name: String(fileName), parents: [parentId], mimeType: mt });
 
-  const metaPart = [
-    `--${boundary}`,
-    "Content-Type: application/json; charset=UTF-8",
-    "",
-    metadata,
-    ""
-  ].join("\r\n");
-
-  const filePart = [
-    `--${boundary}`,
-    `Content-Type: ${mt}`,
-    "",
-    ""
-  ].join("\r\n");
-
+  const metaPart = [`--${boundary}`, "Content-Type: application/json; charset=UTF-8", "", metadata, ""].join("\r\n");
+  const filePart = [`--${boundary}`, `Content-Type: ${mt}`, "", ""].join("\r\n");
   const closing = `\r\n--${boundary}--`;
 
   const body = Buffer.concat([
@@ -71,22 +70,11 @@ async function uploadFileToDrive({ parentId, fileName, mimeType, base64data }) {
   return data;
 }
 
-// googleapis 기반 drive 인스턴스 (upload 제외한 나머지 action에 사용)
-function getDriveClient() {
-  const { google } = require("googleapis");
-  const clientId = process.env.GOOGLE_CLIENT_ID || process.env.GOOGLE_OAUTH_CLIENT_ID;
-  const clientSecret = process.env.GOOGLE_CLIENT_SECRET || process.env.GOOGLE_OAUTH_CLIENT_SECRET;
-  const refreshToken = process.env.GOOGLE_REFRESH_TOKEN || process.env.GOOGLE_DRIVE_REFRESH_TOKEN || process.env.GOOGLE_OAUTH_REFRESH_TOKEN;
-  const auth = new google.auth.OAuth2(clientId, clientSecret);
-  auth.setCredentials({ refresh_token: refreshToken });
-  return google.drive({ version: "v3", auth });
-}
-
 export default async function handler(req, res) {
   if (req.method !== "POST") return res.status(405).json({ ok: false });
   const action = String(req.query.action || req.body?.action || "").trim();
 
-  // ── 파일 업로드: getDrive() 없이 독립 실행 ──
+  // ── 파일 업로드: getDriveClient() 없이 독립 실행 ──
   if (action === "upload") {
     try {
       const { parentId, fileName, mimeType, base64data } = req.body || {};
@@ -101,7 +89,7 @@ export default async function handler(req, res) {
     }
   }
 
-  // ── 나머지 action: drive 클라이언트 사용 ──
+  // ── 나머지 action ──
   try {
     const drive = getDriveClient();
 
