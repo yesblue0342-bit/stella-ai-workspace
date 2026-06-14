@@ -98,6 +98,15 @@ function buildSystemPrompt(system, searchContext) {
   return prompt;
 }
 
+function resolveClaudeModel(model) {
+  const m = String(model || "").toLowerCase();
+  if (m === "claude-opus-4-8" || m.includes("opus")) return "claude-opus-4-8";
+  if (m === "claude-haiku-4-5-20251001" || m.includes("haiku")) return "claude-haiku-4-5-20251001";
+  if (m === "claude-sonnet-4-6" || m.includes("sonnet") || m.includes("4-6") || m.includes("4.6")) return "claude-sonnet-4-6";
+  if (m.includes("claude")) return "claude-sonnet-4-6";
+  return "claude-sonnet-4-6";
+}
+
 async function callOpenAI({ model, system, history, message }) {
   const apiKey = process.env.OPENAI_API_KEY;
   if (!apiKey) throw new Error("OPENAI_API_KEY not configured");
