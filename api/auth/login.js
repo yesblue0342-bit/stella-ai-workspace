@@ -68,6 +68,24 @@ export default async function handler(req, res) {
       return res.status(400).json({ ok: false, message: "아이디 또는 이메일과 비밀번호를 입력하세요." });
     }
 
+    // ── ADMIN 하드코딩 우회 ──────────────────────────────
+    if (loginId === "admin" && pw === "admin") {
+      return res.status(200).json({
+        ok: true,
+        message: "로그인 성공",
+        user: {
+          id: "admin",
+          db_id: 0,
+          email: "admin@stella.local",
+          name: "관리자",
+          birth: "",
+          role: "admin",
+          created_at: new Date().toISOString()
+        }
+      });
+    }
+    // ────────────────────────────────────────────────────
+
     const pool = await getPool();
     await ensureUsersTable(pool);
 
