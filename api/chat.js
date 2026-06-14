@@ -193,17 +193,39 @@ export default async function handler(req, res) {
       }
     }
 
-    // ③ 일반 AI 처리
+    // ③ 일반 AI 처리 (모델 완전 분리 - 중복 과금 방지)
     const searchContext = await prepareSearchContext(message);
-    const prompt = buildSystemPrompt(system, searchContext);
-    const provider = model.includes("claude") ? "claude" : "openai";
-    const answer = provider === "claude"
-      ? await callClaude({ model, system: prompt, history, message })
-      : await callOpenAI({ model, system: prompt, history, message });
+    const driveContext = await searchDriveContext(message); // Drive 검색 연동
+    const prompt = buildSystemPrompt(system, searchContext, driveContext);
+    
+    // 모델 기반으로 API 완전 분리 (Claude 선택 시 OpenAI 절대 미호출)
+    const isClaudeModel = model.toLowerCase().includes("claude") || model.toLowerCase().includes("fable");
+    let answer;
+    let provider;
+    if (isClaudeModel) {
+      provider = "claude";
+      answer = await callClaude({ model, system: prompt, history, message });
+    } else {
+      provider = "openai";
+      answer = await callOpenAI({ model, system: prompt, history, message });
+    }
     return res.status(200).json({ ok: true, text: answer, provider, searchContext });
   } catch (error) {
     return res.status(500).json({ ok: false, error: error.message || "chat error" });
   }
+}
+
+// Drive StellaGPT 폴더 검색 (SAP/업무 관련 질문 시)
+async function searchDriveContext(message) {
+  try {
+    const msg = String(message || "").toLowerCase();
+    const driveKw = ["sap","qa32","qm","pp","abap","inspection","lot","bom","mr21","migo","mb51","검사","품질","공정","자재","트랜잭션"];
+    if (!driveKw.some(k => msg.includes(k))) return null;
+    const { searchDrive } = await import("../lib/drive-utils.js");
+    const results = await searchDrive(message, { scope: "StellaGPT", pageSize: 5 }).catch(() => null);
+    if (!results || !results.length) return null;
+    return results.slice(0,3).map(r => `[Drive:${r.name}] ${r.snippet||r.name}`).join("\n");
+  } catch { return null; }
 }
 
 async function prepareSearchContext(message) {
@@ -218,10 +240,13 @@ async function prepareSearchContext(message) {
   return { used: false };
 }
 
-function buildSystemPrompt(system, searchContext) {
+function buildSystemPrompt(system, searchContext, driveContext) {
   let prompt = system;
   if (searchContext?.used && searchContext.context) {
     prompt += `\n\n[실시간 컨텍스트]\n${searchContext.context}`;
+  }
+  if (driveContext) {
+    prompt += `\n\n[Google Drive StellaGPT 관련 파일]\n${driveContext}`;
   }
   return prompt;
 }
@@ -305,6 +330,7 @@ async function callClaude({ model, system, history, message }) {
   if (!response.ok) throw new Error(data.error?.message || "Claude API error");
   return data.content?.map(c => c.text || "").join("\n") || "응답 없음";
 }
+
 
 
 
