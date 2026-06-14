@@ -59,19 +59,29 @@ export default async function handler(req, res) {
     // 날씨 요청 직접 처리
     const weatherKw = ["날씨","기온","우산","비","눈","weather","forecast"];
     if (weatherKw.some(w => message.toLowerCase().includes(w))) {
-      const locMatch = message.match(/([가-힣]{2,8}(?:시|구|군|동|읍|면)?)\s*날씨/);
-      const location = locMatch ? locMatch[1] : (message.includes("송도") ? "Songdo" : "Seoul");
+      // 지역명 추출 (송도, 서울, 인천 등)
+      const locMatch = message.match(/([가-힣]{2,10}(?:시|구|군|동|읍|면|도)?)/);
+      const location = locMatch ? locMatch[1] : "Seoul";
+      const isDomestic = /[가-힣]/.test(location);
       try {
         const { default: weatherHandler } = await import("./weather.js");
         const fakeReq = { method:"GET", query:{ location }, body:{} };
-        const chunks = [];
-        const fakeRes = {
-          status(s){ return { json(d){ chunks.push(d); } }; }
-        };
-        await weatherHandler(fakeReq, fakeRes);
-        if (chunks[0]?.ok && chunks[0]?.weather) {
-          const w = chunks[0].weather;
-          const answer = `**${w.location || location} 날씨**\n| 항목 | 내용 |\n|---|---|\n| 현재기온 | ${w.temp}°C |\n| 체감 | ${w.feels_like}°C |\n| 날씨 | ${w.description} |\n| 습도 | ${w.humidity}% |\n| 풍속 | ${w.wind_speed}m/s |`;
+        const result = await new Promise(resolve => {
+          weatherHandler(fakeReq, {
+            status(s){ return { json(d){ resolve({s,d}); } }; }
+          });
+        });
+        const d = result?.d;
+        if (d?.ok) {
+          const temp = d.temperature ?? d.temp ?? "?";
+          const feels = d.feels_like ?? d.feelsLike ?? "?";
+          const humid = d.humidity ?? "?";
+          const wind = d.wind ?? d.wind_speed ?? "?";
+          const desc = d.description ?? d.weather ?? "";
+          const mapLink = isDomestic
+            ? `[카카오맵에서 보기](https://map.kakao.com/link/search/${encodeURIComponent(location)})`
+            : `[Google Maps](https://maps.google.com/?q=${encodeURIComponent(location)}+weather)`;
+          const answer = `**${location} 현재 날씨** ${desc}\n| 항목 | 값 |\n|---|---|\n| 기온 | ${temp}°C |\n| 체감 | ${feels}°C |\n| 습도 | ${humid}% |\n| 바람 | ${wind}m/s |\n\n${mapLink}`;
           return res.status(200).json({ ok:true, text: answer, provider:"weather" });
         }
       } catch(we) { /* 날씨 API 실패 시 AI가 대신 답변 */ }
@@ -205,4 +215,5 @@ async function callClaude({ model, system, history, message }) {
   if (!response.ok) throw new Error(data.error?.message || "Claude API error");
   return data.content?.map((c) => c.text || "").join("\n") || "응답 없음";
 }
+
 
