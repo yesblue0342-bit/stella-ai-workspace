@@ -88,43 +88,65 @@ async function callAuthCleanup() {
 }
 
 // ───────── 날씨 직접 처리 (Google Maps API 사용) ─────────
+// 한국 주요 도시 좌표 (Google Places API 없어도 사용)
+const KR_CITIES = {
+  "송도":  { lat:37.3823, lng:126.6569 }, "인천":  { lat:37.4563, lng:126.7052 },
+  "서울":  { lat:37.5665, lng:126.9780 }, "성남":  { lat:37.4200, lng:127.1265 },
+  "판교":  { lat:37.3947, lng:127.1112 }, "수원":  { lat:37.2636, lng:127.0286 },
+  "부산":  { lat:35.1796, lng:129.0756 }, "대전":  { lat:36.3504, lng:127.3845 },
+  "대구":  { lat:35.8714, lng:128.6014 }, "광주":  { lat:35.1595, lng:126.8526 },
+  "울산":  { lat:35.5384, lng:129.3114 }, "세종":  { lat:36.4800, lng:127.2890 },
+  "제주":  { lat:33.4890, lng:126.4983 }, "익산":  { lat:35.9483, lng:126.9576 },
+  "전주":  { lat:35.8242, lng:127.1480 }, "청주":  { lat:36.6424, lng:127.4890 },
+  "천안":  { lat:36.8151, lng:127.1139 }, "포항":  { lat:36.0190, lng:129.3435 },
+};
+
 async function handleWeather(message) {
-  try {
-    const { getWeatherContext } = await import("../lib/place-weather-utils.js");
-    const ctx = await getWeatherContext(message);
-    if (ctx?.context && !ctx.error) {
-      return ctx.context;
+  const locMatch = message.match(/([가-힣]{2,10}(?:시|구|군|동|읍|면|도)?)/);
+  const locationName = locMatch ? locMatch[1] : "송도";
+  const isDomestic = /[가-힣]/.test(locationName);
+
+  // 1) 좌표 확보: 한국 도시 테이블 우선
+  let lat = null, lng = null;
+  for (const [city, coord] of Object.entries(KR_CITIES)) {
+    if (locationName.includes(city) || city.includes(locationName)) {
+      lat = coord.lat; lng = coord.lng; break;
     }
-    if (ctx?.error) {
-      // Google Maps API 실패 시 OpenWeather 폴백
-      throw new Error(ctx.error);
-    }
-  } catch {
-    // 폴백: OpenWeather API
-    try {
-      const locMatch = message.match(/([가-힣]{2,10}(?:시|구|군|동|읍|면|도)?)/);
-      const location = locMatch ? locMatch[1] : "Seoul";
-      const isDomestic = /[가-힣]/.test(location);
-      const { default: weatherHandler } = await import("./weather.js");
-      const result = await new Promise(resolve => {
-        weatherHandler({ method:"GET", query:{ location }, body:{} }, {
-          status(){ return { json(d){ resolve(d); } }; }
-        });
-      });
-      if (result?.ok) {
-        const temp = result.temperature ?? "?";
-        const feels = result.feels_like ?? "?";
-        const humid = result.humidity ?? "?";
-        const wind = result.wind ?? "?";
-        const desc = result.description ?? "";
-        const mapLink = isDomestic
-          ? `[카카오맵](https://map.kakao.com/link/search/${encodeURIComponent(location)})`
-          : `[Google Maps](https://maps.google.com/?q=${encodeURIComponent(location)}+weather)`;
-        return `**${location} 날씨** ${desc}\n| 항목 | 값 |\n|---|---|\n| 기온 | ${temp}°C |\n| 체감 | ${feels}°C |\n| 습도 | ${humid}% |\n| 바람 | ${wind}m/s |\n\n${mapLink}`;
-      }
-    } catch {}
   }
-  return null;
+
+  // 2) Google Weather API 직접 호출
+  if (lat && lng) {
+    const key = process.env.GOOGLE_WEATHER_API_KEY || process.env.GOOGLE_MAPS_API_KEY || process.env.GOOGLE_API_KEY;
+    if (key) {
+      try {
+        const url = new URL("https://weather.googleapis.com/v1/currentConditions:lookup");
+        url.searchParams.set("key", key);
+        url.searchParams.set("location.latitude", String(lat));
+        url.searchParams.set("location.longitude", String(lng));
+        url.searchParams.set("languageCode", "ko");
+        const r = await fetch(url.toString());
+        if (r.ok) {
+          const w = await r.json();
+          const temp = w.temperature?.degrees ?? "?";
+          const feels = w.feelsLikeTemperature?.degrees ?? "?";
+          const humid = w.relativeHumidity ?? "?";
+          const windSpeed = w.wind?.speed?.value ?? "?";
+          const desc = w.weatherCondition?.description?.text || w.weatherCondition?.type || "정보없음";
+          const precip = w.precipitation?.probability?.percent ?? "-";
+          const mapLink = isDomestic
+            ? `[카카오맵 날씨](https://map.kakao.com/link/search/${encodeURIComponent(locationName)})`
+            : `[Google Maps](https://maps.google.com/?q=${encodeURIComponent(locationName)}+weather)`;
+          return `**${locationName} 현재 날씨** — ${desc}\n| 항목 | 값 |\n|---|---|\n| 기온 | ${temp}°C |\n| 체감 | ${feels}°C |\n| 습도 | ${humid}% |\n| 바람 | ${windSpeed}m/s |\n| 강수확률 | ${precip}% |\n\n${mapLink}`;
+        }
+      } catch {}
+    }
+  }
+
+  // 3) 폴백: 카카오맵/구글맵 날씨 링크 제공
+  const mapLink = isDomestic
+    ? `[카카오맵에서 날씨 확인](https://map.kakao.com/link/search/${encodeURIComponent(locationName)})`
+    : `[Google Maps에서 날씨 확인](https://maps.google.com/?q=${encodeURIComponent(locationName)}+weather)`;
+  return `**${locationName} 날씨** 정보를 실시간으로 확인하세요.\n\n${mapLink}`;
 }
 
 // ───────── 메인 핸들러 ─────────
@@ -289,6 +311,7 @@ async function callClaude({ model, system, history, message }) {
   if (!response.ok) throw new Error(data.error?.message || "Claude API error");
   return data.content?.map(c => c.text || "").join("\n") || "응답 없음";
 }
+
 
 
 
