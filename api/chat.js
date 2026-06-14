@@ -1,41 +1,35 @@
 import { detectSmartIntent, getSmartContextForMessage } from "../lib/place-weather-utils.js";
 
 // ───────── 시스템 프롬프트 ─────────
-const STELLA_SYSTEM_PROMPT = `당신은 Stella GPT입니다. KH(이후)의 전용 AI 워크스페이스입니다.
+const STELLA_SYSTEM_PROMPT = `You are Stella GPT, KH's personal AI workspace assistant. Reply in Korean.
 
-## 답변 형식 (Default - 반드시 준수)
+[RESPONSE FORMAT - MANDATORY, NO EXCEPTIONS]
+EVERY response MUST follow this exact structure:
+1. One-line summary (결론 한 줄)
+2. Markdown table if there are 2+ items (반드시 표)
+3. Max 2 lines of additional notes if needed
 
-모든 답변은 아래 구조를 기본으로 한다:
+FORBIDDEN in default mode:
+- Numbered lists with 5+ items
+- Multiple ## headings
+- Long paragraphs
+- Saying "I cannot access" - just do it or give the link
 
-1. **핵심 요약** — 1~2문장으로 결론 먼저
-2. **표(markdown table)** — 항목이 2개 이상이면 반드시 표로 정리
-3. **보충 설명** — 필요 시 2~3줄 이내
+ALLOWED only when user says "자세히", "설명해줘", "왜", "상세히":
+- Detailed prose explanation
 
-❌ 절대 금지:
-- 긴 번호 목록(1. 2. 3. 이어서 5줄 이상)
-- 소제목(##) 남발
-- 같은 내용 반복
-- 설명만 하고 실행 안 함
+[EXECUTION RULES]
+- "해줘/수정해줘/정리해줘" → execute immediately, show result only
+- GitHub: server auto-calls /api/github-read and /api/github-update
+- Weather: call API directly, never say "cannot provide"
+- No off-topic answers
 
-✅ 상세 요청 시에만 (예: "자세히", "설명해줘", "왜"):
-- 단계별 상세 서술 허용
-
-## 실행 규칙
-- "해줘", "수정해줘", "정리해줘" → 직접 실행 후 결과만 표시
-- GitHub 작업: 서버가 자동 호출하므로 별도 설명 불필요
-- 동문서답 금지
-
-## 날씨/지도
+[MAP LINKS]
 - 국내: [카카오맵](https://map.kakao.com/link/search/장소명)
 - 해외: [Google Maps](https://maps.google.com/?q=장소명)
 
-## 저장소
-- yesblue0342-bit/stella-ai-workspace
-- 배포: https://stella-ai-workspace.vercel.app
-- 메인파일: index.html
-
-## KH 정보
-SAP QM/PP 컨설턴트, Celltrion BISON 프로젝트, 소설가/시인/래퍼/무술가`;
+[REPO] yesblue0342-bit/stella-ai-workspace | main file: index.html
+[KH] SAP QM/PP consultant, Celltrion BISON project, novelist/poet/rapper/martial artist`;
 
 // ───────── GitHub 의도 감지 ─────────
 function detectGitHubIntent(message) {
@@ -277,11 +271,11 @@ async function callOpenAI({ model, system, history, message }) {
     headers: { "Content-Type": "application/json", Authorization: `Bearer ${apiKey}` },
     body: JSON.stringify({
       model: selectedModel,
-      temperature: 0.2,
+      temperature: 0.1,
       messages: [
         { role: "system", content: system },
         ...history.slice(-12).map(m => ({ role: m.role === "assistant" ? "assistant" : "user", content: String(m.content || "") })),
-        { role: "user", content: String(message || "") }
+        { role: "user", content: "[표+요약 형식으로 답변] " + String(message || "") }
       ]
     })
   });
@@ -303,7 +297,7 @@ async function callClaude({ model, system, history, message }) {
       system,
       messages: [
         ...history.slice(-12).map(m => ({ role: m.role === "assistant" ? "assistant" : "user", content: String(m.content || "") })),
-        { role: "user", content: String(message || "") }
+        { role: "user", content: "[표+요약 형식으로 답변] " + String(message || "") }
       ]
     })
   });
@@ -311,6 +305,7 @@ async function callClaude({ model, system, history, message }) {
   if (!response.ok) throw new Error(data.error?.message || "Claude API error");
   return data.content?.map(c => c.text || "").join("\n") || "응답 없음";
 }
+
 
 
 
