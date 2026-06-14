@@ -1,7 +1,4 @@
-import { getDrive } from "../lib/drive-utils.js";
-import { google } from "googleapis";
-
-// OAuth2 auth 객체에서 access token 획득
+// OAuth2 access token 획득 (fetch 기반, Vercel 완전 호환)
 async function getAccessToken() {
   const clientId = process.env.GOOGLE_CLIENT_ID || process.env.GOOGLE_OAUTH_CLIENT_ID;
   const clientSecret = process.env.GOOGLE_CLIENT_SECRET || process.env.GOOGLE_OAUTH_CLIENT_SECRET;
@@ -29,11 +26,9 @@ async function uploadFileToDrive({ parentId, fileName, mimeType, base64data }) {
   const buf = Buffer.from(base64data, "base64");
   const mt = mimeType || "application/octet-stream";
 
-  // multipart/related 바운더리 구성
   const boundary = "stella_upload_" + Date.now();
   const metadata = JSON.stringify({ name: String(fileName), parents: [parentId], mimeType: mt });
 
-  // 멀티파트 body 구성
   const metaPart = [
     `--${boundary}`,
     "Content-Type: application/json; charset=UTF-8",
@@ -51,11 +46,12 @@ async function uploadFileToDrive({ parentId, fileName, mimeType, base64data }) {
 
   const closing = `\r\n--${boundary}--`;
 
-  const metaBuf = Buffer.from(metaPart, "utf-8");
-  const filePartBuf = Buffer.from(filePart, "utf-8");
-  const closingBuf = Buffer.from(closing, "utf-8");
-
-  const body = Buffer.concat([metaBuf, filePartBuf, buf, closingBuf]);
+  const body = Buffer.concat([
+    Buffer.from(metaPart, "utf-8"),
+    Buffer.from(filePart, "utf-8"),
+    buf,
+    Buffer.from(closing, "utf-8")
+  ]);
 
   const res = await fetch(
     "https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart&fields=id,name,mimeType,size,webViewLink,createdTime",
@@ -75,12 +71,39 @@ async function uploadFileToDrive({ parentId, fileName, mimeType, base64data }) {
   return data;
 }
 
+// googleapis 기반 drive 인스턴스 (upload 제외한 나머지 action에 사용)
+function getDriveClient() {
+  const { google } = require("googleapis");
+  const clientId = process.env.GOOGLE_CLIENT_ID || process.env.GOOGLE_OAUTH_CLIENT_ID;
+  const clientSecret = process.env.GOOGLE_CLIENT_SECRET || process.env.GOOGLE_OAUTH_CLIENT_SECRET;
+  const refreshToken = process.env.GOOGLE_REFRESH_TOKEN || process.env.GOOGLE_DRIVE_REFRESH_TOKEN || process.env.GOOGLE_OAUTH_REFRESH_TOKEN;
+  const auth = new google.auth.OAuth2(clientId, clientSecret);
+  auth.setCredentials({ refresh_token: refreshToken });
+  return google.drive({ version: "v3", auth });
+}
+
 export default async function handler(req, res) {
   if (req.method !== "POST") return res.status(405).json({ ok: false });
   const action = String(req.query.action || req.body?.action || "").trim();
 
+  // ── 파일 업로드: getDrive() 없이 독립 실행 ──
+  if (action === "upload") {
+    try {
+      const { parentId, fileName, mimeType, base64data } = req.body || {};
+      if (!parentId || !fileName || !base64data) {
+        return res.status(400).json({ ok: false, message: "parentId, fileName, base64data 필요" });
+      }
+      const file = await uploadFileToDrive({ parentId, fileName, mimeType, base64data });
+      return res.status(200).json({ ok: true, file });
+    } catch (e) {
+      console.error("[drive-manage/upload]", e.message);
+      return res.status(500).json({ ok: false, error: e.message, action });
+    }
+  }
+
+  // ── 나머지 action: drive 클라이언트 사용 ──
   try {
-    const drive = getDrive();
+    const drive = getDriveClient();
 
     // ── 폴더 생성 ──
     if (action === "mkdir") {
@@ -129,16 +152,6 @@ export default async function handler(req, res) {
         requestBody: {}, fields: "id,name,parents"
       });
       return res.status(200).json({ ok: true, file: f.data });
-    }
-
-    // ── 파일 업로드 (fetch 멀티파트 - Vercel 완전 호환) ──
-    if (action === "upload") {
-      const { parentId, fileName, mimeType, base64data } = req.body || {};
-      if (!parentId || !fileName || !base64data) {
-        return res.status(400).json({ ok: false, message: "parentId, fileName, base64data 필요" });
-      }
-      const file = await uploadFileToDrive({ parentId, fileName, mimeType, base64data });
-      return res.status(200).json({ ok: true, file });
     }
 
     return res.status(400).json({ ok: false, message: `알 수 없는 action: ${action}` });
