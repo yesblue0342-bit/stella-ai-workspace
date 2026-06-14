@@ -87,30 +87,43 @@ async function callAuthCleanup() {
   return r.json();
 }
 
-// ───────── 날씨 직접 처리 ─────────
+// ───────── 날씨 직접 처리 (Google Maps API 사용) ─────────
 async function handleWeather(message) {
-  const locMatch = message.match(/([가-힣]{2,10}(?:시|구|군|동|읍|면|도)?)/);
-  const location = locMatch ? locMatch[1] : "Seoul";
-  const isDomestic = /[가-힣]/.test(location);
   try {
-    const { default: weatherHandler } = await import("./weather.js");
-    const result = await new Promise(resolve => {
-      weatherHandler({ method:"GET", query:{ location }, body:{} }, {
-        status(){ return { json(d){ resolve(d); } }; }
-      });
-    });
-    if (result?.ok) {
-      const temp = result.temperature ?? result.temp ?? "?";
-      const feels = result.feels_like ?? "?";
-      const humid = result.humidity ?? "?";
-      const wind = result.wind ?? result.wind_speed ?? "?";
-      const desc = result.description ?? "";
-      const mapLink = isDomestic
-        ? `[카카오맵](https://map.kakao.com/link/search/${encodeURIComponent(location)})`
-        : `[Google Maps](https://maps.google.com/?q=${encodeURIComponent(location)}+weather)`;
-      return `**${location} 현재 날씨** ${desc}\n| 항목 | 값 |\n|---|---|\n| 기온 | ${temp}°C |\n| 체감 | ${feels}°C |\n| 습도 | ${humid}% |\n| 바람 | ${wind}m/s |\n\n${mapLink}`;
+    const { getWeatherContext } = await import("../lib/place-weather-utils.js");
+    const ctx = await getWeatherContext(message);
+    if (ctx?.context && !ctx.error) {
+      return ctx.context;
     }
-  } catch {}
+    if (ctx?.error) {
+      // Google Maps API 실패 시 OpenWeather 폴백
+      throw new Error(ctx.error);
+    }
+  } catch {
+    // 폴백: OpenWeather API
+    try {
+      const locMatch = message.match(/([가-힣]{2,10}(?:시|구|군|동|읍|면|도)?)/);
+      const location = locMatch ? locMatch[1] : "Seoul";
+      const isDomestic = /[가-힣]/.test(location);
+      const { default: weatherHandler } = await import("./weather.js");
+      const result = await new Promise(resolve => {
+        weatherHandler({ method:"GET", query:{ location }, body:{} }, {
+          status(){ return { json(d){ resolve(d); } }; }
+        });
+      });
+      if (result?.ok) {
+        const temp = result.temperature ?? "?";
+        const feels = result.feels_like ?? "?";
+        const humid = result.humidity ?? "?";
+        const wind = result.wind ?? "?";
+        const desc = result.description ?? "";
+        const mapLink = isDomestic
+          ? `[카카오맵](https://map.kakao.com/link/search/${encodeURIComponent(location)})`
+          : `[Google Maps](https://maps.google.com/?q=${encodeURIComponent(location)}+weather)`;
+        return `**${location} 날씨** ${desc}\n| 항목 | 값 |\n|---|---|\n| 기온 | ${temp}°C |\n| 체감 | ${feels}°C |\n| 습도 | ${humid}% |\n| 바람 | ${wind}m/s |\n\n${mapLink}`;
+      }
+    } catch {}
+  }
   return null;
 }
 
@@ -276,4 +289,5 @@ async function callClaude({ model, system, history, message }) {
   if (!response.ok) throw new Error(data.error?.message || "Claude API error");
   return data.content?.map(c => c.text || "").join("\n") || "응답 없음";
 }
+
 
