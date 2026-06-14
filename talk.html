@@ -1,8 +1,223 @@
-<!doctype html><html lang="ko"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><title>Stella Talk</title><link rel="manifest" href="/manifest-talk.json"><meta name="theme-color" content="#2563eb"><meta name="apple-mobile-web-app-capable" content="yes"><meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"><link rel="apple-touch-icon" href="/icons/talk-192.png"><style>*{box-sizing:border-box}body{margin:0;font-family:system-ui,-apple-system,BlinkMacSystemFont,'Noto Sans KR',sans-serif;background:#b7c9d8;color:#111827}body.light{background:#fff}.top{position:sticky;top:0;padding:14px;background:rgba(183,201,216,.92);backdrop-filter:blur(var(--blur,0px));display:flex;gap:8px;z-index:3}.top b{font-size:20px;margin-right:auto}.wrap{padding:12px 12px 120px}.msg{display:flex;margin:10px 0}.msg.me{justify-content:flex-end}.bubble{max-width:76%;background:#fff;border-radius:18px;padding:10px 12px}.msg.me .bubble{background:#fee500}.composer{position:fixed;left:0;right:0;bottom:0;background:#fff;padding:10px;display:flex;gap:8px;z-index:3}textarea{flex:1;border:1px solid #d1d5db;border-radius:18px;padding:10px;font:inherit}button,select,input{font:inherit}button{border:1px solid #d1d5db;background:#fff;border-radius:13px;padding:10px}.send{background:#0f172a;color:#fff}.panel{position:fixed;left:10px;right:10px;bottom:76px;background:#fff;border-radius:20px;padding:14px;display:none;z-index:5;box-shadow:0 20px 60px rgba(15,23,42,.18)}.panel.show{display:block}.muted{color:#64748b;font-size:12px}.row{display:grid;grid-template-columns:110px 1fr;gap:8px;align-items:center;margin:8px 0}.dark{background:#111827;color:#f8fafc}.dark .top{background:rgba(17,24,39,.85)}.dark .composer,.dark .panel{background:#1f2937;color:#f8fafc}.dark textarea,.dark select,.dark input{background:#111827;color:#f8fafc;border-color:#374151}</style></head><body><div id="talkGate" style="position:fixed;inset:0;background:#fff;z-index:9999;display:flex;align-items:center;justify-content:center;padding:24px"><div style="width:min(420px,100%);border:1px solid #e5e7eb;border-radius:22px;padding:24px;box-shadow:0 20px 60px rgba(15,23,42,.15)"><h2 style="margin:0 0 6px">Stella Talk</h2><p style="color:#6b7280;font-size:13px;margin:0 0 16px">Stella GPT 계정으로 로그인하세요.</p><input id="tLoginId" placeholder="아이디 또는 이메일" autocomplete="username" style="width:100%;border:1px solid #d1d5db;border-radius:14px;padding:13px;margin:6px 0;font-size:16px"><input id="tPw" type="password" placeholder="비밀번호" autocomplete="current-password" style="width:100%;border:1px solid #d1d5db;border-radius:14px;padding:13px;margin:6px 0;font-size:16px"><button onclick="talkLogin()" style="width:100%;background:#0f172a;color:#fff;border:0;border-radius:14px;padding:14px;font-weight:900;margin-top:8px">로그인</button><button onclick="location.href='/gpt'" style="width:100%;background:#fff;border:1px solid #d1d5db;border-radius:14px;padding:12px;font-weight:800;margin-top:6px">Stella GPT로 이동</button><div id="tMsg" style="color:#b91c1c;font-size:13px;margin-top:8px;min-height:18px"></div></div></div><div class="top"><button onclick="location.href='/gpt'">←</button><b>Stella Talk</b><button onclick="toggleSettings()">설정</button></div><div id="list" class="wrap"></div><div id="settingsPanel" class="panel"><b>Stella Talk 설정</b><p class="muted">회사 사용을 위해 무음/진동/소리, 밝은 화면/다크모드, 흐림 정도를 저장합니다.</p><div class="row"><span>알림</span><select id="mode"><option value="off">알림 끄기</option><option value="silent">무음</option><option value="vibrate">진동</option><option value="sound">소리</option><option value="both">소리+진동</option></select></div><div class="row"><span>사운드</span><select id="tone"><option value="stella">스텔라~</option><option value="byeoltalk">별톡</option><option value="byeolping">별핑</option><option value="princess">별하공주님~</option><option value="ddong">김별똥~</option><option value="uri">우리 별하~</option></select></div><div class="row"><span>테마</span><select id="theme"><option value="white">흰색</option><option value="talk">카카오톡 느낌</option><option value="dark">다크모드</option></select></div><div class="row"><span>배경 흐림</span><input id="blur" type="range" min="0" max="16" value="0"></div><button onclick="saveSettings()">저장</button> <button onclick="previewTone()">미리듣기</button></div><div class="composer"><textarea id="text" placeholder="메시지 입력"></textarea><button class="send" onclick="send()">전송</button></div><script>const SK='stella_session_final_v82';const K='stella_talk_demo_v2',KS='stella_talk_settings_v2';
-function tValidUser(){try{const s=JSON.parse(localStorage.getItem(SK)||'null');if(s&&s.user&&s.user.id)return s.user}catch(e){}return null}
-function talkGateInit(){if(tValidUser()){const g=document.getElementById('talkGate');if(g)g.style.display='none'}}
-async function talkLogin(){const id=document.getElementById('tLoginId').value.trim();const pw=document.getElementById('tPw').value;const msg=document.getElementById('tMsg');if(!id||!pw){msg.textContent='아이디와 비밀번호를 입력하세요.';return}msg.textContent='로그인 중...';
- if(id==='admin'&&pw==='admin'){localStorage.setItem(SK,JSON.stringify({id:'admin',user:{id:'admin',name:'관리자',email:'admin@stella.local'},savedAt:-1}));document.getElementById('talkGate').style.display='none';return}
- try{const r=await fetch('/api/auth/login',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({id,password:pw})});const d=await r.json();if(!r.ok||d.ok===false){msg.textContent=d.message||'로그인 실패';return}localStorage.setItem(SK,JSON.stringify({id:d.user.id,user:d.user,savedAt:-1}));document.getElementById('talkGate').style.display='none'}catch(e){msg.textContent=e.message}}
-let msgs=JSON.parse(localStorage.getItem(K)||'[]');let opt=JSON.parse(localStorage.getItem(KS)||'{"mode":"off","tone":"stella","theme":"white","blur":"0"}');function apply(){mode.value=opt.mode;tone.value=opt.tone;theme.value=opt.theme;blur.value=opt.blur||0;document.body.className=opt.theme==='dark'?'dark':(opt.theme==='white'?'light':'');document.documentElement.style.setProperty('--blur',(opt.blur||0)+'px')}function render(){list.innerHTML=msgs.map(m=>'<div class="msg '+(m.me?'me':'')+'"><div class="bubble">'+esc(m.text)+'<br><small>'+m.time+'</small></div></div>').join('')||'<p class="muted">Stella Talk 대기 중</p>'}function esc(s){return String(s||'').replace(/[&<>]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;'}[c]))}async function send(){const v=text.value.trim();if(!v)return;msgs.push({text:v,me:true,time:new Date().toLocaleTimeString()});text.value='';localStorage.setItem(K,JSON.stringify(msgs));render();notify()}function toggleSettings(){settingsPanel.classList.toggle('show')}function saveSettings(){opt={mode:mode.value,tone:tone.value,theme:theme.value,blur:blur.value};localStorage.setItem(KS,JSON.stringify(opt));apply();alert('저장 완료')}function words(){return {stella:'스텔라~',byeoltalk:'별톡',byeolping:'별핑',princess:'별하공주님~',ddong:'김별똥~',uri:'우리 별하~'}[tone.value]||'스텔라'}function previewTone(){if(['sound','both'].includes(mode.value)){const u=new SpeechSynthesisUtterance(words());u.lang='ko-KR';u.pitch=1.5;u.rate=1.0;speechSynthesis.speak(u)}if(['vibrate','both'].includes(mode.value)&&navigator.vibrate)navigator.vibrate([120,60,120])}function notify(){if(opt.mode==='off')return;if(['vibrate','both'].includes(opt.mode)&&navigator.vibrate)navigator.vibrate([120,60,120]);if(['sound','both'].includes(opt.mode))previewTone()}apply();render();talkGateInit();</script><script>if('serviceWorker' in navigator){navigator.serviceWorker.register('/sw.js').catch(function(){});}var _dp=null;window.addEventListener('beforeinstallprompt',function(e){e.preventDefault();_dp=e;showInstall();});function showInstall(){if(document.getElementById('pwaInstall'))return;var b=document.createElement('button');b.id='pwaInstall';b.textContent='⬇ 앱 설치';b.style.cssText='position:fixed;right:14px;bottom:80px;z-index:9998;background:#2563eb;color:#fff;border:0;border-radius:24px;padding:12px 18px;font-weight:900;box-shadow:0 8px 24px rgba(0,0,0,.25);cursor:pointer';b.onclick=function(){if(!_dp)return;_dp.prompt();_dp.userChoice.then(function(){_dp=null;b.remove();});};document.body.appendChild(b);}window.addEventListener('appinstalled',function(){var b=document.getElementById('pwaInstall');if(b)b.remove();});</script></body></html>
+<!doctype html><html lang="ko"><head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Stella Talk</title>
+<link rel="manifest" href="/manifest-talk.json">
+<meta name="theme-color" content="#ffffff">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<link rel="apple-touch-icon" href="/icons/talk-192.png">
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+:root{--bg:#ffffff;--bg2:#f3f4f6;--bg3:#e5e7eb;--border:#d1d5db;--text:#111827;--text2:#6b7280;--bubble-me:#ffe066;--bubble-other:#fff;--header:#fff;--send:#1f2937;--send-text:#fff;--input-bg:#f9fafb}
+body.dark{--bg:#0d1117;--bg2:#161b22;--bg3:#21262d;--border:#30363d;--text:#e6edf3;--text2:#8b949e;--bubble-me:#2d3a2e;--bubble-other:#21262d;--header:#161b22;--send:#21262d;--send-text:#e6edf3;--input-bg:#0d1117}
+body{font-family:system-ui,'Noto Sans KR',sans-serif;background:var(--bg);color:var(--text);height:100dvh;display:flex;flex-direction:column;transition:background .2s}
+.header{display:flex;align-items:center;gap:10px;padding:12px 14px;background:var(--header);border-bottom:1px solid var(--border);flex-shrink:0}
+.header .back{background:none;border:none;font-size:1.3rem;cursor:pointer;color:var(--text);padding:4px}
+.header h1{font-size:1rem;font-weight:800;color:var(--text);flex:1}
+.header .hbtn{background:var(--bg3);border:1px solid var(--border);color:var(--text);border-radius:9px;padding:6px 12px;cursor:pointer;font-size:.8rem;font-weight:700}
+.room-list{flex:1;overflow-y:auto;background:var(--bg)}
+.room-item{display:flex;align-items:center;gap:12px;padding:14px 16px;border-bottom:1px solid var(--border);cursor:pointer}
+.room-item:hover{background:var(--bg2)}
+.room-avatar{width:44px;height:44px;border-radius:50%;background:var(--bg3);display:grid;place-items:center;font-size:1.2rem;flex-shrink:0;border:1px solid var(--border)}
+.room-info{flex:1;min-width:0}
+.room-name{font-weight:800;font-size:.92rem;color:var(--text)}
+.room-last{font-size:.78rem;color:var(--text2);margin-top:2px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.room-time{font-size:.72rem;color:var(--text2);flex-shrink:0}
+/* 채팅방 */
+#chatRoom{display:none;flex-direction:column;height:100dvh}
+.chat-header{display:flex;align-items:center;gap:10px;padding:12px 14px;background:var(--header);border-bottom:1px solid var(--border);flex-shrink:0}
+.chat-header .back{background:none;border:none;font-size:1.3rem;cursor:pointer;color:var(--text);padding:4px}
+.chat-header h2{font-size:.95rem;font-weight:800;color:var(--text);flex:1}
+.chat-messages{flex:1;overflow-y:auto;padding:14px 12px;background:var(--bg);display:flex;flex-direction:column;gap:10px}
+.msg-row{display:flex;align-items:flex-end;gap:8px}
+.msg-row.me{flex-direction:row-reverse}
+.msg-avatar{width:34px;height:34px;border-radius:50%;background:var(--bg3);display:grid;place-items:center;font-size:.85rem;flex-shrink:0;border:1px solid var(--border)}
+.msg-bubble{max-width:72vw;padding:10px 13px;border-radius:18px;border-top-left-radius:4px;font-size:.88rem;line-height:1.6;color:var(--text);background:var(--bubble-other);border:1px solid var(--border)}
+.msg-row.me .msg-bubble{background:var(--bubble-me);border-top-left-radius:18px;border-top-right-radius:4px;border-color:transparent;color:var(--text)}
+.msg-time{font-size:.68rem;color:var(--text2);flex-shrink:0}
+.chat-composer{flex-shrink:0;padding:10px 12px calc(12px + env(safe-area-inset-bottom));background:var(--header);border-top:1px solid var(--border);display:flex;gap:8px;align-items:center}
+.chat-input{flex:1;background:var(--input-bg);border:1px solid var(--border);border-radius:22px;padding:10px 15px;color:var(--text);font-size:.9rem;resize:none;min-height:42px;max-height:120px;overflow-y:auto}
+.chat-input::placeholder{color:var(--text2)}
+.send-btn{width:42px;height:42px;border-radius:50%;background:var(--send);color:var(--send-text);border:none;cursor:pointer;font-size:1rem;display:grid;place-items:center;flex-shrink:0;font-weight:900}
+.empty{padding:40px;text-align:center;color:var(--text2);font-size:.88rem}
+/* 새 채팅방 FAB */
+.fab{position:fixed;right:18px;bottom:80px;width:52px;height:52px;border-radius:50%;background:var(--send);color:var(--send-text);border:none;cursor:pointer;font-size:1.4rem;display:grid;place-items:center;box-shadow:0 4px 16px rgba(0,0,0,.2);z-index:10}
+</style>
+</head>
+<body>
+<!-- 방 목록 화면 -->
+<div id="roomListView" style="display:flex;flex-direction:column;height:100dvh">
+  <div class="header">
+    <button class="back" onclick="location.href='/'">←</button>
+    <h1>💬 Stella Talk</h1>
+    <button class="hbtn" onclick="toggleTheme()" id="themeBtn">🌙</button>
+    <button class="hbtn" onclick="showNewRoomDialog()">＋</button>
+  </div>
+  <div class="room-list" id="roomList"></div>
+  <button class="fab" onclick="showNewRoomDialog()" title="새 채팅방">✎</button>
+</div>
 
+<!-- 채팅방 화면 -->
+<div id="chatRoom">
+  <div class="chat-header">
+    <button class="back" onclick="closeRoom()">←</button>
+    <h2 id="chatRoomName">채팅방</h2>
+    <button class="hbtn" onclick="deleteRoom()">삭제</button>
+  </div>
+  <div class="chat-messages" id="chatMessages"></div>
+  <div class="chat-composer">
+    <textarea class="chat-input" id="chatInput" placeholder="메시지 입력" rows="1"
+      onkeydown="if(event.key==='Enter'&&!event.shiftKey){event.preventDefault();sendMsg()}"
+      oninput="this.style.height='auto';this.style.height=this.scrollHeight+'px'"></textarea>
+    <button class="send-btn" onclick="sendMsg()">↑</button>
+  </div>
+</div>
+
+<script>
+const SK_TALK='stella_talk_rooms_v1';
+const SK_THEME='stella_talk_theme';
+let _rooms=[], _curRoom=null;
+
+// ── 테마 ──
+function applyTheme(){
+  const t=localStorage.getItem(SK_THEME)||'light'; // 기본 라이트
+  document.body.classList.toggle('dark',t==='dark');
+  document.getElementById('themeBtn').textContent=t==='dark'?'☀️':'🌙';
+}
+function toggleTheme(){
+  const t=localStorage.getItem(SK_THEME)||'light';
+  const next=t==='dark'?'light':'dark';
+  localStorage.setItem(SK_THEME,next);
+  applyTheme();
+}
+
+// ── 채팅방 관리 ──
+function loadRooms(){
+  try{_rooms=JSON.parse(localStorage.getItem(SK_TALK)||'[]');}catch{_rooms=[];}
+}
+function saveRooms(){localStorage.setItem(SK_TALK,JSON.stringify(_rooms));}
+function uid(){return 'r_'+Math.random().toString(36).slice(2,10)+Date.now().toString(36);}
+
+function renderRooms(){
+  const el=document.getElementById('roomList');
+  if(!_rooms.length){el.innerHTML='<div class="empty">💬 채팅방이 없습니다.<br><small>하단 ✎ 버튼으로 새 방을 만드세요</small></div>';return;}
+  el.innerHTML=_rooms.slice().reverse().map(function(r){
+    const last=(r.messages||[]).slice(-1)[0];
+    return '<div class="room-item" onclick="openRoom(\''+r.id+'\')">'+
+      '<div class="room-avatar">💬</div>'+
+      '<div class="room-info">'+
+        '<div class="room-name">'+esc(r.name)+'</div>'+
+        '<div class="room-last">'+(last?esc(String(last.text||'').slice(0,40)):'메시지 없음')+'</div>'+
+      '</div>'+
+      '<div class="room-time">'+(last?fmtTime(last.at):'')+'</div>'+
+      '</div>';
+  }).join('');
+}
+
+function esc(s){return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');}
+function fmtTime(ts){if(!ts)return'';const d=new Date(ts);return d.toLocaleTimeString('ko-KR',{hour:'2-digit',minute:'2-digit'});}
+
+function showNewRoomDialog(){
+  const name=prompt('채팅방 이름:');
+  if(!name||!name.trim())return;
+  const room={id:uid(),name:name.trim(),messages:[],createdAt:Date.now()};
+  _rooms.push(room);saveRooms();renderRooms();
+  openRoom(room.id);
+}
+
+function openRoom(id){
+  _curRoom=_rooms.find(r=>r.id===id);
+  if(!_curRoom)return;
+  document.getElementById('roomListView').style.display='none';
+  const cr=document.getElementById('chatRoom');cr.style.display='flex';
+  document.getElementById('chatRoomName').textContent=_curRoom.name;
+  renderMessages();
+  document.getElementById('chatMessages').scrollTop=9999;
+}
+
+function closeRoom(){
+  _curRoom=null;
+  document.getElementById('chatRoom').style.display='none';
+  document.getElementById('roomListView').style.display='flex';
+  renderRooms();
+}
+
+function deleteRoom(){
+  if(!_curRoom||!confirm('"'+_curRoom.name+'" 채팅방을 삭제하시겠습니까?'))return;
+  _rooms=_rooms.filter(r=>r.id!==_curRoom.id);saveRooms();closeRoom();
+}
+
+function renderMessages(){
+  const el=document.getElementById('chatMessages');
+  if(!_curRoom){el.innerHTML='';return;}
+  const msgs=_curRoom.messages||[];
+  if(!msgs.length){el.innerHTML='<div class="empty">메시지가 없습니다.</div>';return;}
+  const myId=getMyId();
+  el.innerHTML=msgs.map(function(m){
+    const isMe=m.from===myId;
+    return '<div class="msg-row'+(isMe?' me':'')+'">'+
+      (!isMe?'<div class="msg-avatar">👤</div>':'')+
+      '<div class="msg-bubble">'+esc(m.text)+'</div>'+
+      '<div class="msg-time">'+fmtTime(m.at)+'</div>'+
+      (isMe?'<div class="msg-avatar" style="background:var(--bubble-me)">나</div>':'')+
+      '</div>';
+  }).join('');
+}
+
+function getMyId(){
+  try{
+    const s=JSON.parse(localStorage.getItem('stella_session_final_v82')||'null');
+    return s?.user?.id||s?.id||'me';
+  }catch{return 'me';}
+}
+
+function sendMsg(){
+  const inp=document.getElementById('chatInput');
+  const text=inp.value.trim();
+  if(!text||!_curRoom)return;
+  const msg={id:'m_'+Date.now(),from:getMyId(),text,at:Date.now()};
+  if(!_curRoom.messages)_curRoom.messages=[];
+  _curRoom.messages.push(msg);
+  const idx=_rooms.findIndex(r=>r.id===_curRoom.id);
+  if(idx!==-1)_rooms[idx]=_curRoom;
+  saveRooms();renderMessages();
+  inp.value='';inp.style.height='auto';
+  const el=document.getElementById('chatMessages');el.scrollTop=9999;
+
+  // 알림 (다른 사용자에게) - Push API는 서버 필요, 로컬 알림만
+  if(Notification.permission==='granted'){
+    try{new Notification('Stella Talk',{body:text,icon:'/icons/talk-192.png'});}catch{}
+  }
+  // Drive 저장
+  try{fetch('/api/stella?action=member-chat-save',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({roomId:_curRoom.id,title:_curRoom.name,userId:getMyId(),sender:getMyId(),message:text,members:[getMyId()]})}).catch(function(){});}catch{}
+}
+
+// 알림 권한 요청
+function requestNotification(){
+  if(Notification.permission==='default'){
+    Notification.requestPermission().then(function(p){
+      if(p==='granted')new Notification('Stella Talk',{body:'알림이 설정되었습니다.',icon:'/icons/talk-192.png'});
+    });
+  }
+}
+
+// PWA 설치
+var _dp=null;
+window.addEventListener('beforeinstallprompt',function(e){
+  e.preventDefault();_dp=e;
+  const b=document.createElement('button');
+  b.className='hbtn';b.textContent='⬇ 앱설치';b.style.cssText='position:fixed;bottom:140px;right:14px;z-index:99;border-radius:20px;padding:10px 16px;font-weight:900;box-shadow:0 4px 16px rgba(0,0,0,.2)';
+  b.onclick=function(){_dp.prompt();_dp.userChoice.then(function(){_dp=null;b.remove();});};
+  document.body.appendChild(b);
+});
+
+// SW 등록
+if('serviceWorker' in navigator)navigator.serviceWorker.register('/sw.js').catch(function(){});
+
+window.onload=function(){
+  applyTheme();loadRooms();renderRooms();
+  // 알림 권한 자동 요청
+  setTimeout(requestNotification,1500);
+};
+</script>
+</body></html>
