@@ -98,6 +98,21 @@ function buildSystemPrompt(system, searchContext) {
   return prompt;
 }
 
+function resolveOpenAIModel(model) {
+  const m = String(model || "").toLowerCase();
+  // chatgpt-5.5-latest, gpt-5.5 계열 → gpt-4o (아직 API 미지원)
+  if (m.includes("5.5") || m === "chatgpt-5.5-latest") return "gpt-4o";
+  // gpt-5 → gpt-4o (API 미지원)
+  if (m === "gpt-5") return "gpt-4o";
+  // 정식 지원 모델
+  if (m === "gpt-4.1") return "gpt-4.1";
+  if (m === "gpt-4.1-mini") return "gpt-4.1-mini";
+  if (m === "gpt-4o") return "gpt-4o";
+  if (m === "gpt-4o-mini") return "gpt-4o-mini";
+  // 기본값
+  return "gpt-4o";
+}
+
 function resolveClaudeModel(model) {
   const m = String(model || "").toLowerCase();
   if (m === "claude-opus-4-8" || m.includes("opus")) return "claude-opus-4-8";
@@ -110,7 +125,7 @@ function resolveClaudeModel(model) {
 async function callOpenAI({ model, system, history, message }) {
   const apiKey = process.env.OPENAI_API_KEY;
   if (!apiKey) throw new Error("OPENAI_API_KEY not configured");
-  const selectedModel = model === "gpt-5.5" || model.includes("5.5") ? "gpt-4o" : model;
+  const selectedModel = resolveOpenAIModel(model);
   const response = await fetch("https://api.openai.com/v1/chat/completions", {
     method: "POST",
     headers: { "Content-Type": "application/json", Authorization: `Bearer ${apiKey}` },
