@@ -1,6 +1,6 @@
 import { saveJsonToDrive, listJsonFromDrive, searchDrive, listDriveDirectory } from "../lib/drive-utils.js";
 import { getPlaceContext, getWeatherContext } from "../lib/place-weather-utils.js";
-import { getPool } from "../lib/db.js";
+import { getPool, sql } from "../lib/db.js";
 
 const ROUTE_ACTIONS = {
   "board-list": "board-list",
@@ -41,7 +41,15 @@ export default async function handler(req, res) {
       case "assistant-list": return await handleAssistantList(req, res);
       case "db-list":
       case "db-file-list": return await handleDbFileList(req, res);
-      case "init-db": return res.status(410).json({ ok: false, message: "init-db endpoint disabled. DB table setup is handled by signup/login APIs." });
+      case "init-db":
+      case "init-index": {
+        try {
+          const mod = await import("./init-index-db.js");
+          return await mod.default(req, res);
+        } catch (e) {
+          return res.status(500).json({ ok: false, message: "인덱스 초기화 실패", error: e.message });
+        }
+      }
       default: return res.status(400).json({ ok: false, message: "Unknown Stella action", action });
     }
   } catch (error) {
@@ -126,7 +134,22 @@ async function handleBoardSave(req, res) {
   const postId = safeId(body.postId || body.id || title, "post");
   if (!title && !content) return res.status(400).json({ ok: false, message: "제목 또는 내용을 입력하세요." });
   const data = { type: "boardPost", postId, title: title || "제목 없음", content, writer, userId, category, attachments: Array.isArray(body.attachments) ? body.attachments : [], createdAt: body.createdAt || new Date().toISOString(), updatedAt: new Date().toISOString() };
+  // 1) Google Drive에 원문 JSON 저장
   const saved = await saveJsonToDrive({ folderPath: ["Board", category], fileName: `${postId}.json`, data });
+  // 2) Azure SQL board_index에 인덱스 저장 (Drive 실패와 무관하게 보호)
+  try {
+    const pool = await getPool();
+    await pool.request().query(`IF OBJECT_ID('dbo.board_index','U') IS NULL CREATE TABLE dbo.board_index(id INT IDENTITY(1,1) PRIMARY KEY,user_id NVARCHAR(100) NOT NULL,post_id NVARCHAR(100) NOT NULL,category NVARCHAR(100) NULL,title NVARCHAR(255) NULL,writer NVARCHAR(100) NULL,drive_file_id NVARCHAR(255) NULL,drive_link NVARCHAR(1000) NULL,created_at DATETIME2 NOT NULL DEFAULT SYSUTCDATETIME(),updated_at DATETIME2 NOT NULL DEFAULT SYSUTCDATETIME())`);
+    await pool.request()
+      .input("user_id", sql.NVarChar(100), userId)
+      .input("post_id", sql.NVarChar(100), postId)
+      .input("category", sql.NVarChar(100), category)
+      .input("title", sql.NVarChar(255), data.title)
+      .input("writer", sql.NVarChar(100), writer)
+      .input("drive_file_id", sql.NVarChar(255), saved?.id || null)
+      .input("drive_link", sql.NVarChar(1000), saved?.webViewLink || null)
+      .query(`IF EXISTS(SELECT 1 FROM dbo.board_index WHERE post_id=@post_id) UPDATE dbo.board_index SET category=@category,title=@title,writer=@writer,drive_file_id=@drive_file_id,drive_link=@drive_link,updated_at=SYSUTCDATETIME() WHERE post_id=@post_id ELSE INSERT INTO dbo.board_index(user_id,post_id,category,title,writer,drive_file_id,drive_link) VALUES(@user_id,@post_id,@category,@title,@writer,@drive_file_id,@drive_link)`);
+  } catch (e) { /* 인덱스 실패해도 게시글 저장은 성공 처리 */ }
   return res.status(200).json({ ok: true, message: "게시글 저장 완료", saved, post: data });
 }
 async function handleBoardList(req, res) {
@@ -166,6 +189,19 @@ async function handleMemberChatSave(req, res) {
   const messageItem = { id: `msg_${Date.now()}`, sender, userId, message, createdAt: new Date().toISOString() };
   const data = { type: "memberChat", roomId, title, members, lastMessage: message, updatedAt: new Date().toISOString(), messages: Array.isArray(body.messages) ? [...body.messages, messageItem] : [messageItem] };
   const saved = await saveJsonToDrive({ folderPath: ["MemberChat"], fileName: `${roomId}.json`, data });
+  // Azure SQL member_chat_index 인덱스 저장
+  try {
+    const pool = await getPool();
+    await pool.request().query(`IF OBJECT_ID('dbo.member_chat_index','U') IS NULL CREATE TABLE dbo.member_chat_index(id INT IDENTITY(1,1) PRIMARY KEY,room_id NVARCHAR(100) NOT NULL,title NVARCHAR(255) NULL,members NVARCHAR(1000) NULL,last_message NVARCHAR(1000) NULL,drive_file_id NVARCHAR(255) NULL,drive_link NVARCHAR(1000) NULL,updated_at DATETIME2 NOT NULL DEFAULT SYSUTCDATETIME())`);
+    await pool.request()
+      .input("room_id", sql.NVarChar(100), roomId)
+      .input("title", sql.NVarChar(255), title)
+      .input("members", sql.NVarChar(1000), members.join(","))
+      .input("last_message", sql.NVarChar(1000), message.slice(0, 1000))
+      .input("drive_file_id", sql.NVarChar(255), saved?.id || null)
+      .input("drive_link", sql.NVarChar(1000), saved?.webViewLink || null)
+      .query(`IF EXISTS(SELECT 1 FROM dbo.member_chat_index WHERE room_id=@room_id) UPDATE dbo.member_chat_index SET title=@title,members=@members,last_message=@last_message,drive_file_id=@drive_file_id,drive_link=@drive_link,updated_at=SYSUTCDATETIME() WHERE room_id=@room_id ELSE INSERT INTO dbo.member_chat_index(room_id,title,members,last_message,drive_file_id,drive_link) VALUES(@room_id,@title,@members,@last_message,@drive_file_id,@drive_link)`);
+  } catch (e) { /* 인덱스 실패 무시 */ }
   return res.status(200).json({ ok: true, message: "회원 채팅 저장 완료", saved, room: data });
 }
 async function handleMemberChatList(req, res) {
@@ -202,3 +238,4 @@ async function handleDbFileList(req, res) {
 function mapDriveFile(file) {
   return { id: file.id, name: file.name, mimeType: file.mimeType, isFolder: file.isFolder || file.mimeType === "application/vnd.google-apps.folder", link: file.link || file.webViewLink, modifiedTime: file.modifiedTime, createdTime: file.createdTime, size: file.size || null };
 }
+
