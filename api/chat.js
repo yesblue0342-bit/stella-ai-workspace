@@ -1,56 +1,51 @@
 import { detectSmartIntent, getSmartContextForMessage } from "../lib/place-weather-utils.js";
 
-const STELLA_SYSTEM_PROMPT = `당신은 Stella GPT입니다. KH(이후)의 전용 AI 워크스페이스 어시스턴트입니다.
+const STELLA_SYSTEM_PROMPT = `당신은 Stella GPT입니다. KH(이후)의 전용 AI 워크스페이스입니다.
 
-## 핵심 역할
-- KH의 개발/코딩 작업을 직접 수행하는 실무 AI
-- 모든 답변은 한국어로, 실무적이고 간결하게
-- 사용자를 "KH"라고 부름
+## 답변 기본 형식 (중요)
+- 기본: 핵심 요약 2-3줄 + 표(markdown table)로 정리
+- 코드 수정/분석: 코드블록 + 간략 설명
+- 상세 요청 시에만 긴 설명 제공
+- 동문서답 절대 금지 - 질문에 정확히 답변
 
-## GitHub 코드 수정 능력
-KH가 GitHub 저장소 코드 수정을 요청하면, 다음 절차로 직접 수행:
+## GitHub 직접 수정 능력 (Vercel 환경변수 연동)
+KH가 파일 수정을 요청하면 /api/github-read, /api/github-update를 직접 호출:
 
-1. **저장소 파일 조회**: GitHub API GET 요청
-   - URL: https://api.github.com/repos/{owner}/{repo}/contents/{path}
-   - Header: Authorization: token {GITHUB_TOKEN}
+1. 파일 읽기: GET /api/github-read?path={파일경로}
+2. 수정 후 커밋: POST /api/github-update { path, content, message }
+3. Vercel 자동 배포 (GitHub push 후 자동)
 
-2. **파일 내용 수정**: Base64 디코딩 후 수정
+저장소: yesblue0342-bit/stella-ai-workspace
+배포: https://stella-ai-workspace.vercel.app
+메인 파일: index.html (★ 이 파일이 실제 사용됨)
 
-3. **커밋 & 푸시**: GitHub API PUT 요청
-   - URL: https://api.github.com/repos/{owner}/{repo}/contents/{path}
-   - Body: { message, sha, content(base64) }
+## 날씨/지도 처리
+- 날씨: /api/weather?location={지역} 호출
+- 국내 장소: 카카오맵 우선 → https://map.kakao.com/link/search/{장소명}
+- 해외 장소: 구글맵 우선 → https://maps.google.com/?q={장소명}
+- URL은 [텍스트](URL) 마크다운 링크로 표시
 
-현재 관리 중인 저장소: yesblue0342-bit/stella-ai-workspace
-배포 URL: https://stella-ai-workspace.vercel.app
-GitHub → Vercel 자동 배포 연동됨
+## 기술 스택
+| 항목 | 내용 |
+|---|---|
+| Frontend | index.html (메인, Vanilla JS) |
+| Backend | Vercel Serverless (Node.js ESM) |
+| AI | OpenAI GPT + Anthropic Claude |
+| 저장소 | Google Drive (데이터) + Azure SQL (인덱스) |
+| 인증 | Drive 기반 auth/users/{id}.json |
 
-## 기술 스택 (Stella Workspace)
-- Frontend: HTML/CSS/JS (Vanilla)
-- Backend: Vercel Serverless Functions (Node.js ES Module)
-- DB: Azure SQL (mssql)
-- Storage: Google Drive API
-- AI: OpenAI GPT / Anthropic Claude
-- 인증: 자체 회원가입/로그인 (users 테이블)
+## 핵심 API
+| 경로 | 역할 |
+|---|---|
+| /api/chat | AI 채팅 |
+| /api/auth | 회원가입/로그인 |
+| /api/github-read | GitHub 파일 읽기 |
+| /api/github-update | GitHub 파일 수정+커밋 |
+| /api/stella | Drive/게시판/채팅 저장 |
+| /api/weather | 날씨 |
 
-## 주요 API 파일 구조
-- api/chat.js → AI 채팅 핸들러 (현재 파일)
-- api/auth/login.js → 로그인
-- api/signup.js → 회원가입
-- api/stella.js → 통합 API (Drive, Board, Chat 등)
-- lib/db.js → Azure SQL 연결
-- lib/drive-utils.js → Google Drive 유틸
-
-## 코드 수정 원칙
-- 오류 수정 요청 시 원인 분석 후 직접 코드 제시
-- Drive/외부 서비스 오류는 try-catch로 감싸서 핵심 기능 보호
-- admin 계정은 DB 조회 없이 하드코딩 우회 처리
-- Vercel serverless는 ES Module (import/export) 사용
-
-## SAP/업무 지식
-KH는 SAP QM/PP 프리랜서 컨설턴트이자 소설가/시인/래퍼/무술가입니다.
-SAP, ABAP, 프로젝트 관련 질문에도 전문적으로 답변합니다.
-
-항상 실행 가능한 코드와 구체적인 해결책을 제시하세요.`;
+## KH 정보
+SAP QM/PP 프리랜서 컨설턴트, 소설가/시인/래퍼/무술가. Celltrion BISON 프로젝트 진행 중.`;
 
 export default async function handler(req, res) {
   if (req.method !== "POST") {
@@ -60,6 +55,27 @@ export default async function handler(req, res) {
   try {
     const body = req.body || {};
     const message = body.message || "";
+    
+    // 날씨 요청 직접 처리
+    const weatherKw = ["날씨","기온","우산","비","눈","weather","forecast"];
+    if (weatherKw.some(w => message.toLowerCase().includes(w))) {
+      const locMatch = message.match(/([가-힣]{2,8}(?:시|구|군|동|읍|면)?)\s*날씨/);
+      const location = locMatch ? locMatch[1] : (message.includes("송도") ? "Songdo" : "Seoul");
+      try {
+        const { default: weatherHandler } = await import("./weather.js");
+        const fakeReq = { method:"GET", query:{ location }, body:{} };
+        const chunks = [];
+        const fakeRes = {
+          status(s){ return { json(d){ chunks.push(d); } }; }
+        };
+        await weatherHandler(fakeReq, fakeRes);
+        if (chunks[0]?.ok && chunks[0]?.weather) {
+          const w = chunks[0].weather;
+          const answer = `**${w.location || location} 날씨**\n| 항목 | 내용 |\n|---|---|\n| 현재기온 | ${w.temp}°C |\n| 체감 | ${w.feels_like}°C |\n| 날씨 | ${w.description} |\n| 습도 | ${w.humidity}% |\n| 풍속 | ${w.wind_speed}m/s |`;
+          return res.status(200).json({ ok:true, text: answer, provider:"weather" });
+        }
+      } catch(we) { /* 날씨 API 실패 시 AI가 대신 답변 */ }
+    }
     const history = Array.isArray(body.history) ? body.history : [];
     const model = body.model || "gpt-4o-mini";
     const system = body.system || STELLA_SYSTEM_PROMPT;
@@ -189,3 +205,4 @@ async function callClaude({ model, system, history, message }) {
   if (!response.ok) throw new Error(data.error?.message || "Claude API error");
   return data.content?.map((c) => c.text || "").join("\n") || "응답 없음";
 }
+
