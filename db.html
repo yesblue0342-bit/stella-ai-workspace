@@ -5,49 +5,61 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <style>
 *{box-sizing:border-box;margin:0;padding:0}
-body{font-family:system-ui,'Noto Sans KR',sans-serif;background:#0d1117;color:#e6edf3;min-height:100dvh;display:flex;flex-direction:column}
-.top{display:flex;align-items:center;gap:8px;padding:12px 14px;background:#161b22;border-bottom:1px solid #30363d;flex-wrap:wrap;flex-shrink:0}
-.top h1{font-size:1rem;font-weight:900;color:#e6edf3}
-.btn{border:1px solid #30363d;background:#21262d;color:#c9d1d9;border-radius:10px;padding:6px 13px;cursor:pointer;font-size:.82rem;font-weight:700;white-space:nowrap}
-.btn:hover{background:#2d333b}.btn:active{opacity:.7}
-.btn.danger{border-color:#f85149;color:#f85149}
-.btn.danger:hover{background:#3d1a1a}
-.btn.primary{background:#1f6feb;color:#fff;border-color:#1f6feb}
-.btn.primary:hover{background:#388bfd}
-.breadcrumb{padding:8px 14px;font-size:.8rem;color:#8b949e;background:#161b22;border-bottom:1px solid #21262d;display:flex;align-items:center;gap:4px;flex-wrap:wrap;flex-shrink:0}
-.breadcrumb .bc-seg{cursor:pointer;color:#58a6ff;padding:2px 4px;border-radius:6px}
-.breadcrumb .bc-seg:hover{background:#1f6feb22}
-.breadcrumb .bc-sep{color:#484f58}
-.toolbar{display:flex;gap:6px;padding:8px 14px;background:#0d1117;border-bottom:1px solid #21262d;flex-wrap:wrap;flex-shrink:0;align-items:center}
-.filter-input{background:#161b22;border:1px solid #30363d;border-radius:10px;padding:7px 12px;color:#e6edf3;font-size:.82rem;flex:1;min-width:0}
-.filter-input::placeholder{color:#484f58}
-.status-bar{padding:6px 14px;font-size:.75rem;color:#8b949e;background:#161b22;border-bottom:1px solid #21262d;flex-shrink:0}
+:root{--bg:#0d1117;--bg2:#161b22;--bg3:#21262d;--border:#30363d;--text:#e6edf3;--text2:#8b949e;--text3:#c9d1d9;--accent:#58a6ff;--danger:#f85149;--primary:#1f6feb}
+body.light{--bg:#f6f8fa;--bg2:#fff;--bg3:#f3f4f6;--border:#d1d5db;--text:#111827;--text2:#6b7280;--text3:#374151;--accent:#1f6feb;--danger:#dc2626;--primary:#1f6feb}
+body{font-family:system-ui,'Noto Sans KR',sans-serif;background:var(--bg);color:var(--text);min-height:100dvh;display:flex;flex-direction:column;transition:background .2s,color .2s}
+.top{display:flex;align-items:center;gap:6px;padding:10px 12px;background:var(--bg2);border-bottom:1px solid var(--border);flex-wrap:wrap;flex-shrink:0}
+.top h1{font-size:.95rem;font-weight:900;color:var(--text)}
+.btn{border:1px solid var(--border);background:var(--bg3);color:var(--text3);border-radius:9px;padding:6px 12px;cursor:pointer;font-size:.8rem;font-weight:700;white-space:nowrap;transition:background .15s}
+.btn:hover{opacity:.85}.btn:active{opacity:.6}
+.btn.primary{background:var(--bg3);color:var(--text);border-color:var(--border)}
+.btn.danger{border-color:var(--danger);color:var(--danger)}
+.btn.upload-btn{background:var(--bg3);color:var(--text);border:1px solid var(--border)}
+.breadcrumb{padding:7px 12px;font-size:.78rem;color:var(--text2);background:var(--bg2);border-bottom:1px solid var(--border);display:flex;align-items:center;gap:4px;flex-wrap:wrap;flex-shrink:0}
+.bc-seg{cursor:pointer;color:var(--accent);padding:2px 4px;border-radius:5px}.bc-seg:hover{opacity:.75}
+.bc-sep{color:var(--border)}
+.toolbar{display:flex;gap:6px;padding:7px 12px;background:var(--bg);border-bottom:1px solid var(--border);flex-wrap:wrap;flex-shrink:0;align-items:center}
+.filter-in{background:var(--bg2);border:1px solid var(--border);border-radius:9px;padding:6px 11px;color:var(--text);font-size:.8rem;flex:1;min-width:0}
+.filter-in::placeholder{color:var(--text2)}
+.sel-bar{display:none;gap:6px;padding:6px 12px;background:var(--bg2);border-bottom:1px solid var(--border);align-items:center;font-size:.8rem;color:var(--text2);flex-shrink:0}
+.sel-bar.show{display:flex}
+.status{padding:5px 12px;font-size:.73rem;color:var(--text2);background:var(--bg2);border-bottom:1px solid var(--border);flex-shrink:0}
 .file-list{flex:1;overflow-y:auto}
-.file-row{display:flex;align-items:center;gap:10px;padding:10px 14px;border-bottom:1px solid #21262d;cursor:pointer;transition:background .1s}
-.file-row:hover{background:#161b22}
-.file-row.selected{background:#1f6feb18}
-.file-icon{font-size:1.2rem;width:26px;text-align:center;flex-shrink:0}
+.file-row{display:flex;align-items:center;gap:9px;padding:9px 12px;border-bottom:1px solid var(--border);cursor:pointer;transition:background .1s}
+.file-row:hover{background:var(--bg2)}.file-row.sel{background:var(--bg3)}
+.file-chk{width:16px;height:16px;cursor:pointer;accent-color:var(--primary);flex-shrink:0}
+.file-icon{font-size:1.15rem;width:24px;text-align:center;flex-shrink:0}
 .file-info{flex:1;min-width:0}
-.file-name{font-size:.88rem;font-weight:700;color:#c9d1d9;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.file-meta{font-size:.73rem;color:#6b7280;margin-top:2px}
-.file-actions{display:flex;gap:4px;flex-shrink:0;opacity:0;transition:opacity .15s}
-.file-row:hover .file-actions{opacity:1}
-.act{background:#21262d;color:#c9d1d9;border:1px solid #30363d;border-radius:7px;padding:4px 9px;cursor:pointer;font-size:.73rem}
-.act.del{border-color:#f85149;color:#f85149}
-.act:hover{background:#2d333b}
-.empty{padding:40px;text-align:center;color:#484f58;font-size:.9rem}
-#gate{position:fixed;inset:0;background:#0d1117;display:flex;align-items:center;justify-content:center;z-index:9999;padding:24px}
-.gate-card{width:min(400px,100%);background:#161b22;border:1px solid #30363d;border-radius:20px;padding:28px}
-.gate-card h2{margin:0 0 6px;color:#e6edf3;font-size:1.2rem}
-.gate-card p{margin:0 0 16px;color:#8b949e;font-size:.85rem}
-.gate-card input{width:100%;background:#0d1117;border:1px solid #30363d;border-radius:12px;padding:12px;color:#e6edf3;font-size:.92rem;margin-bottom:10px}
-.gate-card input::placeholder{color:#484f58}
-.err{color:#f85149;font-size:.8rem;min-height:16px;margin-top:4px}
-/* 업로드 오버레이 */
-.upload-overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,.7);z-index:1000;align-items:center;justify-content:center}
-.upload-overlay.show{display:flex}
-.upload-card{background:#161b22;border:1px solid #30363d;border-radius:16px;padding:24px;width:min(360px,90%)}
-.upload-card h3{margin:0 0 14px;font-size:1rem;color:#e6edf3}
+.file-name{font-size:.86rem;font-weight:700;color:var(--text3);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.file-meta{font-size:.72rem;color:var(--text2);margin-top:1px}
+.file-acts{display:flex;gap:4px;flex-shrink:0;opacity:0;transition:opacity .15s}
+.file-row:hover .file-acts{opacity:1}
+.act{background:var(--bg3);color:var(--text3);border:1px solid var(--border);border-radius:7px;padding:3px 8px;cursor:pointer;font-size:.72rem}
+.act.del{border-color:var(--danger);color:var(--danger)}
+.empty{padding:40px;text-align:center;color:var(--text2);font-size:.88rem}
+/* Gate */
+#gate{position:fixed;inset:0;background:var(--bg);display:flex;align-items:center;justify-content:center;z-index:9999;padding:20px}
+.gate-card{width:min(380px,100%);background:var(--bg2);border:1px solid var(--border);border-radius:18px;padding:24px}
+.gate-card h2{color:var(--text);margin-bottom:6px;font-size:1.15rem}
+.gate-card p{color:var(--text2);font-size:.83rem;margin-bottom:14px}
+.gate-card input{width:100%;background:var(--bg);border:1px solid var(--border);border-radius:10px;padding:11px;color:var(--text);font-size:.9rem;margin-bottom:8px}
+.gate-card input::placeholder{color:var(--text2)}
+.gate-btn{width:100%;padding:11px;border-radius:10px;cursor:pointer;font-weight:800;border:1px solid var(--border);font-size:.9rem;margin-top:4px;background:var(--bg3);color:var(--text)}
+.gate-btn.pri{background:var(--primary);color:#fff;border-color:var(--primary)}
+.err{color:var(--danger);font-size:.78rem;min-height:16px;margin-top:4px}
+/* Upload overlay */
+.upoverlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,.65);z-index:1000;align-items:center;justify-content:center}
+.upoverlay.on{display:flex}
+.upcard{background:var(--bg2);border:1px solid var(--border);border-radius:14px;padding:22px;width:min(340px,90%);text-align:center}
+.upcard h3{color:var(--text);margin-bottom:10px;font-size:.95rem}
+.upcard p{color:var(--text2);font-size:.82rem}
+/* Move modal */
+.mvmodal{display:none;position:fixed;inset:0;background:rgba(0,0,0,.65);z-index:1000;align-items:center;justify-content:center}
+.mvmodal.on{display:flex}
+.mvcard{background:var(--bg2);border:1px solid var(--border);border-radius:14px;padding:20px;width:min(340px,90%)}
+.mvcard h3{color:var(--text);margin-bottom:10px;font-size:.92rem}
+.mvcard input{width:100%;background:var(--bg);border:1px solid var(--border);border-radius:9px;padding:9px;color:var(--text);font-size:.85rem;margin-bottom:10px}
+.mvcard input::placeholder{color:var(--text2)}
 </style>
 </head>
 <body>
@@ -55,10 +67,10 @@ body{font-family:system-ui,'Noto Sans KR',sans-serif;background:#0d1117;color:#e
   <div class="gate-card">
     <h2>🗄 Stella DB</h2>
     <p>관리자 계정으로 로그인하세요</p>
-    <input id="gId" placeholder="아이디 (admin 또는 yesblue0342)" autocomplete="username" onkeydown="if(event.key==='Enter')dbLogin()">
+    <input id="gId" placeholder="아이디 (admin / yesblue0342)" autocomplete="username" onkeydown="if(event.key==='Enter')dbLogin()">
     <input id="gPw" type="password" placeholder="비밀번호" autocomplete="current-password" onkeydown="if(event.key==='Enter')dbLogin()">
-    <button class="btn primary" style="width:100%;margin-top:4px;padding:12px" onclick="dbLogin()">접속</button>
-    <button class="btn" style="width:100%;margin-top:8px" onclick="location.href='/'">Stella GPT로 돌아가기</button>
+    <button class="gate-btn pri" onclick="dbLogin()">접속</button>
+    <button class="gate-btn" onclick="location.href='/'">Stella GPT로 돌아가기</button>
     <div class="err" id="gErr"></div>
   </div>
 </div>
@@ -66,47 +78,85 @@ body{font-family:system-ui,'Noto Sans KR',sans-serif;background:#0d1117;color:#e
 <div id="appWrap" style="display:none;flex-direction:column;height:100dvh">
   <div class="top">
     <h1>🗄 Stella DB</h1>
-    <span id="userLabel" style="font-size:.75rem;color:#8b949e"></span>
+    <span id="userLabel" style="font-size:.72rem;color:var(--text2)"></span>
     <button class="btn" onclick="goUp()" id="upBtn">⬆ 상위</button>
     <button class="btn" onclick="refresh()">↻</button>
-    <button class="btn" onclick="location.href='/'" title="Stella GPT">GPT</button>
+    <button class="btn" onclick="toggleTheme()" id="themeBtn">☀️</button>
+    <button class="btn" onclick="location.href='/'">GPT</button>
     <button class="btn" onclick="dbLogout()">나가기</button>
   </div>
   <div class="breadcrumb" id="breadcrumb"></div>
-  <div class="toolbar">
-    <input class="filter-input" id="filterInput" placeholder="파일/폴더 필터..." oninput="renderFiles()">
-    <button class="btn" onclick="mkdirPrompt()">📁＋ 폴더</button>
-    <button class="btn primary" onclick="document.getElementById('fileUploadInput').click()">⬆ 업로드</button>
-    <input type="file" id="fileUploadInput" multiple hidden onchange="uploadFiles(this.files)">
+  <!-- 선택 작업 바 -->
+  <div class="sel-bar" id="selBar">
+    <span id="selCount">0개 선택</span>
+    <button class="btn danger" onclick="deleteSelected()">🗑 삭제</button>
+    <button class="btn" onclick="moveSelected()">📂 이동</button>
+    <button class="btn" onclick="clearSel()">✕ 해제</button>
   </div>
-  <div class="status-bar" id="statusBar">로딩 중...</div>
+  <div class="toolbar">
+    <input class="filter-in" id="filterIn" placeholder="파일/폴더 필터..." oninput="renderFiles()">
+    <button class="btn" onclick="mkdirPrompt()">📁＋ 폴더</button>
+    <button class="btn upload-btn" onclick="document.getElementById('fileUploadIn').click()">⬆ 업로드</button>
+    <input type="file" id="fileUploadIn" multiple hidden onchange="uploadFiles(this.files)">
+  </div>
+  <div class="status" id="statusBar">로딩 중...</div>
   <div class="file-list" id="fileList"></div>
 </div>
 
 <!-- 업로드 진행 오버레이 -->
-<div class="upload-overlay" id="uploadOverlay">
-  <div class="upload-card">
-    <h3>업로드 중...</h3>
-    <div id="uploadProgress" style="color:#8b949e;font-size:.85rem;margin-top:8px"></div>
+<div class="upoverlay" id="upoverlay">
+  <div class="upcard">
+    <h3>⬆ 업로드 중...</h3>
+    <p id="upProgress">준비 중...</p>
+  </div>
+</div>
+
+<!-- 이동 모달 -->
+<div class="mvmodal" id="mvmodal">
+  <div class="mvcard">
+    <h3>📂 폴더 이동</h3>
+    <p style="color:var(--text2);font-size:.8rem;margin-bottom:10px">이동할 폴더 ID를 입력하세요 (Stella DB에서 폴더를 먼저 탐색하세요)</p>
+    <input id="mvTargetId" placeholder="이동할 폴더 ID">
+    <div style="display:flex;gap:6px">
+      <button class="btn pri" onclick="confirmMove()" style="flex:1">이동</button>
+      <button class="btn" onclick="document.getElementById('mvmodal').classList.remove('on')" style="flex:1">취소</button>
+    </div>
   </div>
 </div>
 
 <script>
 const SK='stella_session_final_v82';
-const DB_ADMINS=['admin','admin@stella.local','yesblue0342','yesblue0342@naver.com','yesblue0342@gmail.com','김경훈','이후'];
-let _user=null, _stack=[], _files=[], _currentFolderId='', _sortKey='name';
+const ADMINS=['admin','admin@stella.local','yesblue0342','yesblue0342@naver.com','yesblue0342@gmail.com','김경훈','이후'];
+let _user=null,_stack=[],_files=[],_curId='',_sel=new Set(),_theme='dark';
 
-function isAdmin(u){if(!u)return false;const id=String(u.id||'').toLowerCase(),em=String(u.email||'').toLowerCase();return DB_ADMINS.some(a=>a.toLowerCase()===id||a.toLowerCase()===em)||id==='admin'||String(u.role)==='admin';}
+// ── 유틸 ──
+function isAdmin(u){if(!u)return false;const id=String(u.id||'').toLowerCase(),em=String(u.email||'').toLowerCase();return ADMINS.some(a=>a.toLowerCase()===id||a.toLowerCase()===em)||id==='admin'||String(u.role)==='admin';}
 function getSession(){try{const s=JSON.parse(localStorage.getItem(SK)||'null');if(s&&s.user)return s.user;}catch(e){}return null;}
 function saveSession(u){localStorage.setItem(SK,JSON.stringify({id:u.id,user:u,savedAt:-1}));}
 function esc(s){return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');}
 function fmtDate(d){if(!d)return'';const dt=new Date(d);return dt.toLocaleDateString('ko-KR')+' '+dt.toLocaleTimeString('ko-KR',{hour:'2-digit',minute:'2-digit'});}
 function fmtSize(s){if(!s)return'';const n=Number(s);if(n<1024)return n+'B';if(n<1048576)return(n/1024).toFixed(1)+'KB';return(n/1048576).toFixed(1)+'MB';}
-function getIcon(f){if(f.isFolder)return'📁';const n=String(f.name||'');if(n.endsWith('.json'))return'📋';if(n.endsWith('.html'))return'🌐';if(n.endsWith('.js'))return'⚡';if(n.endsWith('.pdf'))return'📄';if(n.endsWith('.png')||n.endsWith('.jpg')||n.endsWith('.jpeg'))return'🖼';if(n.endsWith('.xlsx')||n.endsWith('.csv'))return'📊';if(n.endsWith('.mp4')||n.endsWith('.mov'))return'🎬';return'📃';}
+function getIcon(f){if(f.isFolder)return'📁';const n=String(f.name||'');if(n.endsWith('.json'))return'📋';if(n.endsWith('.html'))return'🌐';if(n.endsWith('.js'))return'⚡';if(n.endsWith('.pdf'))return'📄';if(/\.(png|jpg|jpeg|gif|webp)$/.test(n))return'🖼';if(/\.(xlsx|csv|xls)$/.test(n))return'📊';if(/\.(mp4|mov|avi)$/.test(n))return'🎬';if(/\.(zip|tar|gz)$/.test(n))return'📦';return'📃';}
+function status(t){document.getElementById('statusBar').textContent=t;}
+function sleep(ms){return new Promise(r=>setTimeout(r,ms));}
 
+// ── 테마 ──
+function toggleTheme(){
+  _theme=_theme==='dark'?'light':'dark';
+  document.body.classList.toggle('light',_theme==='light');
+  document.getElementById('themeBtn').textContent=_theme==='dark'?'☀️':'🌙';
+  localStorage.setItem('stella_db_theme',_theme);
+}
+function applyTheme(){
+  const t=localStorage.getItem('stella_db_theme')||'dark';
+  _theme=t;
+  document.body.classList.toggle('light',t==='light');
+  document.getElementById('themeBtn').textContent=t==='dark'?'☀️':'🌙';
+}
+
+// ── 로그인 ──
 async function dbLogin(){
-  const id=document.getElementById('gId').value.trim();
-  const pw=document.getElementById('gPw').value;
+  const id=document.getElementById('gId').value.trim(),pw=document.getElementById('gPw').value;
   const err=document.getElementById('gErr');
   if(!id||!pw){err.textContent='아이디와 비밀번호를 입력하세요.';return;}
   err.textContent='접속 중...';
@@ -122,171 +172,189 @@ async function dbLogin(){
     saveSession(d.user);enterApp(d.user);
   }catch(e){err.textContent=e.message;}
 }
-
 function enterApp(u){
   _user=u;
   document.getElementById('gate').style.display='none';
-  const aw=document.getElementById('appWrap');
-  aw.style.display='flex';
+  const aw=document.getElementById('appWrap');aw.style.display='flex';
   document.getElementById('userLabel').textContent='관리자: '+(u.name||u.id);
+  applyTheme();
   loadFolder('','StellaGPT');
 }
-
 function dbLogout(){localStorage.removeItem(SK);location.reload();}
 
-// ── 폴더 로드 ──
-async function loadFolder(folderId, name){
-  document.getElementById('statusBar').textContent='로딩 중...';
+// ── 폴더 탐색 ──
+async function loadFolder(folderId,name){
+  status('로딩 중...');
   document.getElementById('fileList').innerHTML='';
-  _currentFolderId=folderId||'';
+  clearSel();
+  _curId=folderId||'';
   try{
     const url='/api/drive-list?scope=StellaGPT'+(folderId?'&folderId='+encodeURIComponent(folderId):'');
     const r=await fetch(url,{cache:'no-store'});
     const d=await r.json();
-    if(!d.ok){document.getElementById('statusBar').textContent='오류: '+(d.message||'로드 실패');return;}
+    if(!d.ok){status('오류: '+(d.message||'로드 실패'));return;}
     _files=Array.isArray(d.files)?d.files:[];
     const cid=folderId||'ROOT';
-    if(!_stack.length||_stack[_stack.length-1].id!==cid){
-      _stack.push({id:cid,name:name||folderId||'StellaGPT'});
-    }
-    renderBreadcrumb();
-    renderFiles();
-    document.getElementById('statusBar').textContent='📁 '+(name||'StellaGPT')+' — '+_files.length+'개 항목';
-  }catch(e){document.getElementById('statusBar').textContent='오류: '+e.message;}
+    if(!_stack.length||_stack[_stack.length-1].id!==cid)_stack.push({id:cid,name:name||folderId||'StellaGPT'});
+    renderBreadcrumb();renderFiles();
+    status('📁 '+(_stack[_stack.length-1]?.name||'StellaGPT')+' — '+_files.length+'개 항목');
+  }catch(e){status('오류: '+e.message);}
 }
-
 function renderBreadcrumb(){
-  const el=document.getElementById('breadcrumb');
-  el.innerHTML=_stack.map(function(s,i){
+  document.getElementById('breadcrumb').innerHTML=_stack.map(function(s,i){
     return '<span class="bc-seg" onclick="gotoStack('+i+')">'+esc(s.name)+'</span>'+(i<_stack.length-1?'<span class="bc-sep">›</span>':'');
   }).join('');
   document.getElementById('upBtn').disabled=_stack.length<=1;
 }
+function gotoStack(idx){_stack=_stack.slice(0,idx+1);const s=_stack.pop();loadFolder(s.id==='ROOT'?'':s.id,s.name);}
+function goUp(){if(_stack.length<=1)return;_stack.pop();const s=_stack.pop();loadFolder(s.id==='ROOT'?'':s.id,s.name);}
+function refresh(){if(!_stack.length)return;const s=_stack.pop();loadFolder(s.id==='ROOT'?'':s.id,s.name);}
 
-function gotoStack(idx){
-  _stack=_stack.slice(0,idx+1);
-  const s=_stack.pop();
-  loadFolder(s.id==='ROOT'?'':s.id,s.name);
-}
-
-function goUp(){
-  if(_stack.length<=1)return;
-  _stack.pop();
-  const s=_stack.pop();
-  loadFolder(s.id==='ROOT'?'':s.id,s.name);
-}
-
-function refresh(){
-  if(!_stack.length)return;
-  const s=_stack.pop();
-  loadFolder(s.id==='ROOT'?'':s.id,s.name);
-}
-
+// ── 파일 렌더 ──
 function renderFiles(){
-  const q=(document.getElementById('filterInput').value||'').toLowerCase();
-  let list=Array.isArray(_files)?_files.filter(function(f){return !q||String(f.name||'').toLowerCase().includes(q);}):[];
+  const q=(document.getElementById('filterIn').value||'').toLowerCase();
+  let list=Array.isArray(_files)?_files.filter(f=>!q||String(f.name||'').toLowerCase().includes(q)):[];
   list=list.slice().sort(function(a,b){
-    const af=a.isFolder||false,bf=b.isFolder||false;
-    if(af!==bf)return af?-1:1;
-    if(_sortKey==='date')return new Date(b.modifiedTime||0)-new Date(a.modifiedTime||0);
+    if(a.isFolder!==b.isFolder)return a.isFolder?-1:1;
     return String(a.name||'').localeCompare(String(b.name||''));
   });
   const el=document.getElementById('fileList');
   if(!list.length){el.innerHTML='<div class="empty">📭 항목이 없습니다.</div>';return;}
   el.innerHTML=list.map(function(f){
-    const isFolder=f.isFolder||false;
-    return '<div class="file-row" onclick="openItem(\''+esc(f.id)+'\',\''+esc(f.name)+'\','+isFolder+')">'
-      +'<div class="file-icon">'+getIcon(f)+'</div>'
-      +'<div class="file-info"><div class="file-name">'+esc(f.name||'(이름없음)')+'</div>'
-      +'<div class="file-meta">'+fmtDate(f.modifiedTime)+(f.size?' · '+fmtSize(f.size):'')+'</div></div>'
-      +'<div class="file-actions">'
-      +'<button class="act" onclick="event.stopPropagation();renameItem(\''+esc(f.id)+'\',\''+esc(f.name)+'\')">✏️</button>'
-      +'<button class="act del" onclick="event.stopPropagation();deleteItem(\''+esc(f.id)+'\',\''+esc(f.name)+'\')">🗑</button>'
-      +'</div></div>';
+    const checked=_sel.has(f.id)?'checked':'';
+    return '<div class="file-row'+(checked?' sel':'')+'" id="row_'+esc(f.id)+'">'
+      +'<input type="checkbox" class="file-chk" data-id="'+esc(f.id)+'" '+checked+' onclick="event.stopPropagation();toggleSel(\''+esc(f.id)+'\')">'
+      +'<div class="file-icon" onclick="openItem(\''+esc(f.id)+'\',\''+esc(f.name)+'\','+!!f.isFolder+')">'+getIcon(f)+'</div>'
+      +'<div class="file-info" onclick="openItem(\''+esc(f.id)+'\',\''+esc(f.name)+'\','+!!f.isFolder+')">'
+        +'<div class="file-name">'+esc(f.name||'(이름없음)')+'</div>'
+        +'<div class="file-meta">'+fmtDate(f.modifiedTime)+(f.size?' · '+fmtSize(f.size):'')+'</div>'
+      +'</div>'
+      +'<div class="file-acts">'
+        +'<button class="act" onclick="event.stopPropagation();renameItem(\''+esc(f.id)+'\',\''+esc(f.name)+'\')">✏️</button>'
+        +'<button class="act del" onclick="event.stopPropagation();deleteItem(\''+esc(f.id)+'\',\''+esc(f.name)+'\')">🗑</button>'
+      +'</div>'
+      +'</div>';
   }).join('');
 }
-
 function openItem(id,name,isFolder){
   if(isFolder){loadFolder(id,name);}
-  else{copyToClipboard(name);document.getElementById('statusBar').textContent='📋 파일명 복사: '+name;}
+  else{
+    navigator.clipboard.writeText(name).catch(function(){});
+    status('📋 복사됨: '+name);
+  }
 }
 
-function copyToClipboard(text){
-  navigator.clipboard.writeText(text).catch(function(){
-    const el=document.createElement('textarea');el.value=text;el.style.position='fixed';el.style.opacity='0';
-    document.body.appendChild(el);el.select();document.execCommand('copy');document.body.removeChild(el);
-  });
+// ── 선택 ──
+function toggleSel(id){
+  if(_sel.has(id))_sel.delete(id);else _sel.add(id);
+  const row=document.getElementById('row_'+id);
+  if(row)row.classList.toggle('sel',_sel.has(id));
+  updateSelBar();
+}
+function clearSel(){_sel.clear();document.querySelectorAll('.file-chk').forEach(function(c){c.checked=false;});document.querySelectorAll('.file-row').forEach(function(r){r.classList.remove('sel');});updateSelBar();}
+function updateSelBar(){
+  const bar=document.getElementById('selBar');
+  document.getElementById('selCount').textContent=_sel.size+'개 선택';
+  bar.classList.toggle('show',_sel.size>0);
 }
 
-// ── 폴더 생성 ──
-async function mkdirPrompt(){
-  const name=prompt('생성할 폴더 이름을 입력하세요:');
-  if(!name||!name.trim())return;
-  const parentId=_currentFolderId||(_files[0]?.parents?.[0]||'');
-  if(!parentId){alert('부모 폴더 ID를 알 수 없습니다. 폴더 안에서 실행하세요.');return;}
-  try{
-    const r=await fetch('/api/drive-manage?action=mkdir',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({parentId,name:name.trim()})});
-    const d=await r.json();
-    if(d.ok){refresh();document.getElementById('statusBar').textContent='📁 폴더 생성: '+name;}
-    else{alert('폴더 생성 실패: '+(d.error||d.message));}
-  }catch(e){alert('오류: '+e.message);}
-}
-
-// ── 파일 삭제 ──
+// ── 삭제 ──
 async function deleteItem(fileId,name){
-  if(!confirm('"'+name+'"을(를) 삭제(휴지통)하시겠습니까?'))return;
-  try{
-    const r=await fetch('/api/drive-manage?action=delete',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({fileId})});
+  if(!confirm('"'+name+'" 삭제하시겠습니까?'))return;
+  const r=await fetch('/api/drive-manage?action=delete',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({fileId})});
+  const d=await r.json();
+  if(d.ok){refresh();status('🗑 삭제됨: '+name);}
+  else alert('삭제 실패: '+(d.error||d.message));
+}
+async function deleteSelected(){
+  if(!_sel.size)return;
+  if(!confirm(_sel.size+'개를 삭제하시겠습니까?'))return;
+  const r=await fetch('/api/drive-manage?action=deleteMany',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({fileIds:[..._sel]})});
+  const d=await r.json();
+  if(d.ok){status('🗑 '+d.deleted+'개 삭제 완료');clearSel();refresh();}
+  else alert('삭제 실패: '+(d.error||d.message));
+}
+
+// ── 이동 ──
+function moveSelected(){
+  if(!_sel.size)return;
+  document.getElementById('mvTargetId').value='';
+  document.getElementById('mvmodal').classList.add('on');
+}
+async function confirmMove(){
+  const newParentId=document.getElementById('mvTargetId').value.trim();
+  if(!newParentId){alert('이동할 폴더 ID를 입력하세요.');return;}
+  document.getElementById('mvmodal').classList.remove('on');
+  const ids=[..._sel];const oldParentId=_curId;
+  let ok=0;
+  for(const fileId of ids){
+    const r=await fetch('/api/drive-manage?action=move',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({fileId,newParentId,oldParentId})});
     const d=await r.json();
-    if(d.ok){refresh();document.getElementById('statusBar').textContent='🗑 삭제됨: '+name;}
-    else{alert('삭제 실패: '+(d.error||d.message));}
-  }catch(e){alert('오류: '+e.message);}
+    if(d.ok)ok++;
+  }
+  status('📂 '+ok+'/'+ids.length+'개 이동 완료');clearSel();refresh();
 }
 
 // ── 이름 변경 ──
 async function renameItem(fileId,name){
-  const newName=prompt('새 이름을 입력하세요:',name);
+  const newName=prompt('새 이름:',name);
   if(!newName||newName===name)return;
-  try{
-    const r=await fetch('/api/drive-manage?action=rename',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({fileId,newName:newName.trim()})});
-    const d=await r.json();
-    if(d.ok){refresh();}
-    else{alert('이름 변경 실패: '+(d.error||d.message));}
-  }catch(e){alert('오류: '+e.message);}
+  const r=await fetch('/api/drive-manage?action=rename',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({fileId,newName:newName.trim()})});
+  const d=await r.json();
+  if(d.ok)refresh();else alert('이름 변경 실패: '+(d.error||d.message));
+}
+
+// ── 폴더 생성 ──
+async function mkdirPrompt(){
+  const name=prompt('새 폴더 이름:');
+  if(!name||!name.trim())return;
+  if(!_curId){alert('폴더 안에서 실행하세요.');return;}
+  const r=await fetch('/api/drive-manage?action=mkdir',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({parentId:_curId,name:name.trim()})});
+  const d=await r.json();
+  if(d.ok){refresh();status('📁 생성됨: '+name);}
+  else alert('폴더 생성 실패: '+(d.error||d.message));
 }
 
 // ── 파일 업로드 ──
 async function uploadFiles(fileList){
   if(!fileList||!fileList.length)return;
-  const parentId=_currentFolderId||(_files[0]?.parents?.[0]||'');
-  if(!parentId){alert('업로드할 폴더를 먼저 선택하세요.');return;}
-  const overlay=document.getElementById('uploadOverlay');
-  const progress=document.getElementById('uploadProgress');
-  overlay.classList.add('show');
+  if(!_curId){alert('업로드할 폴더 안으로 이동하세요.');return;}
+  const ov=document.getElementById('upoverlay'),pr=document.getElementById('upProgress');
+  ov.classList.add('on');
+  let ok=0;
   for(let i=0;i<fileList.length;i++){
     const file=fileList[i];
-    progress.textContent=(i+1)+'/'+fileList.length+' — '+file.name+' 업로드 중...';
+    pr.textContent=(i+1)+'/'+fileList.length+' — '+file.name;
     try{
+      // 파일 크기 제한 (10MB)
+      if(file.size>10*1024*1024){pr.textContent='⚠️ '+file.name+' (10MB 초과 스킵)';await sleep(800);continue;}
       const base64data=await new Promise(function(resolve,reject){
         const fr=new FileReader();
-        fr.onload=function(e){resolve(e.target.result.split(',')[1]);};
+        fr.onload=function(e){
+          const result=e.target.result;
+          const b64=result.includes(',')?result.split(',')[1]:result;
+          resolve(b64);
+        };
         fr.onerror=reject;
         fr.readAsDataURL(file);
       });
-      const r=await fetch('/api/drive-manage?action=upload',{method:'POST',headers:{'Content-Type':'application/json'},
-        body:JSON.stringify({parentId,fileName:file.name,mimeType:file.type||'application/octet-stream',base64data})});
+      const r=await fetch('/api/drive-manage?action=upload',{
+        method:'POST',
+        headers:{'Content-Type':'application/json'},
+        body:JSON.stringify({parentId:_curId,fileName:file.name,mimeType:file.type||'application/octet-stream',base64data})
+      });
       const d=await r.json();
-      if(!d.ok){progress.textContent='업로드 실패: '+file.name+' — '+(d.error||d.message);await sleep(1500);}
-    }catch(e){progress.textContent='오류: '+e.message;await sleep(1500);}
+      if(d.ok)ok++;
+      else{pr.textContent='❌ '+file.name+': '+(d.error||d.message);await sleep(1200);}
+    }catch(e){pr.textContent='❌ '+file.name+': '+e.message;await sleep(1200);}
   }
-  overlay.classList.remove('show');
-  document.getElementById('fileUploadInput').value='';
+  ov.classList.remove('on');
+  document.getElementById('fileUploadIn').value='';
+  status('⬆ 업로드 완료: '+ok+'/'+fileList.length+'개');
   refresh();
 }
 
-function sleep(ms){return new Promise(function(r){setTimeout(r,ms);});}
-
-// ── 초기 로딩 ──
+// ── 초기화 ──
 window.onload=function(){
   const u=getSession();
   if(u&&isAdmin(u)){enterApp(u);}
