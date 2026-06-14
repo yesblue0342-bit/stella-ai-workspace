@@ -1,4 +1,5 @@
 import { detectSmartIntent, getSmartContextForMessage } from "../lib/place-weather-utils.js";
+import { saveJsonToDrive, readJsonFromDrive } from "../lib/drive-utils.js";
 
 // ───────── 시스템 프롬프트 ─────────
 const STELLA_SYSTEM_PROMPT = `You are Stella GPT, KH's personal AI workspace assistant. Reply in Korean.
@@ -155,6 +156,7 @@ export default async function handler(req, res) {
     const model = body.model || "gpt-4o-mini";
     const system = body.system || STELLA_SYSTEM_PROMPT;
     const images = Array.isArray(body.images) ? body.images.slice(0, 4) : [];
+    const userId = String(body.userId || body.user_id || "kh").trim();
 
     // ① 날씨 직접 처리
     const weatherKw = ["날씨","기온","우산","weather","forecast"];
@@ -197,7 +199,15 @@ export default async function handler(req, res) {
     // ③ 일반 AI 처리 (모델 완전 분리 - 중복 과금 방지)
     const searchContext = await prepareSearchContext(message);
     const driveContext = await searchDriveContext(message); // Drive 검색 연동
-    const prompt = buildSystemPrompt(system, searchContext, driveContext);
+    
+    // ④ 메모리 노드 로드 (KH 장기 기억)
+    const memory = await loadMemory(userId);
+    const memoryPrompt = memoryToPrompt(memory);
+    const prompt = buildSystemPrompt(
+      (memoryPrompt ? memoryPrompt + "\n\n" : "") + system,
+      searchContext,
+      driveContext
+    );
     
     // 모델 기반으로 API 완전 분리 (Claude 선택 시 OpenAI 절대 미호출)
     const isClaudeModel = model.toLowerCase().includes("claude") || model.toLowerCase().includes("fable");
@@ -210,6 +220,19 @@ export default async function handler(req, res) {
       provider = "openai";
       answer = await callOpenAI({ model, system: prompt, history, message, images });
     }
+    
+    // ⑤ 메모리 업데이트 (비동기 - 응답 지연 없음)
+    setImmediate(async () => {
+      try {
+        const newItems = await extractMemoryFromConversation({
+          model, history, message, answer, isClaudeModel
+        });
+        if (newItems && Object.values(newItems).some(a => Array.isArray(a) && a.length > 0)) {
+          await updateMemory(userId, newItems, isClaudeModel);
+        }
+      } catch(e) { console.warn("[Memory] 업데이트 실패:", e.message); }
+    });
+    
     return res.status(200).json({ ok: true, text: answer, provider, searchContext });
   } catch (error) {
     return res.status(500).json({ ok: false, error: error.message || "chat error" });
@@ -239,6 +262,121 @@ async function prepareSearchContext(message) {
     return { used: false, error: error.message };
   }
   return { used: false };
+}
+
+
+// ═══════════════════════════════════════════════
+// 메모리 노드 시스템 - KH 장기 기억
+// Drive: StellaGPT/memory/{userId}_memory.json
+// ═══════════════════════════════════════════════
+
+const MEMORY_FOLDER = ["memory"];
+const MAX_MEMORY_ITEMS = 50; // 항목별 최대 개수
+
+// 메모리 로드
+async function loadMemory(userId) {
+  try {
+    const data = await readJsonFromDrive({
+      folderPath: MEMORY_FOLDER,
+      fileName: `${userId}_memory`
+    });
+    return data || { userId, facts: [], patterns: [], preferences: [], context: [], updatedAt: null };
+  } catch { 
+    return { userId, facts: [], patterns: [], preferences: [], context: [], updatedAt: null };
+  }
+}
+
+// 메모리 저장
+async function saveMemory(userId, memory) {
+  try {
+    await saveJsonToDrive({
+      folderPath: MEMORY_FOLDER,
+      fileName: `${userId}_memory`,
+      data: { ...memory, updatedAt: new Date().toISOString() }
+    });
+  } catch(e) { console.warn("[Memory] 저장 실패:", e.message); }
+}
+
+// 대화에서 기억할 정보 추출 (AI 활용)
+async function extractMemoryFromConversation({ model, history, message, answer, isClaudeModel }) {
+  try {
+    const recentConv = [
+      ...history.slice(-6).map(m => `${m.role === "assistant" ? "Stella" : "KH"}: ${String(m.content||"").slice(0,200)}`),
+      `KH: ${String(message||"").slice(0,300)}`,
+      `Stella: ${String(answer||"").slice(0,300)}`
+    ].join("\n");
+
+    const extractPrompt = `다음 대화에서 KH(사용자)에 대해 기억할 가치 있는 정보를 JSON으로 추출하세요.
+추출 기준:
+- facts: KH의 확실한 사실 (직업, 프로젝트, 위치, 가족 등)
+- patterns: 반복되는 질문 패턴이나 업무 방식
+- preferences: 선호도 (답변 형식, 관심사, 좋아하는 것)
+- context: 현재 진행 중인 업무나 관심사
+
+없으면 빈 배열. 새 정보만 추출 (기존과 중복 제외).
+반드시 JSON만 반환:
+{"facts":[],"patterns":[],"preferences":[],"context":[]}
+
+대화:
+${recentConv}`;
+
+    let extracted;
+    if (isClaudeModel) {
+      const r = await fetch("https://api.anthropic.com/v1/messages", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "x-api-key": process.env.ANTHROPIC_API_KEY, "anthropic-version": "2023-06-01" },
+        body: JSON.stringify({ model: "claude-haiku-4-5-20251001", max_tokens: 512, system: "JSON only.", messages: [{ role:"user", content: extractPrompt }] })
+      });
+      const d = await r.json();
+      extracted = JSON.parse(d.content?.[0]?.text || "{}");
+    } else {
+      const r = await fetch("https://api.openai.com/v1/chat/completions", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${process.env.OPENAI_API_KEY}` },
+        body: JSON.stringify({ model: "gpt-4o-mini", temperature: 0, max_tokens: 512, response_format: { type: "json_object" },
+          messages: [{ role:"system", content:"JSON only." }, { role:"user", content: extractPrompt }] })
+      });
+      const d = await r.json();
+      extracted = JSON.parse(d.choices?.[0]?.message?.content || "{}");
+    }
+    return extracted;
+  } catch(e) { console.warn("[Memory] 추출 실패:", e.message); return null; }
+}
+
+// 메모리 업데이트 (중복 제거 + 최대 개수 유지)
+async function updateMemory(userId, newItems, isClaudeModel) {
+  const memory = await loadMemory(userId);
+  const now = new Date().toISOString();
+  
+  const addUnique = (arr, newArr, maxN) => {
+    if (!Array.isArray(newArr) || !newArr.length) return arr;
+    const existing = new Set(arr.map(x => String(x).toLowerCase().trim()));
+    const filtered = newArr.filter(x => x && !existing.has(String(x).toLowerCase().trim()));
+    return [...arr, ...filtered].slice(-maxN);
+  };
+
+  if (newItems) {
+    memory.facts = addUnique(memory.facts, newItems.facts, MAX_MEMORY_ITEMS);
+    memory.patterns = addUnique(memory.patterns, newItems.patterns, 30);
+    memory.preferences = addUnique(memory.preferences, newItems.preferences, 30);
+    memory.context = addUnique(memory.context, newItems.context, 20);
+  }
+  
+  await saveMemory(userId, memory);
+  return memory;
+}
+
+// 메모리를 시스템 프롬프트용 텍스트로 변환
+function memoryToPrompt(memory) {
+  if (!memory) return "";
+  const parts = [];
+  if (memory.facts?.length) parts.push(`[KH 알려진 사실]\n${memory.facts.slice(-15).map(f=>"• "+f).join("\n")}`);
+  if (memory.preferences?.length) parts.push(`[KH 선호도]\n${memory.preferences.slice(-10).map(f=>"• "+f).join("\n")}`);
+  if (memory.context?.length) parts.push(`[현재 업무 맥락]\n${memory.context.slice(-8).map(f=>"• "+f).join("\n")}`);
+  if (memory.patterns?.length) parts.push(`[질문 패턴]\n${memory.patterns.slice(-8).map(f=>"• "+f).join("\n")}`);
+  if (!parts.length) return "";
+  const updated = memory.updatedAt ? `(${memory.updatedAt.slice(0,10)} 기준)` : "";
+  return `[=== KH 장기 메모리 ${updated} ===]\n${parts.join("\n\n")}\n[=== 메모리 끝 ===]`;
 }
 
 function buildSystemPrompt(system, searchContext, driveContext) {
@@ -336,6 +474,7 @@ async function callClaude({ model, system, history, message, images = [] }) {
   if (!response.ok) throw new Error(data.error?.message || "Claude API error");
   return data.content?.map(c => c.text || "").join("\n") || "응답 없음";
 }
+
 
 
 
