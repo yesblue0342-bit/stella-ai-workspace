@@ -101,8 +101,13 @@ async function handleDriveSearch(req, res) {
   const query = normalizeDriveQuery(raw) || clean(raw);
   const limit = Math.min(Number(getInput(req, ["limit"]) || 20), 100);
   if (!query) return res.status(400).json({ ok: false, message: "검색어를 입력하세요." });
-  const files = await searchDrive({ query, pageSize: Number.isFinite(limit) ? limit : 20 });
-  return res.status(200).json({ ok: true, type: "drive-search", query, files: files.map(mapDriveFile) });
+  // # 키워드 포함 시 전체 Drive 검색, 기본은 StellaGPT 폴더 내 검색
+  const isFullSearch = /^#|\s#/.test(raw);
+  const searchOptions = { query, pageSize: Number.isFinite(limit) ? limit : 20 };
+  if (!isFullSearch) searchOptions.folderName = "StellaGPT";
+  const result = await searchDrive(searchOptions);
+  const files = Array.isArray(result) ? result : (result.files || []);
+  return res.status(200).json({ ok: true, type: "drive-search", query, scope: isFullSearch ? "all" : "StellaGPT", files: files.map(mapDriveFile) });
 }
 async function handleDriveDirectory(req, res) {
   const folderId = clean(getInput(req, ["folderId", "id"]));
