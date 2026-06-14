@@ -12,12 +12,13 @@ body{font-family:system-ui,'Noto Sans KR',sans-serif;background:var(--bg);color:
 .top h1{font-size:.95rem;font-weight:900;color:var(--text)}
 .btn{border:1px solid var(--border);background:var(--bg3);color:var(--text3);border-radius:9px;padding:6px 12px;cursor:pointer;font-size:.8rem;font-weight:700;white-space:nowrap;transition:background .15s}
 .btn:hover{opacity:.85}.btn:active{opacity:.6}
-.btn.primary{background:var(--bg3);color:var(--text);border-color:var(--border)}
 .btn.danger{border-color:var(--danger);color:var(--danger)}
 .btn.upload-btn{background:var(--bg3);color:var(--text);border:1px solid var(--border)}
-.breadcrumb{padding:7px 12px;font-size:.78rem;color:var(--text2);background:var(--bg2);border-bottom:1px solid var(--border);display:flex;align-items:center;gap:4px;flex-wrap:wrap;flex-shrink:0}
+.breadcrumb{padding:6px 12px;font-size:.78rem;color:var(--text2);background:var(--bg2);border-bottom:1px solid var(--border);display:flex;align-items:center;gap:4px;flex-wrap:wrap;flex-shrink:0}
 .bc-seg{cursor:pointer;color:var(--accent);padding:2px 4px;border-radius:5px}.bc-seg:hover{opacity:.75}
 .bc-sep{color:var(--border)}
+.bc-copy{cursor:pointer;background:var(--bg3);border:1px solid var(--border);border-radius:6px;padding:2px 7px;font-size:.72rem;color:var(--text2);margin-left:4px;white-space:nowrap}
+.bc-copy:hover{color:var(--text)}
 .toolbar{display:flex;gap:6px;padding:7px 12px;background:var(--bg);border-bottom:1px solid var(--border);flex-wrap:wrap;flex-shrink:0;align-items:center}
 .filter-in{background:var(--bg2);border:1px solid var(--border);border-radius:9px;padding:6px 11px;color:var(--text);font-size:.8rem;flex:1;min-width:0}
 .filter-in::placeholder{color:var(--text2)}
@@ -37,7 +38,6 @@ body{font-family:system-ui,'Noto Sans KR',sans-serif;background:var(--bg);color:
 .act{background:var(--bg3);color:var(--text3);border:1px solid var(--border);border-radius:7px;padding:3px 8px;cursor:pointer;font-size:.72rem}
 .act.del{border-color:var(--danger);color:var(--danger)}
 .empty{padding:40px;text-align:center;color:var(--text2);font-size:.88rem}
-/* Gate */
 #gate{position:fixed;inset:0;background:var(--bg);display:flex;align-items:center;justify-content:center;z-index:9999;padding:20px}
 .gate-card{width:min(380px,100%);background:var(--bg2);border:1px solid var(--border);border-radius:18px;padding:24px}
 .gate-card h2{color:var(--text);margin-bottom:6px;font-size:1.15rem}
@@ -47,13 +47,11 @@ body{font-family:system-ui,'Noto Sans KR',sans-serif;background:var(--bg);color:
 .gate-btn{width:100%;padding:11px;border-radius:10px;cursor:pointer;font-weight:800;border:1px solid var(--border);font-size:.9rem;margin-top:4px;background:var(--bg3);color:var(--text)}
 .gate-btn.pri{background:var(--primary);color:#fff;border-color:var(--primary)}
 .err{color:var(--danger);font-size:.78rem;min-height:16px;margin-top:4px}
-/* Upload overlay */
 .upoverlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,.65);z-index:1000;align-items:center;justify-content:center}
 .upoverlay.on{display:flex}
 .upcard{background:var(--bg2);border:1px solid var(--border);border-radius:14px;padding:22px;width:min(340px,90%);text-align:center}
 .upcard h3{color:var(--text);margin-bottom:10px;font-size:.95rem}
 .upcard p{color:var(--text2);font-size:.82rem}
-/* Move modal */
 .mvmodal{display:none;position:fixed;inset:0;background:rgba(0,0,0,.65);z-index:1000;align-items:center;justify-content:center}
 .mvmodal.on{display:flex}
 .mvcard{background:var(--bg2);border:1px solid var(--border);border-radius:14px;padding:20px;width:min(340px,90%)}
@@ -64,64 +62,66 @@ body{font-family:system-ui,'Noto Sans KR',sans-serif;background:var(--bg);color:
 </head>
 <body>
 <div id="gate">
-  <div class="gate-card">
-    <h2>🗄 Stella DB</h2>
-    <p>관리자 계정으로 로그인하세요</p>
-    <input id="gId" placeholder="아이디 (admin / yesblue0342)" autocomplete="username" onkeydown="if(event.key==='Enter')dbLogin()">
-    <input id="gPw" type="password" placeholder="비밀번호" autocomplete="current-password" onkeydown="if(event.key==='Enter')dbLogin()">
-    <button class="gate-btn pri" onclick="dbLogin()">접속</button>
-    <button class="gate-btn" onclick="location.href='/'">Stella GPT로 돌아가기</button>
-    <div class="err" id="gErr"></div>
-  </div>
+<div class="gate-card">
+<h2>🗄 Stella DB</h2>
+<p>관리자 계정으로 로그인하세요</p>
+<input id="gId" placeholder="아이디 (admin / yesblue0342)" autocomplete="username" onkeydown="if(event.key==='Enter')dbLogin()">
+<input id="gPw" type="password" placeholder="비밀번호" autocomplete="current-password" onkeydown="if(event.key==='Enter')dbLogin()">
+<button class="gate-btn pri" onclick="dbLogin()">접속</button>
+<button class="gate-btn" onclick="location.href='/'">Stella GPT로 돌아가기</button>
+<div class="err" id="gErr"></div>
+</div>
 </div>
 
 <div id="appWrap" style="display:none;flex-direction:column;height:100dvh">
-  <div class="top">
-    <h1>🗄 Stella DB</h1>
-    <span id="userLabel" style="font-size:.72rem;color:var(--text2)"></span>
-    <button class="btn" onclick="goUp()" id="upBtn">⬆ 상위</button>
-    <button class="btn" onclick="refresh()">↻</button>
-    <button class="btn" onclick="toggleTheme()" id="themeBtn">☀️</button>
-    <button class="btn" onclick="location.href='/'">GPT</button>
-    <button class="btn" onclick="dbLogout()">나가기</button>
-  </div>
-  <div class="breadcrumb" id="breadcrumb"></div>
-  <!-- 선택 작업 바 -->
-  <div class="sel-bar" id="selBar">
-    <span id="selCount">0개 선택</span>
-    <button class="btn danger" onclick="deleteSelected()">🗑 삭제</button>
-    <button class="btn" onclick="moveSelected()">📂 이동</button>
-    <button class="btn" onclick="clearSel()">✕ 해제</button>
-  </div>
-  <div class="toolbar">
-    <input class="filter-in" id="filterIn" placeholder="파일/폴더 필터..." oninput="renderFiles()">
-    <button class="btn" onclick="mkdirPrompt()">📁＋ 폴더</button>
-    <button class="btn upload-btn" onclick="document.getElementById('fileUploadIn').click()">⬆ 업로드</button>
-    <input type="file" id="fileUploadIn" multiple hidden onchange="uploadFiles(this.files)">
-  </div>
-  <div class="status" id="statusBar">로딩 중...</div>
-  <div class="file-list" id="fileList"></div>
+<div class="top">
+<h1>🗄 Stella DB</h1>
+<span id="userLabel" style="font-size:.72rem;color:var(--text2)"></span>
+<button class="btn" onclick="goUp()" id="upBtn">⬆ 상위</button>
+<button class="btn" onclick="refresh()">↻</button>
+<button class="btn" onclick="toggleTheme()" id="themeBtn">☀️</button>
+<button class="btn" onclick="location.href='/'">GPT</button>
+<button class="btn" onclick="dbLogout()">나가기</button>
 </div>
 
-<!-- 업로드 진행 오버레이 -->
+<!-- 브레드크럼 + 경로복사 -->
+<div class="breadcrumb" id="breadcrumb"></div>
+
+<!-- 선택 작업 바 -->
+<div class="sel-bar" id="selBar">
+<span id="selCount">0개 선택</span>
+<button class="btn danger" onclick="deleteSelected()">🗑 삭제</button>
+<button class="btn" onclick="moveSelected()">📂 이동</button>
+<button class="btn" onclick="clearSel()">✕ 해제</button>
+</div>
+
+<div class="toolbar">
+<input class="filter-in" id="filterIn" placeholder="파일/폴더 필터..." oninput="renderFiles()">
+<button class="btn" onclick="mkdirPrompt()">📁＋ 폴더</button>
+<button class="btn upload-btn" onclick="document.getElementById('fileUploadIn').click()">⬆ 업로드</button>
+<input type="file" id="fileUploadIn" multiple hidden onchange="uploadFiles(this.files)">
+</div>
+<div class="status" id="statusBar">로딩 중...</div>
+<div class="file-list" id="fileList"></div>
+</div>
+
 <div class="upoverlay" id="upoverlay">
-  <div class="upcard">
-    <h3>⬆ 업로드 중...</h3>
-    <p id="upProgress">준비 중...</p>
-  </div>
+<div class="upcard">
+<h3>⬆ 업로드 중...</h3>
+<p id="upProgress">준비 중...</p>
+</div>
 </div>
 
-<!-- 이동 모달 -->
 <div class="mvmodal" id="mvmodal">
-  <div class="mvcard">
-    <h3>📂 폴더 이동</h3>
-    <p style="color:var(--text2);font-size:.8rem;margin-bottom:10px">이동할 폴더 ID를 입력하세요 (Stella DB에서 폴더를 먼저 탐색하세요)</p>
-    <input id="mvTargetId" placeholder="이동할 폴더 ID">
-    <div style="display:flex;gap:6px">
-      <button class="btn pri" onclick="confirmMove()" style="flex:1">이동</button>
-      <button class="btn" onclick="document.getElementById('mvmodal').classList.remove('on')" style="flex:1">취소</button>
-    </div>
-  </div>
+<div class="mvcard">
+<h3>📂 폴더 이동</h3>
+<p style="color:var(--text2);font-size:.8rem;margin-bottom:10px">이동할 폴더 ID를 입력하세요</p>
+<input id="mvTargetId" placeholder="이동할 폴더 ID">
+<div style="display:flex;gap:6px">
+<button class="btn" onclick="confirmMove()" style="flex:1">이동</button>
+<button class="btn" onclick="document.getElementById('mvmodal').classList.remove('on')" style="flex:1">취소</button>
+</div>
+</div>
 </div>
 
 <script>
@@ -178,7 +178,8 @@ function enterApp(u){
   const aw=document.getElementById('appWrap');aw.style.display='flex';
   document.getElementById('userLabel').textContent='관리자: '+(u.name||u.id);
   applyTheme();
-  loadFolder('','StellaGPT');
+  // 루트(내 드라이브)부터 시작
+  loadFolder('','내 드라이브');
 }
 function dbLogout(){localStorage.removeItem(SK);location.reload();}
 
@@ -189,26 +190,71 @@ async function loadFolder(folderId,name){
   clearSel();
   _curId=folderId||'';
   try{
-    const url='/api/drive-list?scope=StellaGPT'+(folderId?'&folderId='+encodeURIComponent(folderId):'');
+    // folderId 없으면 루트, 있으면 해당 폴더
+    const url='/api/drive-list'+(folderId?'?folderId='+encodeURIComponent(folderId):'');
     const r=await fetch(url,{cache:'no-store'});
     const d=await r.json();
     if(!d.ok){status('오류: '+(d.message||'로드 실패'));return;}
     _files=Array.isArray(d.files)?d.files:[];
     const cid=folderId||'ROOT';
-    if(!_stack.length||_stack[_stack.length-1].id!==cid)_stack.push({id:cid,name:name||folderId||'StellaGPT'});
+    // 스택: 같은 위치면 중복 추가 안 함
+    if(!_stack.length||_stack[_stack.length-1].id!==cid){
+      _stack.push({id:cid,name:name||folderId||'내 드라이브'});
+    }
     renderBreadcrumb();renderFiles();
-    status('📁 '+(_stack[_stack.length-1]?.name||'StellaGPT')+' — '+_files.length+'개 항목');
+    status('📁 '+(_stack[_stack.length-1]?.name||'내 드라이브')+' — '+_files.length+'개 항목');
   }catch(e){status('오류: '+e.message);}
 }
+
+// ── 브레드크럼 + 경로복사 ──
+function getPathText(){
+  return _stack.map(function(s){return s.name;}).join(' > ');
+}
+function copyPath(){
+  const path=getPathText();
+  navigator.clipboard.writeText(path).then(function(){
+    status('📋 경로 복사됨: '+path);
+  }).catch(function(){
+    // fallback
+    const el=document.createElement('textarea');
+    el.value=path;document.body.appendChild(el);el.select();
+    document.execCommand('copy');document.body.removeChild(el);
+    status('📋 경로 복사됨: '+path);
+  });
+}
 function renderBreadcrumb(){
-  document.getElementById('breadcrumb').innerHTML=_stack.map(function(s,i){
+  const bc=document.getElementById('breadcrumb');
+  const segs=_stack.map(function(s,i){
     return '<span class="bc-seg" onclick="gotoStack('+i+')">'+esc(s.name)+'</span>'+(i<_stack.length-1?'<span class="bc-sep">›</span>':'');
   }).join('');
+  bc.innerHTML=segs+'<button class="bc-copy" onclick="copyPath()" title="경로 복사">📋 경로복사</button>';
   document.getElementById('upBtn').disabled=_stack.length<=1;
 }
-function gotoStack(idx){_stack=_stack.slice(0,idx+1);const s=_stack.pop();loadFolder(s.id==='ROOT'?'':s.id,s.name);}
-function goUp(){if(_stack.length<=1)return;_stack.pop();const s=_stack.pop();loadFolder(s.id==='ROOT'?'':s.id,s.name);}
-function refresh(){if(!_stack.length)return;const s=_stack.pop();loadFolder(s.id==='ROOT'?'':s.id,s.name);}
+
+// ── 스택 이동 ──
+function gotoStack(idx){
+  // idx 위치까지 자르고 해당 폴더로 이동
+  _stack=_stack.slice(0,idx);
+  const s=_stack.length>0?_stack[_stack.length-1]:{id:'ROOT',name:'내 드라이브'};
+  _stack=_stack.slice(0,_stack.length>0?_stack.length-1:0);
+  loadFolder(s.id==='ROOT'?'':s.id,s.name);
+}
+
+// ── 상위 이동 ──
+function goUp(){
+  if(_stack.length<=1)return;
+  _stack.pop(); // 현재 폴더 제거
+  const prev=_stack.pop(); // 이전 폴더
+  loadFolder(prev.id==='ROOT'?'':prev.id,prev.name);
+}
+
+// ── 새로고침 ──
+function refresh(){
+  if(!_stack.length)return;
+  const cur=_stack[_stack.length-1];
+  _stack.pop();
+  loadFolder(cur.id==='ROOT'?'':cur.id,cur.name);
+}
 
 // ── 파일 렌더 ──
 function renderFiles(){
@@ -226,16 +272,17 @@ function renderFiles(){
       +'<input type="checkbox" class="file-chk" data-id="'+esc(f.id)+'" '+checked+' onclick="event.stopPropagation();toggleSel(\''+esc(f.id)+'\')">'
       +'<div class="file-icon" onclick="openItem(\''+esc(f.id)+'\',\''+esc(f.name)+'\','+!!f.isFolder+')">'+getIcon(f)+'</div>'
       +'<div class="file-info" onclick="openItem(\''+esc(f.id)+'\',\''+esc(f.name)+'\','+!!f.isFolder+')">'
-        +'<div class="file-name">'+esc(f.name||'(이름없음)')+'</div>'
-        +'<div class="file-meta">'+fmtDate(f.modifiedTime)+(f.size?' · '+fmtSize(f.size):'')+'</div>'
+      +'<div class="file-name">'+esc(f.name||'(이름없음)')+'</div>'
+      +'<div class="file-meta">'+fmtDate(f.modifiedTime)+(f.size?' · '+fmtSize(f.size):'')+'</div>'
       +'</div>'
       +'<div class="file-acts">'
-        +'<button class="act" onclick="event.stopPropagation();renameItem(\''+esc(f.id)+'\',\''+esc(f.name)+'\')">✏️</button>'
-        +'<button class="act del" onclick="event.stopPropagation();deleteItem(\''+esc(f.id)+'\',\''+esc(f.name)+'\')">🗑</button>'
+      +'<button class="act" onclick="event.stopPropagation();renameItem(\''+esc(f.id)+'\',\''+esc(f.name)+'\')">✏️</button>'
+      +'<button class="act del" onclick="event.stopPropagation();deleteItem(\''+esc(f.id)+'\',\''+esc(f.name)+'\')">🗑</button>'
       +'</div>'
       +'</div>';
   }).join('');
 }
+
 function openItem(id,name,isFolder){
   if(isFolder){loadFolder(id,name);}
   else{
@@ -308,7 +355,7 @@ async function renameItem(fileId,name){
 async function mkdirPrompt(){
   const name=prompt('새 폴더 이름:');
   if(!name||!name.trim())return;
-  if(!_curId){alert('폴더 안에서 실행하세요.');return;}
+  if(!_curId){alert('폴더 안으로 이동 후 생성하세요.');return;}
   const r=await fetch('/api/drive-manage?action=mkdir',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({parentId:_curId,name:name.trim()})});
   const d=await r.json();
   if(d.ok){refresh();status('📁 생성됨: '+name);}
@@ -326,21 +373,14 @@ async function uploadFiles(fileList){
     const file=fileList[i];
     pr.textContent=(i+1)+'/'+fileList.length+' — '+file.name;
     try{
-      // 파일 크기 제한 (10MB)
       if(file.size>10*1024*1024){pr.textContent='⚠️ '+file.name+' (10MB 초과 스킵)';await sleep(800);continue;}
       const base64data=await new Promise(function(resolve,reject){
         const fr=new FileReader();
-        fr.onload=function(e){
-          const result=e.target.result;
-          const b64=result.includes(',')?result.split(',')[1]:result;
-          resolve(b64);
-        };
-        fr.onerror=reject;
-        fr.readAsDataURL(file);
+        fr.onload=function(e){const result=e.target.result;const b64=result.includes(',')?result.split(',')[1]:result;resolve(b64);};
+        fr.onerror=reject;fr.readAsDataURL(file);
       });
       const r=await fetch('/api/drive-manage?action=upload',{
-        method:'POST',
-        headers:{'Content-Type':'application/json'},
+        method:'POST',headers:{'Content-Type':'application/json'},
         body:JSON.stringify({parentId:_curId,fileName:file.name,mimeType:file.type||'application/octet-stream',base64data})
       });
       const d=await r.json();
@@ -361,4 +401,3 @@ window.onload=function(){
 };
 </script>
 </body></html>
-
