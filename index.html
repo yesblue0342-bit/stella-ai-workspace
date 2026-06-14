@@ -51,8 +51,13 @@ body.dark .composer,body.dark .sidebar,body.dark header,body.dark .topbar{backgr
 body.dark .bubble,body.dark .msg{background:#161b22;color:#e6edf3}
 body.dark .bubble.user,body.dark .user .bubble{background:#1f6feb;color:#fff}
 body.dark textarea,body.dark input,body.dark select,body.dark #modelSelect{background:#0d1117;color:#e6edf3;border-color:#30363d}
+body.dark #chatInput{background:#0d1117!important;color:#e6edf3!important;caret-color:#e6edf3}
+body.dark .attach{background:#21262d!important;color:#c9d1d9!important;border:1px solid #30363d!important}
+body.dark .composer{background:#161b22!important;border-color:#30363d!important}
+body.dark .chips{background:#0d1117!important}
+body.dark .chip{background:#21262d!important;color:#c9d1d9!important}
 body.dark button{background:#21262d;color:#e6edf3;border-color:#30363d}
-body.dark .round.send{background:#1f6feb;color:#fff}
+body.dark .round.send{background:#21262d!important;color:#e6edf3!important;border:1px solid #30363d!important}
 body.dark .card,body.dark .modal .card{background:#161b22;color:#e6edf3}
 body.dark a{color:#58a6ff}
 .theme-toggle{cursor:pointer;border:1px solid #d1d5db;background:#fff;border-radius:12px;padding:6px 10px;font-size:16px;font-weight:700}
@@ -90,7 +95,7 @@ body.dark textarea,body.dark input,body.dark select{background:#0d1117!important
 body.dark textarea::placeholder,body.dark input::placeholder{color:#6b7280!important}
 body.dark button.tool-btn{background:#21262d!important;color:#c9d1d9!important;border-color:#30363d!important}
 body.dark button.tool-btn.member{background:#21262d!important;border-color:#30363d!important}
-body.dark .round.send{background:#1f6feb!important;color:#fff!important}
+body.dark .round.send{background:#21262d!important;color:#e6edf3!important;border:1px solid #30363d!important}
 body.dark .small-btn{background:#21262d!important;color:#c9d1d9!important;border-color:#30363d!important}
 body.dark .top-btn{background:#21262d!important;color:#c9d1d9!important;border-color:#30363d!important}
 body.dark .hamb{background:transparent!important;color:#c9d1d9!important}
@@ -204,6 +209,7 @@ window.addEventListener('DOMContentLoaded',()=>{ensureModelOptions();initEvents(
 </script>
 <script>if('serviceWorker' in navigator){navigator.serviceWorker.register('/sw.js').catch(function(){});}var _dp=null;window.addEventListener('beforeinstallprompt',function(e){e.preventDefault();_dp=e;_si();});function _si(){if(document.getElementById('pwaInstall'))return;var b=document.createElement('button');b.id='pwaInstall';b.textContent='\u2b07 \uc571 \uc124\uce58';b.style.cssText='position:fixed;right:14px;bottom:90px;z-index:9998;background:#0f172a;color:#fff;border:0;border-radius:24px;padding:12px 18px;font-weight:900;box-shadow:0 8px 24px rgba(0,0,0,.25);cursor:pointer';b.onclick=function(){if(!_dp)return;_dp.prompt();_dp.userChoice.then(function(){_dp=null;b.remove();});};document.body.appendChild(b);}window.addEventListener('appinstalled',function(){var b=document.getElementById('pwaInstall');if(b)b.remove();});</script></body>
 </html>
+
 
 
 
