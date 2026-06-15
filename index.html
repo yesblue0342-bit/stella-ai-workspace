@@ -422,7 +422,7 @@ function getUserPrefsKey(){return 'stella_prefs_'+(user?.id||'guest');}
 function saveUserPrefs(){
   try{
     var prefs={
-      theme: document.body.classList.contains('dark')?'dark':'light',
+      // theme은 stella_theme 키로만 관리
       model: (document.getElementById('modelSelect')||{}).value||'gpt-4o',
       sidebarCollapsed: document.getElementById('app')?.classList.contains('sidebar-collapsed')||false,
       manageOpen: read(K.manage,false)
@@ -441,15 +441,7 @@ function loadUserPrefs(){
       return;
     }
     var prefs=JSON.parse(raw);
-    // 테마: stella_theme 키가 명시적으로 저장된 경우만 존중, 없으면 dark 기본
-    var explicitTheme=null;
-    try{explicitTheme=localStorage.getItem('stella_theme');}catch(e){}
-    var themeToUse=explicitTheme||prefs.theme||'dark';
-    var isDark=themeToUse==='dark';
-    document.body.classList.toggle('dark',isDark);
-    var tb=document.getElementById('themeToggle');
-    if(tb)tb.textContent=isDark?'☀️':'🌙';
-    try{localStorage.setItem('stella_theme',themeToUse);}catch(e){}
+    // 테마: loadUserPrefs에서 건드리지 않음 — applyStellaTheme()이 전담
     // 모델
     if(prefs.model){
       var ms=document.getElementById('modelSelect');
