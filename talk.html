@@ -461,8 +461,20 @@ function setBubbleMe(v){
 function loadRooms(){try{_rooms=JSON.parse(localStorage.getItem(SK)||'[]');}catch{_rooms=[];}}
 function saveRooms(){localStorage.setItem(SK,JSON.stringify(_rooms));}
 function uid(){return 'r_'+Math.random().toString(36).slice(2)+Date.now().toString(36);}
-function getMyId(){try{const s=JSON.parse(localStorage.getItem('stella_session_final_v82')||'null');return s?.user?.id||s?.id||'나';}catch{return '나';}}
-function getMyName(){try{const s=JSON.parse(localStorage.getItem('stella_session_final_v82')||'null');return s?.user?.name||s?.user?.id||'나';}catch{return '나';}}
+// ── 로그인 사용자 정보 (다중 키 호환) ──
+function getSession(){
+  // 1순위: index.html의 stella_session_final_v82
+  try{ const s=JSON.parse(localStorage.getItem('stella_session_final_v82')||'null'); if(s&&(s.id||s.user?.id)) return s; }catch(e){}
+  // 2순위: stella_user
+  try{ const s=JSON.parse(localStorage.getItem('stella_user')||'null'); if(s&&(s.id||s.email)) return {id:s.id||s.email,user:s}; }catch(e){}
+  // 3순위: user / currentUser
+  try{ const s=JSON.parse(localStorage.getItem('user')||localStorage.getItem('currentUser')||'null'); if(s&&(s.id||s.email)) return {id:s.id||s.email,user:s}; }catch(e){}
+  return null;
+}
+function getMyId(){ try{ const s=getSession(); return s?.user?.id||s?.id||null; }catch(e){ return null; } }
+function getMyName(){ try{ const s=getSession(); return s?.user?.name||s?.user?.id||s?.id||'나'; }catch(e){ return '나'; } }
+function getMyEmail(){ try{ const s=getSession(); return s?.user?.email||''; }catch(e){ return ''; } }
+function isLoggedIn(){ return !!getMyId(); }
 
 function renderRooms(){
   const el=document.getElementById('roomList');
@@ -701,33 +713,50 @@ function openRoom(id){
   reportRead(id);
   startPolling();
 }
+// ── 폴링 / 실시간 수신 (향후 WebSocket/SSE로 교체 가능) ──
+// poll(roomId, callback) 형태로 분리 → 나중에 이 함수만 교체하면 됨
 function startPolling(){
   stopPolling();
-  _pollTimer=setInterval(function(){ if(_cur && !_cur.isMyChat) syncRoomFromServer(false); }, 3000);
+  // 현재: 3초 폴링 방식
+  _pollTimer = setInterval(async function(){
+    if(!_cur || _cur.isMyChat) return;
+    try{ await syncRoomFromServer(false); }catch(e){}
+  }, 3000);
 }
-function stopPolling(){ if(_pollTimer){clearInterval(_pollTimer);_pollTimer=null;} }
+function stopPolling(){
+  if(_pollTimer){ clearInterval(_pollTimer); _pollTimer=null; }
+}
+// 향후 SSE 전환 시 이 함수를 교체:
+// function startPolling(){ const es=new EventSource('/api/chat-room-sse?roomId='+_cur.id); es.onmessage=e=>{ ... }; }
 
 // 서버 메시지를 로컬 형식으로 변환
 function serverMsgToLocal(m){
-  const fUrl = m.fileUrl||null;
-  const fName = m.fileName||'';
+  const fUrl = m.fileUrl || m.imageUrl || null;
+  const fName = m.fileName || '';
+  const fMime = m.mimeType || '';
   let msgType = 'text';
   if(fUrl){
-    if(/^data:image\//.test(fUrl) || /(jpg|jpeg|png|gif|webp)$/i.test(fName) || /\/uc\?export=view/.test(fUrl)){
+    // data:image/, lh3.googleusercontent.com, drive.google.com/uc, 이미지 확장자, image/ mimeType
+    if(/^data:image\//.test(fUrl)
+      || /lh3\.googleusercontent\.com/.test(fUrl)
+      || /\/uc\?export=view/.test(fUrl)
+      || /(jpg|jpeg|png|gif|webp)$/i.test(fName)
+      || /^image\//.test(fMime)){
       msgType = 'image';
     } else {
       msgType = 'file';
     }
   }
   return {
-    id: m.id,
-    from: m.userId||m.sender,
-    text: m.message||'',
-    fileName: fName||null,
+    id: m.id || ('srv_'+Date.now()+'_'+Math.random().toString(36).slice(2,6)),
+    from: m.userId || m.sender || '?',
+    text: m.message || '',
+    fileName: fName || null,
     fileUrl: fUrl,
+    mimeType: fMime,
     type: msgType,
-    data: fUrl,
-    at: new Date(m.createdAt).getTime()
+    data: fUrl,  // 렌더링에서 m.data 사용
+    at: m.createdAt ? new Date(m.createdAt).getTime() : Date.now()
   };
 }
 
@@ -737,12 +766,15 @@ async function syncRoomFromServer(scrollAfter){
     const r=await fetch('/api/chat-room?action=get&roomId='+encodeURIComponent(_cur.id),{cache:'no-store'});
     const d=await r.json();
     if(!d.ok)return;
+    // id 기준 중복 제거하여 서버 메시지로 교체
     const serverMsgs=(d.messages||[]).map(serverMsgToLocal);
+    const seen=new Set();
+    const dedupedMsgs=serverMsgs.filter(m=>{ if(!m.id||seen.has(m.id)) return false; seen.add(m.id); return true; });
     const idx=_rooms.findIndex(x=>x.id===_cur.id);
     if(idx<0)return;
     const prevCount=(_rooms[idx].messages||[]).length;
-    // 서버 메시지로 교체 (서버가 진실의 원천)
-    _rooms[idx].messages=serverMsgs;
+    // 서버 메시지로 교체 (서버가 진실의 원천, 중복 제거됨)
+    _rooms[idx].messages=dedupedMsgs;
     if(d.room&&d.room.members) _rooms[idx].members=d.room.members;
     // 상대방 읽음 정보 저장 (카톡 "1" 표시용)
     if(d.reads) _rooms[idx].reads=d.reads;
@@ -809,6 +841,12 @@ function renderMessages(){
   // 기존 메시지만 지우고 bg layer는 유지
   Array.from(el.children).forEach(function(c){if(c!==bgLayer)c.remove();});
   if(!_cur){return;}
+  // 로그인 체크 - 입력창 비활성화
+  const notLoggedIn = !isLoggedIn();
+  const chatInp=document.getElementById('chatInput');
+  const sendBtnEl=document.getElementById('sendBtn');
+  if(chatInp){ chatInp.disabled=notLoggedIn; chatInp.placeholder=notLoggedIn?'로그인 후 메시지를 입력할 수 있습니다':'메시지 입력 (Enter=줄바꿈, ↑버튼=전송)'; }
+  if(sendBtnEl&&notLoggedIn){ sendBtnEl.disabled=true; }
   const msgs=_cur.messages||[];
   if(!msgs.length){
     const e=document.createElement('div');e.className='empty';e.textContent='메시지가 없습니다.';
@@ -837,9 +875,28 @@ function renderMessages(){
     if(!isMe){const nm=document.createElement('div');nm.className='msg-name';nm.textContent=esc(m.from||'');col.appendChild(nm);}
     // 내용
     if(m.type==='image'){
-      const img=document.createElement('img');img.className='msg-img';img.src=m.data;img.alt=m.fileName||'이미지';
-      img.onclick=function(){document.getElementById('lightboxImg').src=m.data;document.getElementById('lightbox').classList.add('on');};
-      col.appendChild(img);
+      const imgSrc = m.data || m.fileUrl || '';
+      const wrap=document.createElement('div');wrap.className='msg-img-wrap';
+      const img=document.createElement('img');img.className='msg-img';img.alt=m.fileName||'이미지';
+      img.style.cssText='max-width:220px;max-height:280px;border-radius:12px;display:block;cursor:pointer;object-fit:cover';
+      // lh3 URL은 직접 src로 쓰면 CORS 없이 표시됨
+      img.src = imgSrc;
+      img.onerror=function(){
+        // 이미지 로드 실패 시 링크로 대체
+        const lnk=document.createElement('a');lnk.href=imgSrc;lnk.target='_blank';lnk.rel='noopener';
+        lnk.style.cssText='display:inline-flex;align-items:center;gap:6px;padding:8px 12px;background:var(--bg3);border-radius:10px;color:var(--text);font-size:.85rem;text-decoration:none';
+        lnk.textContent='🖼 '+esc(m.fileName||'이미지 열기');
+        wrap.innerHTML='';wrap.appendChild(lnk);
+      };
+      img.onclick=function(){
+        // 라이트박스 or 새 탭
+        const lb=document.getElementById('lightbox');
+        const lbImg=document.getElementById('lightboxImg');
+        if(lb&&lbImg){lbImg.src=imgSrc;lb.classList.add('on');}
+        else{window.open(imgSrc,'_blank');}
+      };
+      wrap.appendChild(img);
+      col.appendChild(wrap);
     } else if(m.type==='file'){
       const a=document.createElement('a');a.className='msg-file';a.href=m.data;a.download=m.fileName||'file';
       a.innerHTML='<div class="msg-file-icon">📄</div><div class="msg-file-info"><div class="msg-file-name">'+esc(m.fileName||'파일')+'</div><div class="msg-file-size">'+fmtSize(m.fileSize)+'</div></div>';
@@ -893,97 +950,138 @@ async function readFileAsDataURL(file){
   });
 }
 
+// ── 이미지 서버 업로드 (base64 → Drive → 공개URL) ──
+async function uploadImageToDrive(file){
+  const base64 = await readFileAsDataURL(file);
+  const res = await fetch('/api/drive-upload',{
+    method:'POST', headers:{'Content-Type':'application/json'},
+    body: JSON.stringify({ base64, fileName: file.name, mimeType: file.type })
+  });
+  const d = await res.json();
+  if(!d.ok) throw new Error(d.message || '이미지 업로드 실패');
+  return d.imageUrl || d.fallbackUrl || '';
+}
+
 // ── 메시지 전송 ──
 async function sendMsg(){
-  if(!_cur)return;
-  const inp=document.getElementById('chatInput');
-  const text=inp.value.trim();
-  if(!text&&!_attachFiles.length)return;
-  const myId=getMyId();
-  const idx=_rooms.findIndex(r=>r.id===_cur.id);
-  if(idx<0)return;
+  if(!_cur) return;
+  const inp = document.getElementById('chatInput');
+  const text = inp.value.trim();
+  if(!text && !_attachFiles.length) return;
 
-  // 나와의 채팅은 로컬에만 저장
-  if(_cur.isMyChat){
-    for(const f of _attachFiles){
-      const data=await readFileAsDataURL(f);
-      const isImg=f.type.startsWith('image/');
-      _rooms[idx].messages.push({id:'m_'+Date.now()+'_'+Math.random().toString(36).slice(2),from:myId,type:isImg?'image':'file',fileName:f.name,fileSize:f.size,data,at:Date.now()});
-    }
-    if(text){_rooms[idx].messages.push({id:'m_'+Date.now(),from:myId,text,at:Date.now()});}
-    _attachFiles=[];renderAttachPreview();
-    _cur=_rooms[idx];saveRooms();inp.value='';inp.style.height='auto';
-    renderMessages();renderRooms();scrollBottom();
+  // ① 로그인 체크
+  const myId = getMyId();
+  const myName = getMyName();
+  if(!myId){
+    alert('로그인 후 메시지를 보낼 수 있습니다.\n메인 화면에서 로그인해 주세요.');
     return;
   }
 
-  inp.value='';inp.style.height='auto';
+  const idx = _rooms.findIndex(r => r.id === _cur.id);
+  if(idx < 0) return;
 
-  // 파일 전송 - Drive Resumable Upload → webContentLink 방식
-  for(const f of _attachFiles){
-    try{
-      const isImg=f.type.startsWith('image/');
-      // ① Drive upload-url 세션 발급
-      const sessRes=await fetch('/api/drive-upload-url',{
-        method:'POST',headers:{'Content-Type':'application/json'},
-        body:JSON.stringify({parentId:'appDataFolder_MemberChat',fileName:f.name,mimeType:f.type,fileSize:f.size})
+  // ② 나와의 채팅 - 로컬 저장
+  if(_cur.isMyChat){
+    for(const f of _attachFiles){
+      const data = await readFileAsDataURL(f);
+      const isImg = f.type.startsWith('image/');
+      _rooms[idx].messages.push({
+        id: 'm_'+Date.now()+'_'+Math.random().toString(36).slice(2,6),
+        from: myId, fromName: myName,
+        type: isImg ? 'image' : 'file',
+        fileName: f.name, fileSize: f.size, mimeType: f.type,
+        data, fileUrl: data, at: Date.now()
       });
-      const sessData=await sessRes.json();
-      if(sessData.ok && sessData.uploadUrl){
-        // ② 실제 파일을 Drive에 직접 PUT
-        const upRes=await fetch(sessData.uploadUrl,{method:'PUT',headers:{'Content-Type':f.type,'Content-Length':String(f.size)},body:f});
-        const upJson=await upRes.json().catch(()=>({}));
-        const fileId=upJson.id||'';
-        // ③ webContentLink = 직접 다운로드 가능한 공개 URL
-        const fileUrl=fileId?('https://drive.google.com/uc?export=view&id='+fileId):'';
-        if(fileUrl){
-          await fetch('/api/chat-room?action=send',{
-            method:'POST',headers:{'Content-Type':'application/json'},
-            body:JSON.stringify({roomId:_cur.id,title:_cur.name,userId:myId,sender:myId,message:'',fileName:f.name,fileUrl:fileUrl,members:_cur.members||[myId]})
-          });
-          continue;
+    }
+    if(text){
+      _rooms[idx].messages.push({id:'m_'+Date.now(), from:myId, fromName:myName, type:'text', text, at:Date.now()});
+    }
+    _attachFiles=[]; renderAttachPreview();
+    _cur=_rooms[idx]; saveRooms();
+    inp.value=''; inp.style.height='auto';
+    renderMessages(); renderRooms(); scrollBottom();
+    return;
+  }
+
+  inp.value=''; inp.style.height='auto';
+
+  // ③ 파일/이미지 전송
+  for(const f of _attachFiles){
+    const isImg = f.type.startsWith('image/') || /\.(png|jpg|jpeg|gif|webp)$/i.test(f.name);
+    if(isImg){
+      // 이미지: 서버 업로드 → Drive URL
+      const sendBtn = document.getElementById('sendBtn');
+      const origTxt = sendBtn ? sendBtn.textContent : '';
+      if(sendBtn){ sendBtn.disabled=true; sendBtn.textContent='업로드 중...'; }
+      try{
+        const imageUrl = await uploadImageToDrive(f);
+        await fetch('/api/chat-room?action=send',{
+          method:'POST', headers:{'Content-Type':'application/json'},
+          body: JSON.stringify({
+            roomId: _cur.id, title: _cur.name,
+            userId: myId, sender: myName,
+            message: '', fileName: f.name, fileUrl: imageUrl,
+            mimeType: f.type, members: _cur.members||[myId]
+          })
+        });
+      } catch(e){
+        // Drive 업로드 실패 → base64 fallback (300KB 미만)
+        if(f.size < 300*1024){
+          try{
+            const data = await readFileAsDataURL(f);
+            await fetch('/api/chat-room?action=send',{
+              method:'POST', headers:{'Content-Type':'application/json'},
+              body: JSON.stringify({
+                roomId: _cur.id, title: _cur.name,
+                userId: myId, sender: myName,
+                message:'', fileName:f.name, fileUrl:data,
+                mimeType:f.type, members:_cur.members||[myId]
+              })
+            });
+          }catch(e2){
+            alert('이미지 전송 실패: '+e.message);
+          }
+        } else {
+          alert('이미지 업로드 실패: '+e.message);
         }
+      } finally {
+        if(sendBtn){ sendBtn.disabled=false; sendBtn.textContent=origTxt||'↑'; }
       }
-      // fallback: 소용량 이미지는 base64 inline (300KB 미만만)
-      if(f.size < 300*1024){
-        const data=await readFileAsDataURL(f);
-        await fetch('/api/chat-room?action=send',{
-          method:'POST',headers:{'Content-Type':'application/json'},
-          body:JSON.stringify({roomId:_cur.id,title:_cur.name,userId:myId,sender:myId,message:'',fileName:f.name,fileUrl:data,members:_cur.members||[myId]})
-        });
-      } else {
-        // 대용량은 파일명만
-        await fetch('/api/chat-room?action=send',{
-          method:'POST',headers:{'Content-Type':'application/json'},
-          body:JSON.stringify({roomId:_cur.id,title:_cur.name,userId:myId,sender:myId,message:'📎 '+f.name+' ('+Math.round(f.size/1024)+'KB)',members:_cur.members||[myId]})
-        });
-      }
-    }catch(e){
-      // 에러 시 파일명만 전송
+    } else {
+      // 일반 파일 - 파일명 텍스트로 전송
       try{
         await fetch('/api/chat-room?action=send',{
-          method:'POST',headers:{'Content-Type':'application/json'},
-          body:JSON.stringify({roomId:_cur.id,title:_cur.name,userId:myId,sender:myId,message:'📎 '+f.name,members:_cur.members||[myId]})
+          method:'POST', headers:{'Content-Type':'application/json'},
+          body: JSON.stringify({
+            roomId:_cur.id, title:_cur.name,
+            userId:myId, sender:myName,
+            message:'📎 '+f.name+' ('+Math.round(f.size/1024)+'KB)',
+            members:_cur.members||[myId]
+          })
         });
-      }catch(e2){}
+      }catch(e){}
     }
   }
-  _attachFiles=[];renderAttachPreview();
+  _attachFiles=[]; renderAttachPreview();
 
-  // 텍스트 전송 - 서버 append
+  // ④ 텍스트 전송
   if(text){
     try{
       await fetch('/api/chat-room?action=send',{
-        method:'POST',headers:{'Content-Type':'application/json'},
-        body:JSON.stringify({roomId:_cur.id,title:_cur.name,userId:myId,sender:myId,message:text,members:_cur.members||[myId]})
+        method:'POST', headers:{'Content-Type':'application/json'},
+        body: JSON.stringify({
+          roomId:_cur.id, title:_cur.name,
+          userId:myId, sender:myName,
+          message:text, members:_cur.members||[myId]
+        })
       });
-    }catch(e){
-      // 실패 시 로컬에라도 추가
-      _rooms[idx].messages.push({id:'m_'+Date.now(),from:myId,text,at:Date.now()});
-      _cur=_rooms[idx];saveRooms();
+    } catch(e){
+      // 실패 시 로컬에 추가
+      _rooms[idx].messages.push({id:'m_'+Date.now(), from:myId, fromName:myName, type:'text', text, at:Date.now()});
+      _cur=_rooms[idx]; saveRooms();
     }
   }
-  // 전송 후 서버에서 즉시 동기화
+  // ⑤ 서버에서 즉시 동기화
   await syncRoomFromServer(true);
 }
 
