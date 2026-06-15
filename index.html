@@ -47,7 +47,9 @@ button,input,textarea,select{font:inherit}button{cursor:pointer;-webkit-tap-high
 /* /stella-rich-render-fix */
 
 body.dark{background:#0d1117;color:#e6edf3}
-body.dark .composer,body.dark .sidebar,body.dark header,body.dark .topbar{background:#161b22;border-color:#30363d}
+body.dark .composer,body.dark header,body.dark .topbar{background:#161b22;border-color:#30363d}
+body.dark .sidebar{background:#0d1117;border-color:#30363d}
+body.dark .mark{background:#e6edf3;color:#0d1117;border-color:#30363d}
 body.dark .bubble,body.dark .msg{background:#161b22;color:#e6edf3}
 body.dark .bubble.user,body.dark .user .bubble{background:#1f6feb;color:#fff}
 body.dark textarea,body.dark input,body.dark select,body.dark #modelSelect{background:#0d1117;color:#e6edf3;border-color:#30363d}
@@ -407,7 +409,13 @@ function saveUserPrefs(){
 function loadUserPrefs(){
   try{
     var raw=localStorage.getItem(getUserPrefsKey());
-    if(!raw)return;
+    // 저장된 prefs 없으면 dark 기본값 적용
+    if(!raw){
+      document.body.classList.add('dark');
+      var tb=document.getElementById('themeToggle');
+      if(tb)tb.textContent='☀️';
+      return;
+    }
     var prefs=JSON.parse(raw);
     // 테마
     if(prefs.theme){
