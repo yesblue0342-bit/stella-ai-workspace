@@ -227,35 +227,35 @@ function enterApp(u){
   const aw=document.getElementById('appWrap');aw.style.display='flex';
   document.getElementById('userLabel').textContent='관리자: '+(u.name||u.id);
   applyTheme();
-  status('로딩 중...');
-  setTimeout(function(){ loadFolder('','내 드라이브'); }, 50);
+  status('Google Drive 연결 중...');
+  // UI 렌더링 완료 후 loadFolder 실행 (블로킹 방지)
+  requestAnimationFrame(function(){
+    setTimeout(function(){ loadFolder('','내 드라이브'); }, 100);
+  });
 }
 function dbLogout(){localStorage.removeItem(SK);location.reload();}
 
 // ── 폴더 탐색 ──
 async function loadFolder(folderId,name){
+  status('로딩 중...');
   document.getElementById('fileList').innerHTML='';
   clearSel();
   _curId=folderId||'';
-  const url='/api/drive-list'+(folderId?'?folderId='+encodeURIComponent(folderId):'');
   try{
-    const ctrl=new AbortController();
-    const tid=setTimeout(function(){ctrl.abort();},15000);
-    const r=await fetch(url,{cache:'no-store',signal:ctrl.signal});
-    clearTimeout(tid);
+    // folderId 없으면 루트, 있으면 해당 폴더
+    const url='/api/drive-list'+(folderId?'?folderId='+encodeURIComponent(folderId):'');
+    const r=await fetch(url,{cache:'no-store'});
     const d=await r.json();
-    if(!d.ok){status('❌ '+(d.error||d.message||'Drive 오류'));return;}
+    if(!d.ok){status('오류: '+(d.message||'로드 실패'));return;}
     _files=Array.isArray(d.files)?d.files:[];
     const cid=folderId||'ROOT';
+    // 스택: 같은 위치면 중복 추가 안 함
     if(!_stack.length||_stack[_stack.length-1].id!==cid){
       _stack.push({id:cid,name:name||folderId||'내 드라이브'});
     }
     renderBreadcrumb();renderFiles();
     status('📁 '+(_stack[_stack.length-1]?.name||'내 드라이브')+' — '+_files.length+'개 항목');
-  }catch(e){
-    const msg=e.name==='AbortError'?'응답 없음(15초 초과)':e.message;
-    status('❌ 로딩 실패: '+msg);
-  }
+  }catch(e){status('오류: '+e.message);}
 }
 
 // ── 브레드크럼 + 경로복사 ──
@@ -719,7 +719,9 @@ async function loadPickerFolder(folderId){
       return;
     }
     el.innerHTML = folders.map(function(f){
-      return '<div class="pk-row" ondblclick="pickerEnter(''+f.id+'',''+esc(f.name)+'')" onclick="pickerSelect(''+f.id+'',this)"><div class="pk-icon">📁</div><div class="pk-name">'+esc(f.name)+'</div></div>';
+      var fid=f.id.replace(/'/g,"\'");
+      var fn=esc(f.name).replace(/'/g,"\'");
+      return '<div class="pk-row" ondblclick="pickerEnter(\'' + fid + '\',\'' + fn + '\')" onclick="pickerSelect(\'' + fid + '\',this)"><div class="pk-icon">📁</div><div class="pk-name">' + esc(f.name) + '</div></div>';
     }).join('');
   }catch(e){
     el.innerHTML='<div style="padding:20px;text-align:center;color:var(--danger)">'+e.message+'</div>';
