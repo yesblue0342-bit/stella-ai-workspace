@@ -291,26 +291,17 @@ async function dbLogin(){
 }
 
 function enterApp(u){
-  try {
-    _user=u;
-    const gate=document.getElementById('gate');
-    const app=document.getElementById('appWrap');
-    const ul=document.getElementById('userLabel');
-    if(gate) gate.style.display='none';
-    if(app) app.style.display='flex';
-    if(ul) ul.textContent='관리자: '+(u.name||u.id);
-    try{applyTheme();}catch(e){}
-    // loadFolder 호출
-    loadFolder('','내 드라이브');
-  } catch(err) {
-    console.error('enterApp 오류:', err);
-    const err_el = document.getElementById('gErr');
-    if(err_el) {
-      err_el.style.display='block';
-      err_el.textContent='앱 진입 오류: '+err.message;
-    }
-    alert('Stella DB 진입 오류\n\n'+err.message+'\n\n브라우저 콘솔(F12)에서 더 많은 정보를 볼 수 있습니다.');
-  }
+  _user=u;
+  var gate=document.getElementById('gate');
+  var app=document.getElementById('appWrap');
+  var ul=document.getElementById('userLabel');
+  if(gate) gate.style.display='none';
+  if(app) app.style.display='flex';
+  if(ul) ul.textContent='관리자: '+(u.name||u.id);
+  try{applyTheme();}catch(e){}
+  status('Drive 연결 중...');
+  // 비동기로 실행 — UI 블로킹 방지
+  setTimeout(function(){ loadFolder('','내 드라이브'); }, 0);
 }
 
 function dbLogout(){localStorage.removeItem(SK);location.reload();}
@@ -324,35 +315,32 @@ async function fetchWithTimeout(url,options,ms){
 }
 
 async function loadFolder(folderId,name){
-  try{
   status('로딩 중...');
   document.getElementById('fileList').innerHTML='';
   clearSel();
   _curId=folderId||'';
-  let lastErr=null;
-  for(let attempt=1;attempt<=2;attempt++){
-    try{
-      const url='/api/drive-list'+(folderId?'?folderId='+encodeURIComponent(folderId):'');
-      if(attempt>1){status('재시도 중...');await sleep(1500);}
-      const r=await fetchWithTimeout(url,{cache:'no-store'},12000);
-      const d=await r.json();
-      if(!d.ok){lastErr=(d.error||d.message||'로드 실패');if(attempt<2)continue;break;}
+  var lastErr=null;
+  try{
+    var url='/api/drive-list'+(folderId?'?folderId='+encodeURIComponent(folderId):'');
+    var r=await fetchWithTimeout(url,{cache:'no-store'},8000);
+    var d=await r.json();
+    if(d.ok){
       _files=Array.isArray(d.files)?d.files:[];
-      const cid=folderId||'ROOT';
+      var cid=folderId||'ROOT';
       if(!_stack.length||_stack[_stack.length-1].id!==cid){
         _stack.push({id:cid,name:name||folderId||'내 드라이브'});
       }
       renderBreadcrumb();renderFiles();
       status('📁 '+(_stack[_stack.length-1]?.name||'내 드라이브')+' — '+_files.length+'개 항목');
       return;
-    }catch(e){
-      lastErr=(e.name==='AbortError'?'응답 시간 초과(12초)':e.message);
-      console.warn('loadFolder 시도'+attempt+' 실패:',e);
     }
+    lastErr=(d.error||d.message||'Drive 응답 오류');
+  }catch(e){
+    lastErr=(e.name==='AbortError'?'응답 없음 (8초 초과)':e.message);
   }
-  status('❌ 로딩 실패: '+lastErr+' — 자동 진단 중...');
-  setTimeout(runDiag,500);
-  }catch(err){console.error('loadFolder 오류:',err);status('폴더 로딩 실패: '+err.message);}
+  status('❌ 로딩 실패: '+lastErr);
+  // 자동 진단 팝업
+  runDiag();
 }
 
 // ── Drive 진단 ──
