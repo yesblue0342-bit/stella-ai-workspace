@@ -65,12 +65,15 @@ body.dark a{color:#ffffff;font-weight:700;text-decoration:underline;text-decorat
 body.dark .avatar{background:#e6edf3!important;color:#0d1117!important;border-color:#30363d!important}
 body.dark .mark{background:#e6edf3!important;color:#0d1117!important;border-color:#30363d!important}
 /* 다크모드 스크롤바 */
-body.dark ::-webkit-scrollbar{width:10px;height:10px;background:#0d1117}
-body.dark ::-webkit-scrollbar-thumb{background:#30363d;border-radius:5px}
-body.dark ::-webkit-scrollbar-thumb:hover{background:#484f58}
-body.dark ::-webkit-scrollbar-corner{background:#0d1117}
-body.dark .sidebar::-webkit-scrollbar-track{background:#0d1117}
-body.dark *{scrollbar-color:#30363d #0d1117;scrollbar-width:thin}
+body.dark ::-webkit-scrollbar{width:10px;height:10px;background:#0d1117!important}
+body.dark ::-webkit-scrollbar-track{background:#0d1117!important;border:none!important}
+body.dark ::-webkit-scrollbar-thumb{background:#30363d!important;border-radius:5px;border:2px solid #0d1117!important}
+body.dark ::-webkit-scrollbar-thumb:hover{background:#484f58!important}
+body.dark ::-webkit-scrollbar-corner{background:#0d1117!important}
+body.dark .sidebar,body.dark .sidebar *{scrollbar-color:#30363d #0d1117!important;scrollbar-width:thin!important}
+body.dark .sidebar::-webkit-scrollbar{background:#0d1117!important;width:10px!important}
+body.dark .sidebar::-webkit-scrollbar-track{background:#0d1117!important}
+body.dark .sidebar::-webkit-scrollbar-thumb{background:#30363d!important}
 .theme-toggle{cursor:pointer;border:1px solid #d1d5db;background:#fff;border-radius:12px;padding:6px 10px;font-size:16px;font-weight:700}
 body.dark .theme-toggle{background:#21262d;border-color:#30363d}
 pre.codeblock{position:relative;background:#1e293b;color:#e2e8f0;border-radius:12px;padding:32px 14px 14px;overflow-x:auto;font-family:ui-monospace,Menlo,monospace;font-size:13px;margin:8px 0}
@@ -184,7 +187,7 @@ body.dark .user-box *{color:#e6edf3!important}
 <div class="panel-head">
   <h3>📝 노트</h3>
   <div style="display:flex;gap:6px;align-items:center">
-    <input id="noteSearch" placeholder="노트 검색..." style="border:1px solid var(--line,#e5e7eb);border-radius:10px;padding:6px 10px;font-size:.82rem;width:130px;background:var(--bg-panel,#fff)">
+    <input id="noteSearch" placeholder="노트 검색..." oninput="renderNoteList()" style="border:1px solid var(--line,#e5e7eb);border-radius:10px;padding:6px 10px;font-size:.82rem;width:130px;background:var(--bg-panel,#fff)">
     <button class="small-btn" id="closeBoardBtn" type="button">닫기</button>
   </div>
 </div>
