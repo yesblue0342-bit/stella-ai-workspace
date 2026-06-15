@@ -136,6 +136,16 @@ body{font-family:system-ui,'Noto Sans KR',sans-serif;background:var(--bg);color:
 .modal-btns .danger{background:#ef4444;color:#fff;border-color:#ef4444}
 .member-chip{display:inline-flex;align-items:center;gap:5px;background:var(--bg3);border:1px solid var(--border);border-radius:99px;padding:3px 10px;font-size:.78rem;margin:3px}
 .member-chip button{background:none;border:none;cursor:pointer;color:var(--text2);font-size:.85rem}
+.user-dropdown{position:absolute;top:100%;left:0;right:0;background:var(--bg2);border:1px solid var(--border);border-radius:10px;z-index:999;max-height:200px;overflow-y:auto;box-shadow:0 4px 16px rgba(0,0,0,.2)}
+.user-item{display:flex;align-items:center;gap:10px;padding:9px 14px;cursor:pointer;font-size:.84rem;transition:background .1s}
+.user-item:hover{background:var(--bg3)}
+.user-avatar{width:32px;height:32px;border-radius:50%;background:var(--primary);display:flex;align-items:center;justify-content:center;font-weight:800;color:#fff;font-size:.8rem;flex-shrink:0;position:relative}
+.online-dot{position:absolute;bottom:0;right:0;width:9px;height:9px;border-radius:50%;background:#22c55e;border:2px solid var(--bg2)}
+.offline-dot{position:absolute;bottom:0;right:0;width:9px;height:9px;border-radius:50%;background:var(--text2);border:2px solid var(--bg2)}
+.user-info{flex:1;min-width:0}
+.user-name{font-weight:700;color:var(--text)}
+.user-id{font-size:.73rem;color:var(--text2)}
+.search-wrap{position:relative}
 
 /* ── 설정 패널 ── */
 .settings-panel{position:fixed;top:0;right:0;bottom:0;width:min(340px,100vw);background:var(--bg);border-left:1px solid var(--border);z-index:400;transform:translateX(100%);transition:.22s;display:flex;flex-direction:column;box-shadow:-4px 0 24px rgba(0,0,0,.15)}
@@ -228,7 +238,10 @@ body.theme-dark .theme-btn.active{background:#1e3a5f}
     <input id="newRoomName" placeholder="채팅방 이름" onkeydown="if(event.key==='Enter')createRoom()">
     <div style="font-size:.8rem;color:var(--text2);margin-bottom:8px">초대할 멤버 (이름 입력 후 Enter)</div>
     <div style="display:flex;gap:6px;margin-bottom:8px">
-      <input id="memberInput" placeholder="멤버 이름 또는 ID" style="margin:0;flex:1" onkeydown="if(event.key==='Enter'){addMember();event.preventDefault()}">
+      <div class="search-wrap" style="flex:1;position:relative">
+        <input id="memberInput" placeholder="이름 또는 ID 검색..." style="margin:0;width:100%" oninput="searchUsers(this.value,'memberDrop','new')" onkeydown="if(event.key==='Enter'){addMember();event.preventDefault();closeDrop('memberDrop')}">
+        <div id="memberDrop" class="user-dropdown" style="display:none"></div>
+      </div>
       <button class="hbtn" onclick="addMember()">추가</button>
     </div>
     <div id="memberChips"></div>
@@ -245,7 +258,10 @@ body.theme-dark .theme-btn.active{background:#1e3a5f}
     <h3>👥 멤버 초대</h3>
     <div style="font-size:.82rem;color:var(--text2);margin-bottom:10px">현재 채팅방에 멤버를 추가합니다</div>
     <div style="display:flex;gap:6px;margin-bottom:8px">
-      <input id="inviteInput" placeholder="멤버 이름 또는 ID" style="margin:0;flex:1" onkeydown="if(event.key==='Enter'){addInviteMember();event.preventDefault()}">
+      <div class="search-wrap" style="flex:1;position:relative">
+        <input id="inviteInput" placeholder="이름 또는 ID 검색..." style="margin:0;width:100%" oninput="searchUsers(this.value,'inviteDrop','invite')" onkeydown="if(event.key==='Enter'){addInviteMember();event.preventDefault();closeDrop('inviteDrop')}">
+        <div id="inviteDrop" class="user-dropdown" style="display:none"></div>
+      </div>
       <button class="hbtn" onclick="addInviteMember()">추가</button>
     </div>
     <div id="inviteChips" style="margin-bottom:12px"></div>
@@ -460,6 +476,75 @@ function openNewRoom(){
   openModal('newRoomModal');
   setTimeout(()=>document.getElementById('newRoomName').focus(),100);
 }
+// ── 온라인 세션 기록 ──
+const ONLINE_TTL = 5 * 60 * 1000; // 5분
+function markOnline(id){ try{ const k='stella_online_'+id; localStorage.setItem(k, Date.now()); }catch(e){} }
+function isOnline(id){ try{ const t=Number(localStorage.getItem('stella_online_'+id)||0); return Date.now()-t < ONLINE_TTL; }catch(e){return false;} }
+
+// ── 사용자 검색 ──
+let _searchCache=null, _searchTimer=null;
+async function fetchAllUsers(){
+  if(_searchCache) return _searchCache;
+  try{
+    const r=await fetch('/api/user-search',{cache:'no-store'});
+    const d=await r.json();
+    _searchCache = d.ok ? (d.users||[]) : [];
+  }catch(e){ _searchCache=[]; }
+  return _searchCache;
+}
+function closeDrop(id){ const el=document.getElementById(id); if(el) el.style.display='none'; }
+function searchUsers(q, dropId, mode){
+  clearTimeout(_searchTimer);
+  _searchTimer = setTimeout(async function(){
+    const drop = document.getElementById(dropId);
+    if(!drop) return;
+    const users = await fetchAllUsers();
+    const kw = q.trim().toLowerCase();
+    const myId = localStorage.getItem('stella_my_id') || '';
+    // 이미 추가된 멤버 제외
+    const already = mode==='new' ? _members : (_cur ? (_cur.members||[]) : []);
+    const filtered = users.filter(function(u){
+      const uid = String(u.id||'').toLowerCase();
+      const uname = String(u.name||'').toLowerCase();
+      if(u.id === myId) return false;
+      if(already.includes(u.id)) return false;
+      if(!kw) return true;
+      return uid.includes(kw) || uname.includes(kw);
+    });
+    if(!filtered.length){ drop.style.display='none'; return; }
+    drop.innerHTML = filtered.slice(0,8).map(function(u){
+      const online = isOnline(u.id);
+      const initial = (u.name||u.id||'?')[0].toUpperCase();
+      return '<div class="user-item" onclick="selectUser('+JSON.stringify(u.id)+','+JSON.stringify(u.name)+',\''+dropId+'\',\''+mode+'\')">'+
+        '<div class="user-avatar">'+initial+'<span class="'+(online?'online':'offline')+'-dot" title="'+(online?'온라인':'오프라인')+'"></span></div>'+
+        '<div class="user-info"><div class="user-name">'+esc(u.name)+'</div><div class="user-id">@'+esc(u.id)+(online?' 🟢':' ⚫')+'</div></div>'+
+        '</div>';
+    }).join('');
+    drop.style.display='block';
+  }, 250);
+}
+function selectUser(id, name, dropId, mode){
+  closeDrop(dropId);
+  if(mode==='new'){
+    document.getElementById('memberInput').value='';
+    if(!id||_members.includes(id)) return;
+    _members.push(id);
+    renderMemberChips('memberChips',_members,function(i){_members.splice(i,1);renderMemberChips('memberChips',_members,arguments.callee);});
+  } else {
+    document.getElementById('inviteInput').value='';
+    if(!id||_inviteMembers.includes(id)||(_cur&&(_cur.members||[]).includes(id))) return;
+    _inviteMembers.push(id);
+    document.getElementById('inviteChips').innerHTML=_inviteMembers.map(function(m,i){
+      return '<span class="member-chip">'+esc(m)+'<button onclick="_inviteMembers.splice('+i+',1);this.parentNode.remove()">✕</button></span>';
+    }).join('');
+  }
+}
+
+// 클릭 외부 시 드롭다운 닫기
+document.addEventListener('click',function(e){
+  if(!e.target.closest('.search-wrap')){ closeDrop('memberDrop'); closeDrop('inviteDrop'); }
+});
+
 function addMember(){
   const v=document.getElementById('memberInput').value.trim();
   if(!v||_members.includes(v))return;
