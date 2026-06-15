@@ -545,19 +545,25 @@ async function loadChatHistoryFromDrive(){
     const r=await fetch('/api/hybrid-chat-list?userId='+encodeURIComponent(user.id),{cache:'no-store'});
     if(!r.ok)return;
     const d=await r.json();
-    if(!d.ok||!d.rooms||!d.rooms.length)return;
+    // hybrid-chat-list는 items 반환, 호환 처리
+    const chatItems = d.rooms || d.items || [];
+    if(!d.ok||!chatItems.length)return;
     const localIds=new Set((rooms||[]).map(function(r){return r.id;}));
     let added=0;
-    d.rooms.forEach(function(dr){
-      if(!localIds.has(dr.id)){
+    chatItems.forEach(function(dr){
+      const rid = dr.id || dr.room_id;
+      if(!rid) return;
+      if(!localIds.has(rid)){
         rooms.push({
-          id:dr.id,name:dr.title||dr.name||'복원된 채팅',
-          owner:user.id,
-          messages:dr.messages||[],
-          projectId:dr.projectId||'',
-          createdAt:dr.createdAt||new Date().toISOString()
+          id: rid,
+          name: dr.title || dr.name || '복원된 채팅',
+          owner: user.id,
+          messages: dr.messages || [],
+          projectId: dr.projectId || dr.project_id || '',
+          createdAt: dr.createdAt || dr.created_at || new Date().toISOString()
         });
         added++;
+        localIds.add(rid);
       }
     });
     if(added>0){saveRooms();renderAll();console.log('[Drive] 채팅 '+added+'개 복원');}
