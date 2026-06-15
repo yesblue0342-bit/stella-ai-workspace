@@ -227,32 +227,35 @@ function enterApp(u){
   const aw=document.getElementById('appWrap');aw.style.display='flex';
   document.getElementById('userLabel').textContent='관리자: '+(u.name||u.id);
   applyTheme();
-  // 루트(내 드라이브)부터 시작
-  loadFolder('','내 드라이브');
+  status('로딩 중...');
+  setTimeout(function(){ loadFolder('','내 드라이브'); }, 50);
 }
 function dbLogout(){localStorage.removeItem(SK);location.reload();}
 
 // ── 폴더 탐색 ──
 async function loadFolder(folderId,name){
-  status('로딩 중...');
   document.getElementById('fileList').innerHTML='';
   clearSel();
   _curId=folderId||'';
+  const url='/api/drive-list'+(folderId?'?folderId='+encodeURIComponent(folderId):'');
   try{
-    // folderId 없으면 루트, 있으면 해당 폴더
-    const url='/api/drive-list'+(folderId?'?folderId='+encodeURIComponent(folderId):'');
-    const r=await fetch(url,{cache:'no-store'});
+    const ctrl=new AbortController();
+    const tid=setTimeout(function(){ctrl.abort();},15000);
+    const r=await fetch(url,{cache:'no-store',signal:ctrl.signal});
+    clearTimeout(tid);
     const d=await r.json();
-    if(!d.ok){status('오류: '+(d.message||'로드 실패'));return;}
+    if(!d.ok){status('❌ '+(d.error||d.message||'Drive 오류'));return;}
     _files=Array.isArray(d.files)?d.files:[];
     const cid=folderId||'ROOT';
-    // 스택: 같은 위치면 중복 추가 안 함
     if(!_stack.length||_stack[_stack.length-1].id!==cid){
       _stack.push({id:cid,name:name||folderId||'내 드라이브'});
     }
     renderBreadcrumb();renderFiles();
     status('📁 '+(_stack[_stack.length-1]?.name||'내 드라이브')+' — '+_files.length+'개 항목');
-  }catch(e){status('오류: '+e.message);}
+  }catch(e){
+    const msg=e.name==='AbortError'?'응답 없음(15초 초과)':e.message;
+    status('❌ 로딩 실패: '+msg);
+  }
 }
 
 // ── 브레드크럼 + 경로복사 ──
