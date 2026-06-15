@@ -1,5 +1,6 @@
 {
   "rewrites": [
+    { "source": "/", "destination": "/index.html" },
     { "source": "/gpt", "destination": "/gpt.html" },
     { "source": "/chatgpt", "destination": "/gpt.html" },
     { "source": "/stella-gpt", "destination": "/gpt.html" },
