@@ -238,7 +238,20 @@ function saveRooms(){write(K.rooms,[...read(K.rooms,[]).filter(x=>x.owner!==user
 function exp(){return new Set(read(K.exp,['all','none']))}function saveExp(s){write(K.exp,[...s])}function bexp(){return new Set(read(K.bexp,['기본']))}function saveBexp(s){write(K.bexp,[...s])}
 function setAuthMode(m){authMode=m;$$('.signup-only').forEach(e=>e.classList.toggle('hidden',m!=='signup'));$('#loginTab').classList.toggle('active',m==='login');$('#signupTab').classList.toggle('active',m==='signup');$('#authSubmit').textContent=m==='login'?'로그인':'회원가입';$('#authMsg').textContent=''}
 function initAuth(){bootstrapAdmin();users=allUsers();const f=loadSessionUser();if(f){user=f;saveSessionUser(user);showApp();return}$('#authModal').classList.add('active');$('#app').style.display='none'}
-function showApp(){loadData();loadUserPrefs();$('#authModal').classList.remove('active');$('#app').style.display='grid';$('#userName').textContent=user.name;$('#userEmail').textContent=user.email||user.id;if(!rooms.length)createRoom('새 채팅',false);if(!activeRoomId)activeRoomId=rooms[0]?.id;renderAll();setTimeout(loadChatHistoryFromDrive,1000);}
+function showApp(){
+  loadData();loadUserPrefs();
+  $('#authModal').classList.remove('active');
+  $('#app').style.display='grid';
+  $('#userName').textContent=user.name;
+  $('#userEmail').textContent=user.email||user.id;
+  if(!rooms.length)createRoom('새 채팅',false);
+  if(!activeRoomId)activeRoomId=rooms[0]?.id;
+  renderAll();
+  // Drive에서 순차 복원 (채팅 → 노트/게시글 → 프로젝트)
+  setTimeout(loadChatHistoryFromDrive, 800);
+  setTimeout(loadNotesFromDrive, 1500);
+  setTimeout(loadProjectsFromDrive, 2200);
+}
 async function handleAuth(e){e.preventDefault();users=allUsers();$('#authMsg').textContent='';const id=$('#authId').value.trim();const pw=$('#authPassword').value;if(!id||!pw){$('#authMsg').textContent='아이디 또는 이메일과 비밀번호를 입력해 주세요.';return}try{let res,data,loginEmail=id;if(authMode==='signup'){const name=$('#authName').value.trim();const email=$('#authEmail').value.trim().toLowerCase();const birth=$('#authBirth').value.trim();loginEmail=email||id;if(!name||!loginEmail){$('#authMsg').textContent='이름과 이메일을 입력해 주세요.';return}res=await fetch('/api/signup',{method:'POST',headers:{'Content-Type':'application/json','Cache-Control':'no-store'},body:JSON.stringify({id,email:loginEmail,password:pw,name,birth})});}else{res=await fetch('/api/login',{method:'POST',headers:{'Content-Type':'application/json','Cache-Control':'no-store'},body:JSON.stringify({id,email:id,password:pw})});}const raw=await res.text();try{data=JSON.parse(raw)}catch{data={message:raw}}if(!res.ok||data.ok===false){$('#authMsg').textContent=data.message||data.error||'로그인/회원가입 처리 실패';return}const apiUser=data.user||{};const email=String(apiUser.email||loginEmail||id).toLowerCase();const localUser={id:String(apiUser.id||id),name:apiUser.name||email||id,email,birth:apiUser.birth||$('#authBirth').value.trim()||'',passwordHash:'',role:(ADMIN_EMAILS.includes(email)||ADMIN_EMAILS.includes(String(apiUser.id||id))||ADMIN_EMAILS.includes(String(apiUser.name||'')))?'admin':'user',createdAt:apiUser.created_at||new Date().toISOString()};users=allUsers().filter(u=>u.id!==localUser.id&&String(u.email||'').toLowerCase()!==email);users.push(localUser);saveUsers();user=localUser;saveSessionUser(user);showApp();}catch(err){$('#authMsg').textContent='회원 API 연결 오류: '+(err.message||err)}}
 function forgotPassword(){users=allUsers();const id=prompt('아이디를 입력하세요.');if(!id)return;const u=users.find(x=>x.id===id.trim());if(!u)return alert('사용자를 찾을 수 없습니다. 관리자에게 문의하세요.\n관리자: yesblue0342@naver.com / yesblue0342@gmail.com');const name=prompt('가입자 이름'),email=prompt('가입 이메일'),birth=prompt('생년월일 예: 1982-04-30');if((name||'').trim()===u.name&&(email||'').trim().toLowerCase()===u.email&&(birth||'').trim()===u.birth){const np=prompt('새 비밀번호');if(np){u.passwordHash=hash(np);saveUsers();alert('비밀번호가 변경되었습니다.')}}else alert('본인 확인 정보가 맞지 않습니다. 관리자에게 문의하세요.')}function logout(){localStorage.removeItem(K.session);location.reload()}
 function activeRoom(){return rooms.find(r=>r.id===activeRoomId)}function projectName(pid){return projects.find(p=>p.id===pid)?.name||'미분류'}function projectRooms(pid){return rooms.filter(r=>r.projectId===pid)}
@@ -417,7 +430,22 @@ function saveCurrentNote(){
   savePosts();
   document.getElementById('noteMeta').textContent = '저장됨 · '+new Date().toLocaleString('ko-KR');
   // Drive 저장
-  try{fetch('/api/stella?action=board-save',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({postId:_curNoteId,userId:user.id,writer:user.name||user.id,category:'노트',title:title,content:body})}).catch(function(){});}catch(e){}
+  // Drive + Azure SQL 저장 (postId 명시적으로 전달)
+  try{
+    fetch('/api/stella?action=board-save',{
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({
+        postId: _curNoteId,
+        userId: user.id,
+        writer: user.name||user.id,
+        category: '노트',
+        title: title,
+        content: body,
+        createdAt: posts.find(function(p){return p.id===_curNoteId;})?.createdAt || new Date().toISOString()
+      })
+    }).catch(function(e){console.warn('[Note] Drive 저장 실패:',e.message);});
+  }catch(e){}
 }
 
 function deleteCurrentNote(){
@@ -508,17 +536,17 @@ function formatSearchReferences(results){if(!Array.isArray(results)||!results.le
 // 채팅 히스토리 Drive에서 로드 (새로 접속 시)
 async function loadChatHistoryFromDrive(){
   try{
-    const r=await fetch('/api/hybrid-chat-list',{cache:'no-store'});
+    const r=await fetch('/api/hybrid-chat-list?userId='+encodeURIComponent(user.id),{cache:'no-store'});
     if(!r.ok)return;
     const d=await r.json();
     if(!d.ok||!d.rooms||!d.rooms.length)return;
-    // 로컬에 없는 채팅방만 추가
     const localIds=new Set((rooms||[]).map(function(r){return r.id;}));
     let added=0;
     d.rooms.forEach(function(dr){
       if(!localIds.has(dr.id)){
         rooms.push({
           id:dr.id,name:dr.title||dr.name||'복원된 채팅',
+          owner:user.id,
           messages:dr.messages||[],
           projectId:dr.projectId||'',
           createdAt:dr.createdAt||new Date().toISOString()
@@ -527,7 +555,81 @@ async function loadChatHistoryFromDrive(){
       }
     });
     if(added>0){saveRooms();renderAll();console.log('[Drive] 채팅 '+added+'개 복원');}
-  }catch(e){console.warn('[Drive] 히스토리 로드 실패:',e.message);}
+  }catch(e){console.warn('[Drive] 채팅 로드 실패:',e.message);}
+}
+
+// ── Drive에서 노트/게시글 복원 ──
+async function loadNotesFromDrive(){
+  if(!user||!user.id) return;
+  try{
+    const r=await fetch('/api/stella?action=board-list&userId='+encodeURIComponent(user.id)+'&category=all',{cache:'no-store'});
+    if(!r.ok) return;
+    const d=await r.json();
+    if(!d.ok||!d.posts||!d.posts.length) return;
+    const localIds=new Set((posts||[]).map(function(p){return p.id||p.postId;}));
+    let added=0;
+    d.posts.forEach(function(dp){
+      const id=dp.postId||dp.id;
+      if(!id) return;
+      if(!localIds.has(id)){
+        posts.unshift({
+          id: id,
+          owner: user.id,
+          title: dp.title||'(제목없음)',
+          body: dp.content||dp.body||'',
+          category: dp.category||dp._category||'노트',
+          createdAt: dp.createdAt||new Date().toISOString(),
+          updatedAt: dp.updatedAt||dp.createdAt||new Date().toISOString()
+        });
+        added++;
+        localIds.add(id);
+      }
+    });
+    if(added>0){
+      savePosts();
+      renderNoteList();
+      renderBoardTree();
+      renderAll();
+      console.log('[Drive] 노트/게시글 '+added+'개 복원');
+    }
+  }catch(e){console.warn('[Drive] 노트 로드 실패:',e.message);}
+}
+
+// ── Drive에서 프로젝트 카테고리 복원 (Azure SQL workspace_state) ──
+async function loadProjectsFromDrive(){
+  if(!user||!user.id) return;
+  try{
+    const r=await fetch('/api/workspace?owner='+encodeURIComponent(user.id),{cache:'no-store'});
+    if(!r.ok) return;
+    const d=await r.json();
+    if(!d.ok) return;
+    let changed=false;
+    // 프로젝트 복원
+    if(Array.isArray(d.projects)&&d.projects.length){
+      const localProjIds=new Set((projects||[]).map(function(p){return p.id;}));
+      d.projects.forEach(function(dp){
+        if(dp.id&&!localProjIds.has(dp.id)){
+          projects.push({id:dp.id,owner:user.id,name:dp.name||dp.id,createdAt:dp.createdAt||new Date().toISOString()});
+          localProjIds.add(dp.id);
+          changed=true;
+        }
+      });
+      if(changed){saveProjects();}
+    }
+    // 채팅방 추가 복원 (workspace_state.rooms_json)
+    if(Array.isArray(d.rooms)&&d.rooms.length){
+      const localRoomIds=new Set((rooms||[]).map(function(r){return r.id;}));
+      d.rooms.forEach(function(dr){
+        if(dr.id&&!localRoomIds.has(dr.id)){
+          rooms.push({id:dr.id,owner:user.id,name:dr.name||'복원된 채팅',messages:dr.messages||[],projectId:dr.projectId||'',createdAt:dr.createdAt||new Date().toISOString()});
+          localRoomIds.add(dr.id);
+          changed=true;
+        }
+      });
+      if(changed){saveRooms();}
+    }
+    if(changed){renderAll();console.log('[Drive] 프로젝트/채팅 workspace 복원 완료');}
+  }catch(e){console.warn('[Drive] 프로젝트 로드 실패:',e.message);}
 }
 
 function initEvents(){ensureModelOptions();
