@@ -230,10 +230,18 @@ async function dbLogin(){
   } else {
     localStorage.removeItem(SK_REMEMBER);
   }
-  // 관리자 화이트리스트 (즉시 통과)
+  // 관리자 화이트리스트 (즉시 통과) - 안전하게
   if(id==='admin' && pw==='admin'){
-    const u={id:'admin',name:'관리자',email:'admin@stella.local',role:'admin'};
-    saveSession(u);enterApp(u);return;
+    try{
+      const u={id:'admin',name:'관리자',email:'admin@stella.local',role:'admin'};
+      saveSession(u);
+      enterApp(u);
+      return;
+    }catch(adminErr){
+      err.textContent='접속 오류: '+adminErr.message;
+      console.error('admin login error:', adminErr);
+      return;
+    }
   }
   // yesblue0342 / 김경훈 / 이후 - API 인증 시도 + 실패 시 안내
   try{
@@ -262,13 +270,23 @@ async function dbLogin(){
   }
 }
 function enterApp(u){
-  _user=u;
-  document.getElementById('gate').style.display='none';
-  const aw=document.getElementById('appWrap');aw.style.display='flex';
-  document.getElementById('userLabel').textContent='관리자: '+(u.name||u.id);
-  applyTheme();
-  // 루트(내 드라이브)부터 시작
-  loadFolder('','내 드라이브');
+  try{
+    _user=u;
+    const gate=document.getElementById('gate');
+    if(gate) gate.style.display='none';
+    const aw=document.getElementById('appWrap');
+    if(aw) aw.style.display='flex';
+    const ul=document.getElementById('userLabel');
+    if(ul) ul.textContent='관리자: '+(u.name||u.id);
+    try{applyTheme();}catch(e){console.warn('applyTheme failed:',e);}
+    // 루트(내 드라이브)부터 시작
+    loadFolder('','내 드라이브');
+  }catch(e){
+    console.error('enterApp error:',e);
+    alert('앱 진입 오류: '+e.message);
+    const err=document.getElementById('gErr');
+    if(err) err.textContent='앱 진입 오류: '+e.message;
+  }
 }
 function dbLogout(){localStorage.removeItem(SK);location.reload();}
 
