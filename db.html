@@ -157,6 +157,22 @@ body{font-family:system-ui,'Noto Sans KR',sans-serif;background:var(--bg);color:
 </div>
 </div>
 
+<!-- 파일 미리보기 모달 -->
+<div id="filePreviewModal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.8);z-index:9500;align-items:center;justify-content:center;padding:14px">
+<div style="background:var(--bg2);border:1px solid var(--border);border-radius:16px;width:min(640px,100%);max-height:88vh;display:flex;flex-direction:column;overflow:hidden">
+<div style="display:flex;align-items:center;gap:8px;padding:14px 16px;border-bottom:1px solid var(--border)">
+<span id="fpTitle" style="flex:1;font-weight:800;font-size:.92rem;color:var(--text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">파일</span>
+<button onclick="closeFilePreview()" style="background:var(--bg3);border:1px solid var(--border);border-radius:8px;padding:5px 11px;cursor:pointer;color:var(--text);font-size:.82rem">✕</button>
+</div>
+<div id="fpBody" style="flex:1;overflow:auto;padding:16px;background:var(--bg)"></div>
+<div style="display:flex;gap:8px;padding:12px 16px;border-top:1px solid var(--border);flex-wrap:wrap">
+<button id="fpDownload" style="flex:1;min-width:100px;padding:10px;border-radius:10px;cursor:pointer;font-weight:800;background:#1f6feb;color:#fff;border:none;font-size:.85rem">⬇ 다운로드</button>
+<button id="fpOpen" style="flex:1;min-width:100px;padding:10px;border-radius:10px;cursor:pointer;font-weight:800;background:var(--bg3);color:var(--text);border:1px solid var(--border);font-size:.85rem">🔗 Drive에서 열기</button>
+<button id="fpCopyName" style="padding:10px 14px;border-radius:10px;cursor:pointer;font-weight:800;background:var(--bg3);color:var(--text);border:1px solid var(--border);font-size:.85rem">📋</button>
+</div>
+</div>
+</div>
+
 <div class="mvmodal" id="mvmodal">
 <div class="mvcard">
 <h3>📂 폴더 이동</h3>
@@ -381,12 +397,49 @@ function renderFiles(){
 }
 
 function openItem(id,name,isFolder){
-  if(isFolder){loadFolder(id,name);}
-  else{
-    navigator.clipboard.writeText(name).catch(function(){});
-    status('📋 복사됨: '+name);
-  }
+  if(isFolder){loadFolder(id,name);return;}
+  // 파일 - 미리보기/다운로드 모달
+  const f=_files.find(function(x){return x.id===id;});
+  openFilePreview(f||{id:id,name:name});
 }
+
+function openFilePreview(f){
+  const name=f.name||'파일';
+  const id=f.id;
+  const lower=name.toLowerCase();
+  const isImg=/\.(png|jpg|jpeg|gif|webp|bmp|svg)$/.test(lower);
+  const isPdf=/\.pdf$/.test(lower);
+  const isVid=/\.(mp4|webm|mov)$/.test(lower);
+  // Google Drive 미리보기/다운로드 URL
+  const previewUrl='https://drive.google.com/file/d/'+id+'/preview';
+  const downloadUrl='https://drive.google.com/uc?export=download&id='+id;
+  const imgUrl='https://drive.google.com/thumbnail?id='+id+'&sz=w1000';
+
+  let bodyHtml='';
+  if(isImg){
+    bodyHtml='<img id="fpImg" src="'+imgUrl+'" style="max-width:100%;max-height:60vh;border-radius:10px;display:block;margin:0 auto">';
+  } else if(isPdf||isVid){
+    bodyHtml='<iframe src="'+previewUrl+'" style="width:100%;height:60vh;border:0;border-radius:10px"></iframe>';
+  } else {
+    bodyHtml='<div style="padding:40px;text-align:center;color:var(--text2)"><div style="font-size:3rem;margin-bottom:10px">'+getIcon(f)+'</div><div>미리보기를 지원하지 않는 형식입니다.</div></div>';
+  }
+
+  const modal=document.getElementById('filePreviewModal');
+  document.getElementById('fpTitle').textContent=name;
+  document.getElementById('fpBody').innerHTML=bodyHtml;
+  // 이미지 로드 실패 시 iframe으로 폴백
+  if(isImg){
+    const img=document.getElementById('fpImg');
+    if(img) img.onerror=function(){
+      document.getElementById('fpBody').innerHTML='<iframe src="'+previewUrl+'" style="width:100%;height:60vh;border:0;border-radius:10px"></iframe>';
+    };
+  }
+  document.getElementById('fpDownload').onclick=function(){window.open(downloadUrl,'_blank');};
+  document.getElementById('fpOpen').onclick=function(){window.open(f.link||('https://drive.google.com/file/d/'+id+'/view'),'_blank');};
+  document.getElementById('fpCopyName').onclick=function(){navigator.clipboard.writeText(name).catch(function(){});status('📋 복사됨: '+name);};
+  modal.style.display='flex';
+}
+function closeFilePreview(){document.getElementById('filePreviewModal').style.display='none';document.getElementById('fpBody').innerHTML='';}
 
 // ── 선택 ──
 function toggleSel(id){
