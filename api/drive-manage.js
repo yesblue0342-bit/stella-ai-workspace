@@ -106,7 +106,38 @@ export default async function handler(req, res) {
   if (req.method !== "POST") return res.status(405).json({ ok: false });
   const action = String(req.query.action || req.body?.action || "").trim();
 
-  // ── 업로드 ──
+  // ── Resumable Upload 세션 URL 발급 ──
+  // 브라우저가 직접 Drive에 업로드 (용량 무제한)
+  if (action === "upload-session") {
+    try {
+      const { parentId, fileName, mimeType, fileSize } = req.body || {};
+      if (!parentId || !fileName) return res.status(400).json({ ok: false, message: "parentId, fileName 필요" });
+      const token = await getAccessToken();
+      const mt = mimeType || "application/octet-stream";
+      const metadata = { name: String(fileName), parents: [parentId], mimeType: mt };
+      const initRes = await fetch(
+        "https://www.googleapis.com/upload/drive/v3/files?uploadType=resumable&fields=id,name,mimeType,size",
+        {
+          method: "POST",
+          headers: {
+            Authorization: `Bearer ${token}`,
+            "Content-Type": "application/json; charset=UTF-8",
+            "X-Upload-Content-Type": mt,
+            ...(fileSize ? { "X-Upload-Content-Length": String(fileSize) } : {})
+          },
+          body: JSON.stringify(metadata)
+        }
+      );
+      if (!initRes.ok) {
+        const err = await initRes.text();
+        return res.status(500).json({ ok: false, message: "세션 발급 실패", error: err });
+      }
+      const uploadUrl = initRes.headers.get("location");
+      return res.status(200).json({ ok: true, uploadUrl });
+    } catch (e) { return res.status(500).json({ ok: false, error: e.message }); }
+  }
+
+  // ── 소용량 업로드 (하위 호환 - 10MB 이하) ──
   if (action === "upload") {
     try {
       const { parentId, fileName, mimeType, base64data } = req.body || {};
