@@ -576,9 +576,22 @@ function createRoom(){
   const name=document.getElementById('newRoomName').value.trim();
   if(!name)return;
   const myId=getMyId();
-  const room={id:uid(),name,messages:[],members:[myId,..._members],createdAt:Date.now()};
+  const allMembers=[myId,..._members];
+  // 멤버 조합으로 일관된 방 ID 생성 (양쪽이 같은 방 공유)
+  const sortedMembers=[...new Set(allMembers)].sort();
+  const roomId='room_'+sortedMembers.join('_').replace(/[^a-zA-Z0-9가-힣]/g,'_').slice(0,70);
+  const room={id:roomId,name,messages:[],members:allMembers,createdAt:Date.now()};
+  // 중복 방 체크
+  if(_rooms.find(r=>r.id===roomId)){
+    closeModal('newRoomModal');openRoom(roomId);renderRooms();return;
+  }
   _rooms.push(room);saveRooms();
   closeModal('newRoomModal');
+  // 서버에 방 등록 (빈 멤버 정보 저장)
+  try{
+    fetch('/api/chat-room?action=send',{method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({roomId,title:name,userId:myId,sender:myId,message:'채팅방이 생성되었습니다',members:allMembers})}).catch(function(){});
+  }catch(e){}
   openRoom(room.id);
   renderRooms();
 }
@@ -648,6 +661,7 @@ function deleteRoom(){
 }
 
 // ── 채팅방 열기 ──
+let _pollTimer=null;
 function openRoom(id){
   _cur=_rooms.find(r=>r.id===id);if(!_cur)return;
   document.getElementById('noRoom').style.display='none';
@@ -660,8 +674,66 @@ function openRoom(id){
   renderMessages();
   renderRooms();
   scrollBottom();
+  // 서버에서 메시지 동기화 + 폴링 시작
+  syncRoomFromServer(true);
+  startPolling();
+}
+function startPolling(){
+  stopPolling();
+  _pollTimer=setInterval(function(){ if(_cur && !_cur.isMyChat) syncRoomFromServer(false); }, 3000);
+}
+function stopPolling(){ if(_pollTimer){clearInterval(_pollTimer);_pollTimer=null;} }
+
+// 서버 메시지를 로컬 형식으로 변환
+function serverMsgToLocal(m){
+  return {
+    id: m.id,
+    from: m.userId||m.sender,
+    text: m.message||'',
+    fileName: m.fileName||null,
+    fileUrl: m.fileUrl||null,
+    type: m.fileUrl ? (/(jpg|jpeg|png|gif|webp)$/i.test(m.fileName||'')?'image':'file') : 'text',
+    data: m.fileUrl||null,
+    at: new Date(m.createdAt).getTime()
+  };
+}
+
+async function syncRoomFromServer(scrollAfter){
+  if(!_cur||_cur.isMyChat)return;
+  try{
+    const r=await fetch('/api/chat-room?action=get&roomId='+encodeURIComponent(_cur.id),{cache:'no-store'});
+    const d=await r.json();
+    if(!d.ok)return;
+    const serverMsgs=(d.messages||[]).map(serverMsgToLocal);
+    const idx=_rooms.findIndex(x=>x.id===_cur.id);
+    if(idx<0)return;
+    const prevCount=(_rooms[idx].messages||[]).length;
+    // 서버 메시지로 교체 (서버가 진실의 원천)
+    _rooms[idx].messages=serverMsgs;
+    if(d.room&&d.room.members) _rooms[idx].members=d.room.members;
+    _cur=_rooms[idx];
+    saveRooms();
+    if(serverMsgs.length!==prevCount){
+      renderMessages();renderRooms();
+      if(scrollAfter||serverMsgs.length>prevCount) scrollBottom();
+      // 새 메시지 알림 (내가 보낸 게 아닐 때)
+      if(serverMsgs.length>prevCount){
+        const last=serverMsgs[serverMsgs.length-1];
+        const myId=getMyId();
+        if(last && last.from!==myId && document.hidden){
+          notify(_cur.name, last.text||'📎 파일');
+        }
+      }
+    }
+  }catch(e){}
+}
+function notify(title,body){
+  if(Notification.permission==='granted'){
+    try{new Notification('Stella Talk · '+title,{body:body,icon:'/icons/talk-192.png?v=3'});}catch(e){}
+  }
 }
 function closeMobileRoom(){
+  stopPolling();
   document.getElementById('sidebar').classList.remove('hidden-mobile');
   document.getElementById('chatRoom').style.display='none';
   document.getElementById('noRoom').style.display='flex';
@@ -757,28 +829,50 @@ async function sendMsg(){
   const idx=_rooms.findIndex(r=>r.id===_cur.id);
   if(idx<0)return;
 
-  // 파일 전송
+  // 나와의 채팅은 로컬에만 저장
+  if(_cur.isMyChat){
+    for(const f of _attachFiles){
+      const data=await readFileAsDataURL(f);
+      const isImg=f.type.startsWith('image/');
+      _rooms[idx].messages.push({id:'m_'+Date.now()+'_'+Math.random().toString(36).slice(2),from:myId,type:isImg?'image':'file',fileName:f.name,fileSize:f.size,data,at:Date.now()});
+    }
+    if(text){_rooms[idx].messages.push({id:'m_'+Date.now(),from:myId,text,at:Date.now()});}
+    _attachFiles=[];renderAttachPreview();
+    _cur=_rooms[idx];saveRooms();inp.value='';inp.style.height='auto';
+    renderMessages();renderRooms();scrollBottom();
+    return;
+  }
+
+  inp.value='';inp.style.height='auto';
+
+  // 파일 전송 (Drive 업로드 후 링크 전송)
   for(const f of _attachFiles){
-    const data=await readFileAsDataURL(f);
-    const isImg=f.type.startsWith('image/');
-    const msg={id:'m_'+Date.now()+'_'+Math.random().toString(36).slice(2),from:myId,type:isImg?'image':'file',fileName:f.name,fileSize:f.size,data,at:Date.now()};
-    _rooms[idx].messages.push(msg);
+    try{
+      const data=await readFileAsDataURL(f);
+      // 작은 파일은 base64 inline, 큰 파일은 별도 처리 가능
+      await fetch('/api/chat-room?action=send',{
+        method:'POST',headers:{'Content-Type':'application/json'},
+        body:JSON.stringify({roomId:_cur.id,title:_cur.name,userId:myId,sender:myId,message:'',fileName:f.name,fileUrl:data,members:_cur.members||[myId]})
+      });
+    }catch(e){}
   }
   _attachFiles=[];renderAttachPreview();
 
-  // 텍스트 전송
+  // 텍스트 전송 - 서버 append
   if(text){
-    const msg={id:'m_'+Date.now(),from:myId,text,at:Date.now()};
-    _rooms[idx].messages.push(msg);
+    try{
+      await fetch('/api/chat-room?action=send',{
+        method:'POST',headers:{'Content-Type':'application/json'},
+        body:JSON.stringify({roomId:_cur.id,title:_cur.name,userId:myId,sender:myId,message:text,members:_cur.members||[myId]})
+      });
+    }catch(e){
+      // 실패 시 로컬에라도 추가
+      _rooms[idx].messages.push({id:'m_'+Date.now(),from:myId,text,at:Date.now()});
+      _cur=_rooms[idx];saveRooms();
+    }
   }
-  _cur=_rooms[idx];
-  saveRooms();inp.value='';inp.style.height='auto';
-  renderMessages();renderRooms();scrollBottom();
-
-  // Drive 저장
-  if(text){try{fetch('/api/stella?action=member-chat-save',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({roomId:_cur.id,title:_cur.name,userId:myId,sender:myId,message:text,members:_cur.members||[myId]})}).catch(function(){});}catch{}}
-  // 알림
-  if(Notification.permission==='granted'){try{new Notification('Stella Talk - '+_cur.name,{body:text||'파일 전송',icon:'/icons/talk-192.png'});}catch{}}
+  // 전송 후 서버에서 즉시 동기화
+  await syncRoomFromServer(true);
 }
 
 function scrollBottom(){setTimeout(function(){const el=document.getElementById('chatMessages');el.scrollTop=el.scrollHeight;},50);}
@@ -843,7 +937,33 @@ if('serviceWorker' in navigator)navigator.serviceWorker.register('/sw.js').catch
 window.onload=function(){
   applySettings();loadRooms();ensureMyChat();renderRooms();
   setTimeout(requestNotification,2000);
+  // 서버에서 내가 속한 방 목록 동기화
+  setTimeout(syncRoomListFromServer,500);
+  // 방 목록 주기적 갱신 (10초)
+  setInterval(syncRoomListFromServer, 10000);
 };
+
+// 서버에서 방 목록 가져와 병합
+async function syncRoomListFromServer(){
+  const myId=getMyId();
+  if(!myId||myId==='나')return;
+  try{
+    const r=await fetch('/api/chat-room?action=list&userId='+encodeURIComponent(myId),{cache:'no-store'});
+    const d=await r.json();
+    if(!d.ok||!Array.isArray(d.rooms))return;
+    let changed=false;
+    for(const sr of d.rooms){
+      if(sr.deleted)continue;
+      const exists=_rooms.find(x=>x.id===sr.roomId);
+      if(!exists){
+        // 서버에만 있는 방 → 로컬에 추가
+        _rooms.push({id:sr.roomId,name:sr.title||'채팅방',members:sr.members||[],messages:[],createdAt:Date.now()});
+        changed=true;
+      }
+    }
+    if(changed){saveRooms();renderRooms();}
+  }catch(e){}
+}
 
 // ── 나와의 채팅 보장 ──
 function ensureMyChat(){
