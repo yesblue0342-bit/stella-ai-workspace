@@ -281,7 +281,7 @@ export default async function handler(req, res) {
     const model = body.model || "gpt-4o-mini";
     const system = body.system || STELLA_SYSTEM_PROMPT;
     const images = Array.isArray(body.images) ? body.images.slice(0, 4) : [];
-    const userId = String(body.userId || body.user_id || "kh").trim();
+    const userId = String(body.userId || body.user_id || "").trim() || "anonymous";
 
     // ① 날씨 직접 처리
     const weatherKw = ["날씨","기온","우산","weather","forecast"];
