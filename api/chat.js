@@ -1,5 +1,5 @@
 import { detectSmartIntent, getSmartContextForMessage } from "../lib/place-weather-utils.js";
-import { saveJsonToDrive, readJsonFromDrive } from "../lib/drive-utils.js";
+import { saveJsonToDrive, readJsonFromDrive, buildDriveContextForChat } from "../lib/drive-utils.js";
 
 // 이미지 base64 전송을 위해 body 크기 제한 상향
 export const config = {
@@ -275,6 +275,8 @@ export default async function handler(req, res) {
   try {
     const body = req.body || {};
     const message = String(body.message || "");
+    let aiMessage = message;
+    let actualDriveContext = null;
     const history = Array.isArray(body.history) ? body.history : [];
     const model = body.model || "gpt-4o-mini";
     const system = body.system || STELLA_SYSTEM_PROMPT;
@@ -321,7 +323,27 @@ export default async function handler(req, res) {
 
     // ③ 일반 AI 처리 (모델 완전 분리 - 중복 과금 방지)
     const searchContext = await prepareSearchContext(message);
-    const driveContext = await searchDriveContext(message); // Drive 검색 연동
+
+    // Google Drive 경로가 들어오면 실제 folderId/fileId 기준으로 파일 내용 읽기
+    let driveContext = null;
+    try {
+      actualDriveContext = await buildDriveContextForChat(message);
+      if (actualDriveContext?.prompt) {
+        aiMessage = message + actualDriveContext.prompt;
+        driveContext = [
+          `선택 경로: ${actualDriveContext.path}`,
+          `실제로 읽은 파일: ${(actualDriveContext.files || []).filter(f => f.read).map(f => f.name).join(", ") || "없음"}`,
+          `읽지 못한 파일: ${(actualDriveContext.files || []).filter(f => !f.read).map(f => f.name).join(", ") || "없음"}`
+        ].join("\n");
+      }
+    } catch (driveErr) {
+      aiMessage = message + `\n\n[STELLA_GOOGLE_DRIVE_READ_ERROR]\n${driveErr.message}\n[/STELLA_GOOGLE_DRIVE_READ_ERROR]\n\nDrive 파일 내용을 읽지 못했습니다. 추측하지 말고 사용자에게 파일 내용을 읽지 못했다고 안내하세요.`;
+      driveContext = `Drive 읽기 오류: ${driveErr.message}`;
+    }
+
+    if (!driveContext) {
+      driveContext = await searchDriveContext(message); // 기존 Drive 검색 연동
+    }
     
     // ④ 메모리 노드 로드 (KH 장기 기억)
     const memory = await loadMemory(userId);
@@ -338,17 +360,17 @@ export default async function handler(req, res) {
     let provider;
     if (isClaudeModel) {
       provider = "claude";
-      answer = await callClaude({ model, system: prompt, history, message, images });
+      answer = await callClaude({ model, system: prompt, history, message: aiMessage, images });
     } else {
       provider = "openai";
-      answer = await callOpenAI({ model, system: prompt, history, message, images });
+      answer = await callOpenAI({ model, system: prompt, history, message: aiMessage, images });
     }
     
     // ⑤ 메모리 업데이트 (비동기 - 응답 지연 없음)
     setImmediate(async () => {
       try {
         const newItems = await extractMemoryFromConversation({
-          model, history, message, answer, isClaudeModel
+          model, history, message: aiMessage, answer, isClaudeModel
         });
         if (newItems && Object.values(newItems).some(a => Array.isArray(a) && a.length > 0)) {
           await updateMemory(userId, newItems, isClaudeModel);
@@ -356,7 +378,22 @@ export default async function handler(req, res) {
       } catch(e) { console.warn("[Memory] 업데이트 실패:", e.message); }
     });
     
-    return res.status(200).json({ ok: true, text: answer, provider, searchContext });
+    return res.status(200).json({
+      ok: true,
+      text: answer,
+      provider,
+      searchContext,
+      driveRead: actualDriveContext ? {
+        path: actualDriveContext.path,
+        files: (actualDriveContext.files || []).map(f => ({
+          id: f.id,
+          name: f.name,
+          mimeType: f.mimeType,
+          read: !!f.read,
+          error: f.error || ""
+        }))
+      } : null
+    });
   } catch (error) {
     return res.status(500).json({ ok: false, error: error.message || "chat error" });
   }
