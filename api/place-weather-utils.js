@@ -116,7 +116,7 @@ async function searchKakaoPlaces(query) {
 }
 
 async function searchGooglePlaces(query) {
-  const mapsApiKey = process.env.GOOGLE_MAPS_API_KEY || process.env.GOOGLE_API_KEY;
+  const mapsApiKey = process.env.GOOGLE_WEATHER_API_KEY || process.env.GOOGLE_MAPS_API_KEY || process.env.GOOGLE_API_KEY;
   if (!mapsApiKey) throw new Error("GOOGLE_MAPS_API_KEY not configured");
   const response = await fetch("https://places.googleapis.com/v1/places:searchText", {
     method: "POST",
@@ -148,8 +148,8 @@ async function geocodeByGooglePlaces(query) {
 }
 
 async function lookupGoogleWeather(lat, lng) {
-  const mapsApiKey = process.env.GOOGLE_MAPS_API_KEY || process.env.GOOGLE_API_KEY;
-  if (!mapsApiKey) throw new Error("GOOGLE_MAPS_API_KEY not configured");
+  const mapsApiKey = process.env.GOOGLE_WEATHER_API_KEY || process.env.GOOGLE_MAPS_API_KEY || process.env.GOOGLE_API_KEY;
+  if (!mapsApiKey) throw new Error("GOOGLE_WEATHER_API_KEY not configured");
   const url = new URL("https://weather.googleapis.com/v1/currentConditions:lookup");
   url.searchParams.set("key", mapsApiKey);
   url.searchParams.set("location.latitude", String(lat));
