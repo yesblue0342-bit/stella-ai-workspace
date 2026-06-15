@@ -56,6 +56,7 @@ export default async function handler(req, res) {
         sender, userId, message,
         fileName: fileName || null,
         fileUrl: fileUrl || null,
+        mimeType: clean(body.mimeType || ''),
         createdAt: new Date().toISOString()
       };
 
