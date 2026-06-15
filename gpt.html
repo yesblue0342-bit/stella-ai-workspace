@@ -195,11 +195,16 @@ function renderAttachPreview(){
   const box=document.getElementById('attachPreview');
   if(!box)return;
   const imgs=_attachedImages.map((f,i)=>
-    '<div class="attach-thumb"><img src="'+f.data+'"><button class="rm" onclick="_attachedImages.splice('+i+',1);renderAttachPreview()">✕</button></div>'
+    '<div class="attach-thumb"><img src="'+f.data+'" style="width:56px;height:56px;object-fit:cover;border-radius:10px;display:block"><button class="rm" onclick="_attachedImages.splice('+i+',1);renderAttachPreview()" style="position:absolute;top:2px;right:2px;background:rgba(0,0,0,.6);color:#fff;border:none;border-radius:50%;width:18px;height:18px;cursor:pointer;font-size:11px;line-height:1;padding:0">✕</button></div>'
   );
-  const files=_attachedFiles.map((f,i)=>
-    '<div class="attach-file">📄 '+esc(f.name)+'<button onclick="_attachedFiles.splice('+i+',1);renderAttachPreview()" style="background:none;border:none;cursor:pointer;color:#6b7280;font-size:11px;padding:0 0 0 4px">✕</button></div>'
-  );
+  const files=_attachedFiles.map((f,i)=>{
+    // 파일이지만 이미지 확장자면 data URL로 썸네일 표시
+    const isImg2=/\.(png|jpg|jpeg|gif|webp|bmp|svg)$/i.test(f.name)||(f.type&&f.type.startsWith('image/'));
+    if(isImg2&&f.data){
+      return '<div class="attach-thumb" style="position:relative"><img src="'+f.data+'" style="width:56px;height:56px;object-fit:cover;border-radius:10px;display:block"><button onclick="_attachedFiles.splice('+i+',1);renderAttachPreview()" style="position:absolute;top:2px;right:2px;background:rgba(0,0,0,.6);color:#fff;border:none;border-radius:50%;width:18px;height:18px;cursor:pointer;font-size:11px;line-height:1;padding:0">✕</button></div>';
+    }
+    return '<div class="attach-file" style="display:flex;align-items:center;gap:4px;background:#e5e7eb;border-radius:8px;padding:4px 8px;font-size:.75rem">📄 '+esc(f.name)+'<button onclick="_attachedFiles.splice('+i+',1);renderAttachPreview()" style="background:none;border:none;cursor:pointer;color:#6b7280;font-size:11px;padding:0 0 0 4px">✕</button></div>';
+  });
   box.innerHTML=imgs.join('')+files.join('');
 }
 
@@ -273,7 +278,9 @@ async function send(){
 
   // 일반 AI 응답
   try{
-    const _imgs=_attachedImages.map(x=>x.data);
+    // _attachedFiles 중 이미지도 Vision으로 전송
+    const _fileImgs=_attachedFiles.filter(x=>/\.(png|jpg|jpeg|gif|webp|bmp|svg)$/i.test(x.name)||(x.type&&x.type.startsWith('image/'))).map(x=>x.data);
+    const _imgs=[..._attachedImages.map(x=>x.data),..._fileImgs];
     const _fnames=_attachedFiles.map(x=>x.name).join(', ');
     const _fullText=text+(_fnames?' [첨부파일: '+_fnames+']':'');
     _attachedImages=[];_attachedFiles=[];renderAttachPreview();
