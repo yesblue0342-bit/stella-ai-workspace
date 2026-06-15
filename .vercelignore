@@ -1,0 +1,14 @@
+api/board-list.js
+api/board-save.js
+api/chat-list.js
+api/chat-save.js
+api/db-test.js
+api/drive-search.js
+api/drive-test.js
+api/init-db.js
+api/member-chat-list.js
+api/member-chat-save.js
+api/place-search.js
+api/weather-search.js
+api/pwa-manifest.js
+api/claude.js

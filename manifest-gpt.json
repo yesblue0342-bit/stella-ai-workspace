@@ -1,0 +1,19 @@
+{
+  "name": "Stella GPT",
+  "short_name": "Stella GPT",
+  "description": "Stella GPT - AI 작업공간",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#0f172a",
+  "theme_color": "#0f172a",
+  "lang": "ko",
+  "categories": ["productivity"],
+  "icons": [
+    { "src": "/icons/gpt-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "/icons/gpt-192.png", "sizes": "192x192", "type": "image/png", "purpose": "maskable" },
+    { "src": "/icons/gpt-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "/icons/gpt-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ]
+}

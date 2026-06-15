@@ -1,0 +1,981 @@
+<!doctype html><html lang="ko"><head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Stella DB</title>
+<link rel="manifest" href="/manifest-db.json">
+<meta name="theme-color" content="#0d1117">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Stella DB">
+<link rel="apple-touch-icon" href="/icons/db-192.png">
+<link rel="icon" type="image/png" sizes="192x192" href="/icons/db-192.png">
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+:root{--bg:#0d1117;--bg2:#161b22;--bg3:#21262d;--border:#30363d;--text:#e6edf3;--text2:#8b949e;--text3:#c9d1d9;--accent:#e6edf3;--danger:#f85149;--primary:#1f6feb}
+body.light{--bg:#f6f8fa;--bg2:#fff;--bg3:#f3f4f6;--border:#d1d5db;--text:#111827;--text2:#6b7280;--text3:#374151;--accent:#111827;--danger:#dc2626;--primary:#1f6feb}
+body{font-family:system-ui,'Noto Sans KR',sans-serif;background:var(--bg);color:var(--text);min-height:100dvh;display:flex;flex-direction:column;transition:background .2s,color .2s}
+.top{display:flex;align-items:center;gap:6px;padding:10px 12px;background:var(--bg2);border-bottom:1px solid var(--border);flex-wrap:wrap;flex-shrink:0}
+.top h1{font-size:.95rem;font-weight:900;color:var(--text)}
+.btn{border:1px solid var(--border);background:var(--bg3);color:var(--text3);border-radius:9px;padding:6px 12px;cursor:pointer;font-size:.8rem;font-weight:700;white-space:nowrap;transition:background .15s}
+.btn:hover{opacity:.85}.btn:active{opacity:.6}
+.btn.danger{border-color:var(--danger);color:var(--danger)}
+.btn.upload-btn{background:var(--bg3);color:var(--text);border:1px solid var(--border)}
+.breadcrumb{padding:6px 12px;font-size:.78rem;color:var(--text2);background:var(--bg2);border-bottom:1px solid var(--border);display:flex;align-items:center;gap:4px;flex-wrap:wrap;flex-shrink:0}
+.bc-seg{cursor:pointer;color:var(--accent);padding:2px 4px;border-radius:5px}.bc-seg:hover{opacity:.75}
+.bc-sep{color:var(--border)}
+.bc-copy{cursor:pointer;background:var(--bg3);border:1px solid var(--border);border-radius:6px;padding:2px 7px;font-size:.72rem;color:var(--text2);margin-left:4px;white-space:nowrap}
+.bc-copy:hover{color:var(--text)}
+.toolbar{display:flex;gap:6px;padding:7px 12px;background:var(--bg);border-bottom:1px solid var(--border);flex-wrap:wrap;flex-shrink:0;align-items:center}
+.filter-in{background:var(--bg2);border:1px solid var(--border);border-radius:9px;padding:6px 11px;color:var(--text);font-size:.8rem;flex:1;min-width:0}
+.filter-in::placeholder{color:var(--text2)}
+.sel-bar{display:none;gap:6px;padding:6px 12px;background:var(--bg2);border-bottom:1px solid var(--border);align-items:center;font-size:.8rem;color:var(--text2);flex-shrink:0}
+.sel-bar.show{display:flex}
+.status{padding:5px 12px;font-size:.73rem;color:var(--text2);background:var(--bg2);border-bottom:1px solid var(--border);flex-shrink:0}
+.file-list{flex:1;overflow-y:auto}
+.file-row{display:flex;align-items:center;gap:9px;padding:9px 12px;border-bottom:1px solid var(--border);cursor:pointer;transition:background .1s}
+.file-row:hover{background:var(--bg2)}.file-row.sel{background:var(--bg3)}
+.file-chk{width:16px;height:16px;cursor:pointer;accent-color:var(--primary);flex-shrink:0}
+.file-icon{font-size:1.15rem;width:24px;text-align:center;flex-shrink:0}
+.file-info{flex:1;min-width:0}
+.file-name{font-size:.86rem;font-weight:700;color:var(--text3);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.file-meta{font-size:.72rem;color:var(--text2);margin-top:1px}
+.file-acts{display:flex;gap:4px;flex-shrink:0;opacity:0;transition:opacity .15s}
+.file-row:hover .file-acts{opacity:1}
+.act{background:var(--bg3);color:var(--text3);border:1px solid var(--border);border-radius:7px;padding:3px 8px;cursor:pointer;font-size:.72rem}
+.act.del{border-color:var(--danger);color:var(--danger)}
+.empty{padding:40px;text-align:center;color:var(--text2);font-size:.88rem}
+#gate{position:fixed;inset:0;background:var(--bg);display:flex;align-items:center;justify-content:center;z-index:9999;padding:20px}
+.gate-card{width:min(380px,100%);background:var(--bg2);border:1px solid var(--border);border-radius:18px;padding:24px}
+.gate-card h2{color:var(--text);margin-bottom:6px;font-size:1.15rem}
+.gate-card p{color:var(--text2);font-size:.83rem;margin-bottom:14px}
+.gate-card input{width:100%;background:var(--bg);border:1px solid var(--border);border-radius:10px;padding:11px;color:var(--text);font-size:.9rem;margin-bottom:8px}
+.gate-card input::placeholder{color:var(--text2)}
+.gate-btn{width:100%;padding:11px;border-radius:10px;cursor:pointer;font-weight:800;border:1px solid var(--border);font-size:.9rem;margin-top:4px;background:var(--bg3);color:var(--text)}
+.gate-btn.pri{background:var(--primary);color:#fff;border-color:var(--primary)}
+.err{color:var(--danger);font-size:.78rem;min-height:16px;margin-top:4px}
+.upoverlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,.65);z-index:1000;align-items:center;justify-content:center}
+.upoverlay.on{display:flex}
+.upcard{background:var(--bg2);border:1px solid var(--border);border-radius:14px;padding:22px;width:min(340px,90%);text-align:center}
+.upcard h3{color:var(--text);margin-bottom:10px;font-size:.95rem}
+.upcard p{color:var(--text2);font-size:.82rem}
+.mvmodal{display:none;position:fixed;inset:0;background:rgba(0,0,0,.65);z-index:1000;align-items:center;justify-content:center}
+.mvmodal.on{display:flex}
+.mvcard{background:var(--bg2);border:1px solid var(--border);border-radius:14px;padding:20px;width:min(340px,90%)}
+.mvcard h3{color:var(--text);margin-bottom:10px;font-size:.92rem}
+.mvcard input{width:100%;background:var(--bg);border:1px solid var(--border);border-radius:9px;padding:9px;color:var(--text);font-size:.85rem;margin-bottom:10px}
+.mvcard input::placeholder{color:var(--text2)}
+
+/* ── 드래그&드롭 ── */
+.file-list.drag-over{outline:3px dashed var(--primary);outline-offset:-4px;background:rgba(31,111,235,.07)}
+.drop-hint{display:none;position:fixed;inset:0;z-index:2000;background:rgba(31,111,235,.18);border:4px dashed #1f6feb;pointer-events:none;align-items:center;justify-content:center;flex-direction:column;gap:12px;font-size:1.4rem;font-weight:900;color:#1f6feb}
+.drop-hint.on{display:flex}
+
+/* ── 우클릭 메뉴 ── */
+.ctx-menu{display:none;position:fixed;z-index:3000;background:var(--bg2);border:1px solid var(--border);border-radius:12px;padding:6px 0;min-width:180px;box-shadow:0 8px 32px rgba(0,0,0,.35)}
+.ctx-menu.on{display:block}
+.ctx-item{padding:9px 16px;cursor:pointer;color:var(--text);display:flex;align-items:center;gap:9px;font-size:.84rem;transition:background .1s}
+.ctx-item:hover{background:var(--bg3)}
+.ctx-item.danger{color:var(--danger)}
+.ctx-item.disabled{opacity:.4;pointer-events:none}
+.ctx-sep{height:1px;background:var(--border);margin:4px 0}
+/* ── 폴더 피커 ── */
+.picker-bg{display:none;position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:2000;align-items:center;justify-content:center}
+.picker-bg.on{display:flex}
+.picker{background:var(--bg2);border:1px solid var(--border);border-radius:16px;width:min(480px,94vw);max-height:80vh;display:flex;flex-direction:column}
+.picker-head{padding:14px 18px;border-bottom:1px solid var(--border);font-weight:800;font-size:.95rem;display:flex;align-items:center;gap:8px}
+.picker-head span{flex:1}
+.picker-path{padding:6px 18px;font-size:.75rem;color:var(--text2);border-bottom:1px solid var(--border);overflow-x:auto;white-space:nowrap}
+.picker-list{flex:1;overflow-y:auto;max-height:350px}
+.pk-row{display:flex;align-items:center;gap:10px;padding:10px 18px;cursor:pointer;border-bottom:1px solid var(--border);transition:background .1s}
+.pk-row:hover{background:var(--bg3)}
+.pk-row.sel{background:var(--bg3);font-weight:700}
+.pk-icon{font-size:1.1rem;flex-shrink:0}
+.pk-name{flex:1;font-size:.85rem;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.picker-foot{padding:12px 18px;border-top:1px solid var(--border);display:flex;gap:8px;justify-content:flex-end}
+.picker-foot button{padding:8px 16px;border-radius:10px;cursor:pointer;font-size:.84rem;font-weight:700;border:1px solid var(--border);background:var(--bg3);color:var(--text)}
+.picker-foot .pri{background:#1f6feb;color:#fff;border-color:#1f6feb}
+/* ── 클립보드 상태 표시 ── */
+.clip-bar{display:none;gap:6px;padding:6px 12px;background:#1e3a5f;border-bottom:1px solid var(--border);align-items:center;font-size:.8rem;color:#93c5fd;flex-shrink:0}
+.clip-bar.on{display:flex}
+.clip-bar button{font-size:.78rem}
+</style>
+</head>
+<body>
+<div id="gate">
+<div class="gate-card">
+<h2>🗄 Stella DB</h2>
+<p>관리자 계정으로 로그인하세요</p>
+<input id="gId" placeholder="아이디" autocomplete="username" onkeydown="if(event.key==='Enter')dbLogin()">
+<input id="gPw" type="password" placeholder="비밀번호" autocomplete="current-password" onkeydown="if(event.key==='Enter')dbLogin()">
+<button class="gate-btn pri" onclick="dbLogin()">접속</button>
+<button class="gate-btn" onclick="location.href='/'">Stella GPT로 돌아가기</button>
+<div class="err" id="gErr"></div>
+</div>
+</div>
+
+<div id="appWrap" style="display:none;flex-direction:column;height:100dvh">
+<div class="top">
+<h1>🗄 Stella DB</h1>
+<span id="userLabel" style="font-size:.72rem;color:var(--text2)"></span>
+<button class="btn" onclick="goUp()" id="upBtn">⬆ 상위</button>
+<button class="btn" onclick="refresh()">↻</button>
+<button class="btn" onclick="toggleTheme()" id="themeBtn">☀️</button>
+<button class="btn" onclick="location.href='/'">GPT</button>
+<button class="btn" id="installBtn" onclick="installPWA()" style="display:none">📲 설치</button>
+<button class="btn" onclick="dbLogout()">나가기</button>
+</div>
+
+<!-- 브레드크럼 + 경로복사 -->
+<div class="breadcrumb" id="breadcrumb"></div>
+
+<!-- 선택 작업 바 -->
+<div class="sel-bar" id="selBar">
+<span id="selCount">0개 선택</span>
+<button class="btn danger" onclick="deleteSelected()">🗑 삭제</button>
+<button class="btn" onclick="moveSelected()">📂 이동</button>
+<button class="btn" onclick="clearSel()">✕ 해제</button>
+</div>
+
+<div class="clip-bar" id="clipBar">
+  <span id="clipInfo">📋 복사됨</span>
+  <button class="btn" onclick="pasteClipboard()">📌 여기에 붙여넣기</button>
+  <button class="btn" onclick="clearClipboard()">✕ 취소</button>
+</div>
+<div class="toolbar">
+<input class="filter-in" id="filterIn" placeholder="파일/폴더 필터..." oninput="renderFiles()">
+<button class="btn" onclick="mkdirPrompt()">📁＋ 폴더</button>
+<button class="btn upload-btn" onclick="document.getElementById('fileUploadIn').click()">⬆ 업로드</button>
+<input type="file" id="fileUploadIn" multiple hidden onchange="uploadFiles(this.files)">
+</div>
+<div class="status" id="statusBar">로딩 중...</div>
+<div class="file-list" id="fileList"></div>
+</div>
+
+<div class="upoverlay" id="upoverlay">
+<div class="upcard">
+<h3>⬆ 업로드 중...</h3>
+<p id="upProgress">준비 중...</p>
+</div>
+</div>
+
+<!-- 파일 미리보기 모달 -->
+<div id="filePreviewModal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.8);z-index:9500;align-items:center;justify-content:center;padding:14px">
+<div style="background:var(--bg2);border:1px solid var(--border);border-radius:16px;width:min(640px,100%);max-height:88vh;display:flex;flex-direction:column;overflow:hidden">
+<div style="display:flex;align-items:center;gap:8px;padding:14px 16px;border-bottom:1px solid var(--border)">
+<span id="fpTitle" style="flex:1;font-weight:800;font-size:.92rem;color:var(--text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">파일</span>
+<button onclick="closeFilePreview()" style="background:var(--bg3);border:1px solid var(--border);border-radius:8px;padding:5px 11px;cursor:pointer;color:var(--text);font-size:.82rem">✕</button>
+</div>
+<div id="fpBody" style="flex:1;overflow:auto;padding:16px;background:var(--bg)"></div>
+<div style="display:flex;gap:8px;padding:12px 16px;border-top:1px solid var(--border);flex-wrap:wrap">
+<button id="fpDownload" style="flex:1;min-width:100px;padding:10px;border-radius:10px;cursor:pointer;font-weight:800;background:#1f6feb;color:#fff;border:none;font-size:.85rem">⬇ 다운로드</button>
+<button id="fpOpen" style="flex:1;min-width:100px;padding:10px;border-radius:10px;cursor:pointer;font-weight:800;background:var(--bg3);color:var(--text);border:1px solid var(--border);font-size:.85rem">🔗 Drive에서 열기</button>
+<button id="fpCopyName" style="padding:10px 14px;border-radius:10px;cursor:pointer;font-weight:800;background:var(--bg3);color:var(--text);border:1px solid var(--border);font-size:.85rem">📋</button>
+</div>
+</div>
+</div>
+
+<div class="mvmodal" id="mvmodal">
+<div class="mvcard">
+<h3>📂 폴더 이동</h3>
+<p style="color:var(--text2);font-size:.8rem;margin-bottom:10px">이동할 폴더 ID를 입력하세요</p>
+<input id="mvTargetId" placeholder="이동할 폴더 ID">
+<div style="display:flex;gap:6px">
+<button class="btn" onclick="confirmMove()" style="flex:1">이동</button>
+<button class="btn" onclick="document.getElementById('mvmodal').classList.remove('on')" style="flex:1">취소</button>
+</div>
+</div>
+</div>
+
+<script>
+const SK='stella_session_final_v82';
+const ADMINS=['admin','admin@stella.local','yesblue0342','yesblue0342@naver.com','yesblue0342@gmail.com','김경훈','이후'];
+let _user=null,_stack=[],_files=[],_curId='',_sel=new Set(),_theme='dark';
+
+// ── 유틸 ──
+function isAdmin(u){if(!u)return false;const id=String(u.id||'').toLowerCase(),em=String(u.email||'').toLowerCase();return ADMINS.some(a=>a.toLowerCase()===id||a.toLowerCase()===em)||id==='admin'||String(u.role)==='admin';}
+function getSession(){try{const s=JSON.parse(localStorage.getItem(SK)||'null');if(s&&s.user)return s.user;}catch(e){}return null;}
+function saveSession(u){localStorage.setItem(SK,JSON.stringify({id:u.id,user:u,savedAt:-1}));}
+function esc(s){return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');}
+function fmtDate(d){if(!d)return'';const dt=new Date(d);return dt.toLocaleDateString('ko-KR')+' '+dt.toLocaleTimeString('ko-KR',{hour:'2-digit',minute:'2-digit'});}
+function fmtSize(s){if(!s)return'';const n=Number(s);if(n<1024)return n+'B';if(n<1048576)return(n/1024).toFixed(1)+'KB';return(n/1048576).toFixed(1)+'MB';}
+function getIcon(f){if(f.isFolder)return'📁';const n=String(f.name||'');if(n.endsWith('.json'))return'📋';if(n.endsWith('.html'))return'🌐';if(n.endsWith('.js'))return'⚡';if(n.endsWith('.pdf'))return'📄';if(/\.(png|jpg|jpeg|gif|webp)$/.test(n))return'🖼';if(/\.(xlsx|csv|xls)$/.test(n))return'📊';if(/\.(mp4|mov|avi)$/.test(n))return'🎬';if(/\.zip$/.test(n))return'🗜️';if(/\.(tar|gz|7z|rar)$/.test(n))return'📦';return'📃';}
+function status(t){document.getElementById('statusBar').textContent=t;}
+function sleep(ms){return new Promise(r=>setTimeout(r,ms));}
+
+// ── 테마 ──
+function toggleTheme(){
+  _theme=_theme==='dark'?'light':'dark';
+  document.body.classList.toggle('light',_theme==='light');
+  document.getElementById('themeBtn').textContent=_theme==='dark'?'☀️':'🌙';
+  localStorage.setItem('stella_db_theme',_theme);
+}
+function applyTheme(){
+  const t=localStorage.getItem('stella_db_theme')||'dark';
+  _theme=t;
+  document.body.classList.toggle('light',t==='light');
+  document.getElementById('themeBtn').textContent=t==='dark'?'☀️':'🌙';
+}
+
+// ── 로그인 ──
+async function dbLogin(){
+  const id=document.getElementById('gId').value.trim(),pw=document.getElementById('gPw').value;
+  const err=document.getElementById('gErr');
+  if(!id||!pw){err.textContent='아이디와 비밀번호를 입력하세요.';return;}
+  err.textContent='접속 중...';
+  if(id==='admin'&&pw==='admin'){
+    const u={id:'admin',name:'관리자',email:'admin@stella.local',role:'admin'};
+    saveSession(u);enterApp(u);return;
+  }
+  if((id==='yesblue0342'||id==='김경훈'||id==='이후')&&pw==='!kh2080312'){
+    const u={id:id,name:id,email:id+'@stella.local',role:'admin'};
+    saveSession(u);enterApp(u);return;
+  }
+  try{
+    const r=await fetch('/api/auth/login',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({id,password:pw})});
+    const d=await r.json();
+    if(!r.ok||d.ok===false){err.textContent=d.message||'로그인 실패';return;}
+    if(!isAdmin(d.user)){err.textContent='DB 열람 권한이 없습니다.';return;}
+    saveSession(d.user);enterApp(d.user);
+  }catch(e){err.textContent=e.message;}
+}
+function enterApp(u){
+  _user=u;
+  document.getElementById('gate').style.display='none';
+  const aw=document.getElementById('appWrap');aw.style.display='flex';
+  document.getElementById('userLabel').textContent='관리자: '+(u.name||u.id);
+  applyTheme();
+  status('Google Drive 연결 중...');
+  // UI 렌더링 완료 후 loadFolder 실행 (블로킹 방지)
+  requestAnimationFrame(function(){
+    setTimeout(function(){ loadFolder('','내 드라이브'); }, 100);
+  });
+}
+function dbLogout(){localStorage.removeItem(SK);location.reload();}
+
+// ── 폴더 탐색 ──
+async function loadFolder(folderId,name){
+  status('로딩 중...');
+  document.getElementById('fileList').innerHTML='';
+  clearSel();
+  _curId=folderId||'';
+  try{
+    // folderId 없으면 루트, 있으면 해당 폴더
+    const url='/api/drive-list'+(folderId?'?folderId='+encodeURIComponent(folderId):'');
+    const r=await fetch(url,{cache:'no-store'});
+    const d=await r.json();
+    if(!d.ok){status('오류: '+(d.message||'로드 실패'));return;}
+    _files=Array.isArray(d.files)?d.files:[];
+    const cid=folderId||'ROOT';
+    // 스택: 같은 위치면 중복 추가 안 함
+    if(!_stack.length||_stack[_stack.length-1].id!==cid){
+      _stack.push({id:cid,name:name||folderId||'내 드라이브'});
+    }
+    renderBreadcrumb();renderFiles();
+    status('📁 '+(_stack[_stack.length-1]?.name||'내 드라이브')+' — '+_files.length+'개 항목');
+  }catch(e){status('오류: '+e.message);}
+}
+
+// ── 브레드크럼 + 경로복사 ──
+function getPathText(){
+  return _stack.map(function(s){return s.name;}).join(' > ');
+}
+function copyPath(){
+  const path=getPathText();
+  navigator.clipboard.writeText(path).then(function(){
+    status('📋 경로 복사됨: '+path);
+  }).catch(function(){
+    // fallback
+    const el=document.createElement('textarea');
+    el.value=path;document.body.appendChild(el);el.select();
+    document.execCommand('copy');document.body.removeChild(el);
+    status('📋 경로 복사됨: '+path);
+  });
+}
+function renderBreadcrumb(){
+  const bc=document.getElementById('breadcrumb');
+  const segs=_stack.map(function(s,i){
+    return '<span class="bc-seg" onclick="gotoStack('+i+')">'+esc(s.name)+'</span>'+(i<_stack.length-1?'<span class="bc-sep">›</span>':'');
+  }).join('');
+  bc.innerHTML=segs+'<button class="bc-copy" onclick="copyPath()" title="경로 복사">📋 경로복사</button>';
+  document.getElementById('upBtn').disabled=_stack.length<=1;
+}
+
+// ── 스택 이동 ──
+function gotoStack(idx){
+  // idx 위치까지 자르고 해당 폴더로 이동
+  _stack=_stack.slice(0,idx);
+  const s=_stack.length>0?_stack[_stack.length-1]:{id:'ROOT',name:'내 드라이브'};
+  _stack=_stack.slice(0,_stack.length>0?_stack.length-1:0);
+  loadFolder(s.id==='ROOT'?'':s.id,s.name);
+}
+
+// ── 상위 이동 ──
+function goUp(){
+  if(_stack.length<=1)return;
+  _stack.pop(); // 현재 폴더 제거
+  const prev=_stack.pop(); // 이전 폴더
+  loadFolder(prev.id==='ROOT'?'':prev.id,prev.name);
+}
+
+// ── 새로고침 ──
+function refresh(){
+  if(!_stack.length)return;
+  const cur=_stack[_stack.length-1];
+  _stack.pop();
+  loadFolder(cur.id==='ROOT'?'':cur.id,cur.name);
+}
+
+// ── 파일 렌더 ──
+function renderFiles(){
+  const q=(document.getElementById('filterIn').value||'').toLowerCase();
+  let list=Array.isArray(_files)?_files.filter(f=>!q||String(f.name||'').toLowerCase().includes(q)):[];
+  list=list.slice().sort(function(a,b){
+    if(a.isFolder!==b.isFolder)return a.isFolder?-1:1;
+    return String(a.name||'').localeCompare(String(b.name||''));
+  });
+  const el=document.getElementById('fileList');
+  el.innerHTML='';
+  if(!list.length){el.innerHTML='<div class="empty">📭 항목이 없습니다.</div>';return;}
+  list.forEach(function(f){
+    const row=document.createElement('div');
+    row.className='file-row'+(_sel.has(f.id)?' sel':'');
+    row.id='row_'+f.id;
+
+    // 체크박스
+    const chk=document.createElement('input');
+    chk.type='checkbox';chk.className='file-chk';
+    chk.checked=_sel.has(f.id);
+    chk.onclick=function(e){e.stopPropagation();toggleSel(f.id);};
+    row.appendChild(chk);
+
+    // 아이콘
+    const icon=document.createElement('div');
+    icon.className='file-icon';icon.textContent=getIcon(f);
+    icon.onclick=function(){openItem(f.id,f.name,f.isFolder);};
+    row.appendChild(icon);
+
+    // 파일 정보
+    const info=document.createElement('div');
+    info.className='file-info';
+    info.onclick=function(){openItem(f.id,f.name,f.isFolder);};
+    const nm=document.createElement('div');nm.className='file-name';nm.textContent=f.name||'(이름없음)';
+    const mt=document.createElement('div');mt.className='file-meta';
+    mt.textContent=fmtDate(f.modifiedTime)+(f.size?' · '+fmtSize(f.size):'');
+    info.appendChild(nm);info.appendChild(mt);
+    row.appendChild(info);
+
+    // 액션 버튼
+    const acts=document.createElement('div');acts.className='file-acts';
+
+    // ZIP 압축풀기 버튼
+    if(String(f.name||'').toLowerCase().endsWith('.zip')){
+      const uzBtn=document.createElement('button');
+      uzBtn.className='act';uzBtn.textContent='🗜️ 풀기';uzBtn.title='압축 풀기';
+      uzBtn.onclick=function(e){e.stopPropagation();unzipItem(f.id,f.name);};
+      acts.appendChild(uzBtn);
+    }
+
+    // 이름 변경 버튼
+    const rnBtn=document.createElement('button');
+    rnBtn.className='act';rnBtn.textContent='✏️';
+    rnBtn.onclick=function(e){e.stopPropagation();renameItem(f.id,f.name);};
+    acts.appendChild(rnBtn);
+
+    // 삭제 버튼
+    const delBtn=document.createElement('button');
+    delBtn.className='act del';delBtn.textContent='🗑';
+    delBtn.onclick=function(e){e.stopPropagation();deleteItem(f.id,f.name);};
+    acts.appendChild(delBtn);
+
+    row.appendChild(acts);
+    // 우클릭 컨텍스트 메뉴
+    row.addEventListener('contextmenu', function(e){
+      e.preventDefault();
+      showCtxMenu(e.clientX, e.clientY, f);
+    });
+    el.appendChild(row);
+  });
+}
+
+function openItem(id,name,isFolder){
+  if(isFolder){loadFolder(id,name);return;}
+  // 파일 - 미리보기/다운로드 모달
+  const f=_files.find(function(x){return x.id===id;});
+  openFilePreview(f||{id:id,name:name});
+}
+
+function openFilePreview(f){
+  const name=f.name||'파일';
+  const id=f.id;
+  const lower=name.toLowerCase();
+  const isImg=/\.(png|jpg|jpeg|gif|webp|bmp|svg)$/.test(lower);
+  const isPdf=/\.pdf$/.test(lower);
+  const isVid=/\.(mp4|webm|mov)$/.test(lower);
+  // Google Drive 미리보기/다운로드 URL
+  const previewUrl='https://drive.google.com/file/d/'+id+'/preview';
+  const downloadUrl='https://drive.google.com/uc?export=download&id='+id;
+  const imgUrl='https://drive.google.com/thumbnail?id='+id+'&sz=w1000';
+
+  let bodyHtml='';
+  if(isImg){
+    bodyHtml='<img id="fpImg" src="'+imgUrl+'" style="max-width:100%;max-height:60vh;border-radius:10px;display:block;margin:0 auto">';
+  } else if(isPdf||isVid){
+    bodyHtml='<iframe src="'+previewUrl+'" style="width:100%;height:60vh;border:0;border-radius:10px"></iframe>';
+  } else {
+    bodyHtml='<div style="padding:40px;text-align:center;color:var(--text2)"><div style="font-size:3rem;margin-bottom:10px">'+getIcon(f)+'</div><div>미리보기를 지원하지 않는 형식입니다.</div></div>';
+  }
+
+  const modal=document.getElementById('filePreviewModal');
+  document.getElementById('fpTitle').textContent=name;
+  document.getElementById('fpBody').innerHTML=bodyHtml;
+  // 이미지 로드 실패 시 iframe으로 폴백
+  if(isImg){
+    const img=document.getElementById('fpImg');
+    if(img) img.onerror=function(){
+      document.getElementById('fpBody').innerHTML='<iframe src="'+previewUrl+'" style="width:100%;height:60vh;border:0;border-radius:10px"></iframe>';
+    };
+  }
+  document.getElementById('fpDownload').onclick=function(){window.open(downloadUrl,'_blank');};
+  document.getElementById('fpOpen').onclick=function(){window.open(f.link||('https://drive.google.com/file/d/'+id+'/view'),'_blank');};
+  document.getElementById('fpCopyName').onclick=function(){navigator.clipboard.writeText(name).catch(function(){});status('📋 복사됨: '+name);};
+  modal.style.display='flex';
+}
+function closeFilePreview(){document.getElementById('filePreviewModal').style.display='none';document.getElementById('fpBody').innerHTML='';}
+
+// ── 선택 ──
+function toggleSel(id){
+  if(_sel.has(id))_sel.delete(id);else _sel.add(id);
+  const row=document.getElementById('row_'+id);
+  if(row)row.classList.toggle('sel',_sel.has(id));
+  updateSelBar();
+}
+function clearSel(){_sel.clear();document.querySelectorAll('.file-chk').forEach(function(c){c.checked=false;});document.querySelectorAll('.file-row').forEach(function(r){r.classList.remove('sel');});updateSelBar();}
+function updateSelBar(){
+  const bar=document.getElementById('selBar');
+  document.getElementById('selCount').textContent=_sel.size+'개 선택';
+  bar.classList.toggle('show',_sel.size>0);
+}
+
+// ── 압축 풀기 ──
+async function unzipItem(fileId, name){
+  if(!_curId){alert('폴더 안에서 실행하세요.');return;}
+  if(!confirm('"'+name+'" 압축을 현재 폴더에 풀겠습니까?'))return;
+  status('🗜️ 압축 해제 중... 잠시 기다려주세요');
+  const ov=document.getElementById('upoverlay'),pr=document.getElementById('upProgress');
+  ov.classList.add('on');
+  pr.textContent='ZIP 파일 다운로드 및 압축 해제 중...';
+  try{
+    const r=await fetch('/api/drive-manage?action=unzip',{
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({fileId, parentId:_curId})
+    });
+    const d=await r.json();
+    ov.classList.remove('on');
+    if(d.ok){
+      const errMsg=d.errors&&d.errors.length?' (오류 '+d.errors.length+'개)':'';
+      status('✅ 압축 해제 완료: '+d.uploaded+'/'+(d.total||d.uploaded)+'개 파일'+errMsg);
+      refresh();
+    } else {
+      status('❌ 압축 해제 실패: '+(d.error||d.message));
+      alert('압축 해제 실패: '+(d.error||d.message));
+    }
+  }catch(e){
+    ov.classList.remove('on');
+    status('❌ 오류: '+e.message);
+    alert('오류: '+e.message);
+  }
+}
+
+// ── 삭제 ──
+async function deleteItem(fileId,name){
+  if(!confirm('"'+name+'" 삭제하시겠습니까?'))return;
+  const r=await fetch('/api/drive-manage?action=delete',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({fileId})});
+  const d=await r.json();
+  if(d.ok){refresh();status('🗑 삭제됨: '+name);}
+  else alert('삭제 실패: '+(d.error||d.message));
+}
+async function deleteSelected(){
+  if(!_sel.size)return;
+  if(!confirm(_sel.size+'개를 삭제하시겠습니까?'))return;
+  const r=await fetch('/api/drive-manage?action=deleteMany',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({fileIds:[..._sel]})});
+  const d=await r.json();
+  if(d.ok){status('🗑 '+d.deleted+'개 삭제 완료');clearSel();refresh();}
+  else alert('삭제 실패: '+(d.error||d.message));
+}
+
+// ── 이동 ──
+// moveSelected는 위 폴더 피커 코드에서 재정의됨
+async function confirmMove(){
+  const newParentId=document.getElementById('mvTargetId').value.trim();
+  if(!newParentId){alert('이동할 폴더 ID를 입력하세요.');return;}
+  document.getElementById('mvmodal').classList.remove('on');
+  const ids=[..._sel];const oldParentId=_curId;
+  let ok=0;
+  for(const fileId of ids){
+    const r=await fetch('/api/drive-manage?action=move',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({fileId,newParentId,oldParentId})});
+    const d=await r.json();
+    if(d.ok)ok++;
+  }
+  status('📂 '+ok+'/'+ids.length+'개 이동 완료');clearSel();refresh();
+}
+
+// ── 이름 변경 ──
+async function renameItem(fileId,name){
+  const newName=prompt('새 이름:',name);
+  if(!newName||newName===name)return;
+  const r=await fetch('/api/drive-manage?action=rename',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({fileId,newName:newName.trim()})});
+  const d=await r.json();
+  if(d.ok)refresh();else alert('이름 변경 실패: '+(d.error||d.message));
+}
+
+// ── 폴더 생성 ──
+async function mkdirPrompt(){
+  const name=prompt('새 폴더 이름:');
+  if(!name||!name.trim())return;
+  if(!_curId){alert('폴더 안으로 이동 후 생성하세요.');return;}
+  const r=await fetch('/api/drive-manage?action=mkdir',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({parentId:_curId,name:name.trim()})});
+  const d=await r.json();
+  if(d.ok){refresh();status('📁 생성됨: '+name);}
+  else alert('폴더 생성 실패: '+(d.error||d.message));
+}
+
+// ── 파일 업로드 ──
+// ── 파일 업로드 (Resumable - 용량 무제한) ──
+async function uploadFiles(fileList){
+  if(!fileList||!fileList.length)return;
+  if(!_curId){alert('업로드할 폴더 안으로 이동하세요.');return;}
+  const ov=document.getElementById('upoverlay'),pr=document.getElementById('upProgress');
+  ov.classList.add('on');
+  let ok=0;
+  for(let i=0;i<fileList.length;i++){
+    const file=fileList[i];
+    const label='('+(i+1)+'/'+fileList.length+') '+file.name;
+    try{
+      pr.textContent=label+' — 준비 중...';
+      const mt=file.type||'application/octet-stream';
+
+      // 1) 서버에서 Resumable Upload 세션 URL 발급
+      const sessRes=await fetch('/api/drive-manage?action=upload-session',{
+        method:'POST',
+        headers:{'Content-Type':'application/json'},
+        body:JSON.stringify({parentId:_curId,fileName:file.name,mimeType:mt,fileSize:file.size})
+      });
+      const sessData=await sessRes.json();
+      if(!sessData.ok||!sessData.uploadUrl){
+        pr.textContent='❌ '+file.name+': 세션 발급 실패 '+(sessData.error||sessData.message||'');
+        await sleep(1500);continue;
+      }
+
+      // 2) 브라우저 → Google Drive 직접 업로드 (청크 5MB씩)
+      const CHUNK=5*1024*1024;
+      const total=file.size;
+      let offset=0;
+      let fileId=null;
+
+      while(offset<total){
+        const end=Math.min(offset+CHUNK,total);
+        const chunk=file.slice(offset,end);
+        const pct=Math.round(end/total*100);
+        pr.textContent=label+' — '+pct+'% ('+fmtSize(end)+'/'+fmtSize(total)+')';
+
+        const upRes=await fetch(sessData.uploadUrl,{
+          method:'PUT',
+          headers:{
+            'Content-Range':'bytes '+offset+'-'+(end-1)+'/'+total,
+            'Content-Type':mt
+          },
+          body:chunk
+        });
+
+        if(upRes.status===200||upRes.status===201){
+          const data=await upRes.json();
+          fileId=data.id;
+          break;
+        } else if(upRes.status===308){
+          // 청크 완료, 다음 청크로
+          const range=upRes.headers.get('Range');
+          if(range) offset=parseInt(range.split('-')[1])+1;
+          else offset=end;
+        } else {
+          const errTxt=await upRes.text();
+          throw new Error('업로드 오류('+upRes.status+'): '+errTxt.slice(0,100));
+        }
+      }
+
+      if(fileId){ok++;pr.textContent='✅ '+file.name+' 완료';}
+      else{pr.textContent='⚠️ '+file.name+': 응답 없음';await sleep(1000);}
+    }catch(e){
+      pr.textContent='❌ '+file.name+': '+e.message;
+      await sleep(1500);
+    }
+  }
+  ov.classList.remove('on');
+  document.getElementById('fileUploadIn').value='';
+  status('⬆ 업로드 완료: '+ok+'/'+fileList.length+'개');
+  refresh();
+}
+
+// ── PWA 설치 ──
+let _deferredPrompt=null;
+window.addEventListener('beforeinstallprompt',function(e){
+  e.preventDefault();_deferredPrompt=e;
+  const btn=document.getElementById('installBtn');
+  if(btn)btn.style.display='';
+});
+window.addEventListener('appinstalled',function(){
+  _deferredPrompt=null;
+  const btn=document.getElementById('installBtn');
+  if(btn)btn.style.display='none';
+  status('✅ 앱이 설치되었습니다!');
+});
+async function installPWA(){
+  if(!_deferredPrompt)return;
+  _deferredPrompt.prompt();
+  const{outcome}=await _deferredPrompt.userChoice;
+  if(outcome==='accepted'){_deferredPrompt=null;document.getElementById('installBtn').style.display='none';}
+}
+
+// ── 초기화 ──
+
+
+// ════════════════════════════════
+// 우클릭 컨텍스트 메뉴
+// ════════════════════════════════
+var _ctxTarget = null;
+
+function showCtxMenu(x, y, file){
+  _ctxTarget = file;
+  var menu = document.getElementById('ctxMenu');
+  // ZIP 풀기 버튼 표시/숨김
+  var uzEl = document.getElementById('ctxUnzip');
+  if(uzEl) uzEl.style.display = String(file.name||'').toLowerCase().endsWith('.zip') ? '' : 'none';
+  menu.classList.add('on');
+  // 화면 밖으로 나가지 않게
+  var mw = menu.offsetWidth, mh = menu.offsetHeight;
+  if(x + mw > window.innerWidth) x = window.innerWidth - mw - 8;
+  if(y + mh > window.innerHeight) y = window.innerHeight - mh - 8;
+  menu.style.left = x + 'px';
+  menu.style.top = y + 'px';
+}
+
+function hideCtxMenu(){
+  document.getElementById('ctxMenu').classList.remove('on');
+}
+
+document.addEventListener('click', function(e){
+  if(!e.target.closest('.ctx-menu')) hideCtxMenu();
+});
+document.addEventListener('contextmenu', function(e){
+  if(!e.target.closest('.file-row') && !e.target.closest('.ctx-menu')){
+    hideCtxMenu();
+  }
+});
+
+function ctxAction(action){
+  hideCtxMenu();
+  if(!_ctxTarget) return;
+  var f = _ctxTarget;
+  switch(action){
+    case 'open':
+      openItem(f.id, f.name, f.isFolder);
+      break;
+    case 'copy':
+      setClipboard('copy', f);
+      break;
+    case 'cut':
+      setClipboard('cut', f);
+      break;
+    case 'moveTo':
+      openPicker('move', [f]);
+      break;
+    case 'copyTo':
+      openPicker('copy', [f]);
+      break;
+    case 'rename':
+      renameItem(f.id, f.name);
+      break;
+    case 'delete':
+      deleteItem(f.id, f.name);
+      break;
+    case 'unzip':
+      unzipItem(f.id, f.name);
+      break;
+  }
+}
+
+// ════════════════════════════════
+// 클립보드 (복사/잘라내기 → 붙여넣기)
+// ════════════════════════════════
+var _clipboard = null; // {mode:'copy'|'cut', files:[...]}
+
+function setClipboard(mode, file){
+  _clipboard = { mode: mode, files: [file], fromFolderId: _curId };
+  updateClipBar();
+  status((mode==='copy'?'📋 복사됨':'✂️ 잘라내기') + ': ' + file.name);
+}
+
+function updateClipBar(){
+  var bar = document.getElementById('clipBar');
+  var info = document.getElementById('clipInfo');
+  if(_clipboard && _clipboard.files.length){
+    bar.classList.add('on');
+    var icon = _clipboard.mode === 'copy' ? '📋' : '✂️';
+    info.textContent = icon + ' ' + _clipboard.files[0].name + (_clipboard.files.length > 1 ? ' 외 ' + (_clipboard.files.length-1) + '개' : '');
+  } else {
+    bar.classList.remove('on');
+  }
+}
+
+function clearClipboard(){
+  _clipboard = null;
+  updateClipBar();
+}
+
+async function pasteClipboard(){
+  if(!_clipboard || !_clipboard.files.length){alert('복사/잘라내기한 파일이 없습니다.');return;}
+  if(!_curId){alert('붙여넣을 폴더 안으로 이동하세요.');return;}
+  var mode = _clipboard.mode;
+  var files = _clipboard.files;
+  var fromId = _clipboard.fromFolderId;
+  var okCount = 0;
+  for(var i = 0; i < files.length; i++){
+    try{
+      if(mode === 'copy'){
+        var r = await fetch('/api/drive-manage?action=copy', {
+          method:'POST', headers:{'Content-Type':'application/json'},
+          body: JSON.stringify({fileId: files[i].id, targetParentId: _curId})
+        });
+        var d = await r.json();
+        if(d.ok) okCount++;
+        else status('❌ 복사 실패: ' + (d.error||d.message));
+      } else {
+        // cut = move
+        var r2 = await fetch('/api/drive-manage?action=move', {
+          method:'POST', headers:{'Content-Type':'application/json'},
+          body: JSON.stringify({fileId: files[i].id, newParentId: _curId, oldParentId: fromId})
+        });
+        var d2 = await r2.json();
+        if(d2.ok) okCount++;
+        else status('❌ 이동 실패: ' + (d2.error||d2.message));
+      }
+    }catch(e){ status('❌ 오류: ' + e.message); }
+  }
+  var label = mode === 'copy' ? '복사' : '이동';
+  status('✅ ' + label + ' 완료: ' + okCount + '/' + files.length + '개');
+  if(mode === 'cut') clearClipboard();
+  refresh();
+}
+
+// 선택 바의 이동 버튼도 폴더 피커 연동
+function moveSelected(){
+  if(!_sel.size) return;
+  var selFiles = _files.filter(function(f){ return _sel.has(f.id); });
+  openPicker('move', selFiles);
+}
+
+// ════════════════════════════════
+// 폴더 피커
+// ════════════════════════════════
+var _picker = {
+  mode: 'move', // 'move' | 'copy'
+  files: [],
+  stack: [{id:'', name:'내 드라이브'}],
+  folders: [],
+  selectedId: null
+};
+
+function openPicker(mode, files){
+  _picker.mode = mode;
+  _picker.files = files;
+  _picker.stack = [{id:'', name:'내 드라이브'}];
+  _picker.selectedId = null;
+  document.getElementById('pickerTitle').textContent = (mode==='move'?'📁 이동할':'📁 복사할') + ' 폴더 선택';
+  document.getElementById('pickerBg').classList.add('on');
+  loadPickerFolder('');
+}
+
+function closePicker(){
+  document.getElementById('pickerBg').classList.remove('on');
+}
+
+async function loadPickerFolder(folderId){
+  var el = document.getElementById('pickerList');
+  el.innerHTML = '<div style="padding:20px;text-align:center;color:var(--text2)">로딩...</div>';
+  _picker.selectedId = folderId || null;
+  // 경로 표시
+  document.getElementById('pickerPath').textContent = _picker.stack.map(function(s){return s.name;}).join(' › ');
+  try{
+    var url = '/api/drive-list' + (folderId ? '?folderId=' + encodeURIComponent(folderId) : '');
+    var r = await fetch(url, {cache:'no-store'});
+    var d = await r.json();
+    if(!d.ok){el.innerHTML='<div style="padding:20px;text-align:center;color:var(--danger)">오류</div>';return;}
+    var folders = (d.files||[]).filter(function(f){return f.isFolder;}).sort(function(a,b){return String(a.name||'').localeCompare(String(b.name||''));});
+    _picker.folders = folders;
+    if(!folders.length){
+      el.innerHTML = '<div style="padding:20px;text-align:center;color:var(--text2)">하위 폴더가 없습니다</div>';
+      return;
+    }
+    el.innerHTML = folders.map(function(f){
+      var fid=f.id.replace(/'/g,"\'");
+      var fn=esc(f.name).replace(/'/g,"\'");
+      return '<div class="pk-row" ondblclick="pickerEnter(\'' + fid + '\',\'' + fn + '\')" onclick="pickerSelect(\'' + fid + '\',this)"><div class="pk-icon">📁</div><div class="pk-name">' + esc(f.name) + '</div></div>';
+    }).join('');
+  }catch(e){
+    el.innerHTML='<div style="padding:20px;text-align:center;color:var(--danger)">'+e.message+'</div>';
+  }
+}
+
+function pickerSelect(id, el){
+  _picker.selectedId = id;
+  document.querySelectorAll('.pk-row').forEach(function(r){r.classList.remove('sel');});
+  if(el) el.classList.add('sel');
+}
+
+function pickerEnter(id, name){
+  _picker.stack.push({id:id, name:name});
+  _picker.selectedId = id;
+  loadPickerFolder(id);
+}
+
+function pickerGoUp(){
+  if(_picker.stack.length <= 1) return;
+  _picker.stack.pop();
+  var prev = _picker.stack[_picker.stack.length - 1];
+  loadPickerFolder(prev.id);
+}
+
+function pickerSelectCurrent(){
+  // 현재 보고 있는 폴더를 대상으로 선택
+  var cur = _picker.stack[_picker.stack.length - 1];
+  _picker.selectedId = cur.id;
+  pickerConfirm();
+}
+
+async function pickerConfirm(){
+  var targetId = _picker.selectedId;
+  if(!targetId && _picker.stack.length > 0){
+    targetId = _picker.stack[_picker.stack.length-1].id;
+  }
+  if(!targetId){alert('폴더를 선택하세요.');return;}
+  closePicker();
+  var mode = _picker.mode;
+  var files = _picker.files;
+  var okCount = 0;
+  status((mode==='move'?'📁 이동':'📋 복사') + ' 중...');
+  for(var i = 0; i < files.length; i++){
+    try{
+      if(mode === 'copy'){
+        var r = await fetch('/api/drive-manage?action=copy', {
+          method:'POST', headers:{'Content-Type':'application/json'},
+          body: JSON.stringify({fileId: files[i].id, targetParentId: targetId})
+        });
+        if((await r.json()).ok) okCount++;
+      } else {
+        var r2 = await fetch('/api/drive-manage?action=move', {
+          method:'POST', headers:{'Content-Type':'application/json'},
+          body: JSON.stringify({fileId: files[i].id, newParentId: targetId, oldParentId: _curId})
+        });
+        if((await r2.json()).ok) okCount++;
+      }
+    }catch(e){}
+  }
+  status('✅ ' + (mode==='move'?'이동':'복사') + ' 완료: ' + okCount + '/' + files.length + '개');
+  clearSel();
+  refresh();
+}
+
+
+// ── 드래그&드롭 업로드 ──
+(function(){
+  const body = document.body;
+  let _dragCount = 0;
+
+  // 전체 화면 드래그 진입
+  body.addEventListener('dragenter', function(e){
+    if(!e.dataTransfer.types.includes('Files')) return;
+    e.preventDefault();
+    _dragCount++;
+    document.getElementById('dropHint').classList.add('on');
+  });
+
+  body.addEventListener('dragleave', function(e){
+    _dragCount--;
+    if(_dragCount <= 0){
+      _dragCount = 0;
+      document.getElementById('dropHint').classList.remove('on');
+    }
+  });
+
+  body.addEventListener('dragover', function(e){
+    if(!e.dataTransfer.types.includes('Files')) return;
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'copy';
+  });
+
+  body.addEventListener('drop', function(e){
+    e.preventDefault();
+    _dragCount = 0;
+    document.getElementById('dropHint').classList.remove('on');
+    document.getElementById('fileList').classList.remove('drag-over');
+
+    const files = e.dataTransfer.files;
+    if(!files || !files.length) return;
+
+    if(!_curId){
+      alert('폴더 안으로 이동 후 드래그하세요.');
+      return;
+    }
+    uploadFiles(files);
+  });
+
+  // 파일 목록 영역 호버 강조
+  document.addEventListener('dragover', function(e){
+    const fl = document.getElementById('fileList');
+    if(fl) fl.classList.add('drag-over');
+  });
+  document.addEventListener('dragleave', function(e){
+    if(e.relatedTarget === null){
+      const fl = document.getElementById('fileList');
+      if(fl) fl.classList.remove('drag-over');
+    }
+  });
+})();
+
+window.onload=function(){
+  const u=getSession();
+  if(u&&isAdmin(u)){enterApp(u);}
+};
+</script>
+
+<div class="drop-hint" id="dropHint">
+  <div style="font-size:3rem">📂</div>
+  <div>여기에 파일을 놓으세요</div>
+  <div style="font-size:.9rem;font-weight:400;opacity:.7">현재 폴더에 업로드됩니다</div>
+</div>
+
+<div class="ctx-menu" id="ctxMenu">
+  <div class="ctx-item" onclick="ctxAction('open')">📂 열기</div>
+  <div class="ctx-sep"></div>
+  <div class="ctx-item" onclick="ctxAction('copy')">📋 복사</div>
+  <div class="ctx-item" onclick="ctxAction('cut')">✂️ 잘라내기 (이동)</div>
+  <div class="ctx-sep"></div>
+  <div class="ctx-item" onclick="ctxAction('moveTo')">📁 이동할 폴더 선택...</div>
+  <div class="ctx-item" onclick="ctxAction('copyTo')">📁 복사할 폴더 선택...</div>
+  <div class="ctx-sep"></div>
+  <div class="ctx-item" onclick="ctxAction('unzip')" id="ctxUnzip" style="display:none">🗜️ 압축 풀기</div>
+  <div class="ctx-item" onclick="ctxAction('rename')">✏️ 이름 변경</div>
+  <div class="ctx-item danger" onclick="ctxAction('delete')">🗑 삭제</div>
+</div>
+<div class="picker-bg" id="pickerBg" onclick="if(event.target===this)closePicker()">
+  <div class="picker">
+    <div class="picker-head"><span id="pickerTitle">📁 폴더 선택</span><button class="btn" onclick="pickerGoUp()" style="font-size:.78rem;padding:4px 10px">⬆ 상위</button></div>
+    <div class="picker-path" id="pickerPath">내 드라이브</div>
+    <div class="picker-list" id="pickerList"></div>
+    <div class="picker-foot">
+      <button onclick="pickerSelectCurrent()">📌 현재 폴더 선택</button>
+      <button onclick="closePicker()">취소</button>
+      <button class="pri" onclick="pickerConfirm()">확인</button>
+    </div>
+  </div>
+</div>
+</body></html>

@@ -1,0 +1,560 @@
+<!doctype html><html lang="ko"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><title>Stella GPT</title><link rel="manifest" href="/manifest-gpt.json"><meta name="theme-color" content="#0f172a"><meta name="apple-mobile-web-app-capable" content="yes"><meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"><link rel="apple-touch-icon" href="/icons/gpt-192.png"><style>*{box-sizing:border-box}:root{--border:#e5e7eb;--side-bg:#fbfbfc;--bg:#fff;--text:#111827}
+body.dark{--border:#30363d;--side-bg:#0d1117;--bg:#0d1117;--text:#e6edf3}
+body{margin:0;background:#fff;color:#111827;font-family:system-ui,-apple-system,BlinkMacSystemFont,'Noto Sans KR',sans-serif}.hidden{display:none!important}.auth{min-height:100dvh;background:linear-gradient(135deg,#f8fafc,#9ca3af);display:flex;align-items:center;justify-content:center;padding:24px}.card{width:min(560px,100%);background:#fff;border-radius:28px;padding:28px;box-shadow:0 28px 90px rgba(15,23,42,.22)}h1{font-size:44px;margin:0 0 14px}.muted{color:#6b7280}.tabs{display:grid;grid-template-columns:1fr 1fr;background:#f3f4f6;border-radius:18px;padding:6px;margin:20px 0}.tabs button{border:0;background:transparent;border-radius:14px;padding:14px;font-weight:900}.tabs button.active{background:#fff}.field{margin:12px 0}.field label{display:block;font-weight:900;margin-bottom:7px}.field input{width:100%;border:1px solid #d1d5db;border-radius:16px;padding:14px;font:inherit}.btn,button{border:1px solid #d1d5db;border-radius:16px;background:#fff;padding:12px 14px;font-weight:900;color:#111827;touch-action:manipulation}.primary{background:#0f172a;color:#fff}.check{display:flex;align-items:center;gap:8px;margin:10px 0}.msg{min-height:22px;color:#b91c1c;margin-top:10px}.app{height:100dvh;display:grid;grid-template-columns:330px 1fr}.side{border-right:1px solid var(--border,#e5e7eb);background:var(--side-bg,#fbfbfc);overflow:auto;padding:14px}.brand{font-size:30px;font-weight:900}.search{display:flex;gap:8px;margin:14px 0}.search input{flex:1;border:1px solid #d1d5db;border-radius:14px;padding:12px}.section{margin:18px 0 8px;color:#6b7280;font-size:13px;font-weight:900}.tree{display:block;width:100%;text-align:left;border:0;background:transparent;border-radius:12px;padding:10px;margin:3px 0}.tree.active,.tree:hover{background:#eef2ff}.main{height:100dvh;display:flex;flex-direction:column}.top{height:62px;border-bottom:1px solid #e5e7eb;display:flex;align-items:center;gap:8px;padding:10px 14px}.hamb{display:none}.title{font-size:20px;font-weight:900;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.spacer{flex:1}.msgs{flex:1;overflow:auto;padding:18px;display:flex;flex-direction:column;gap:14px}.row{display:flex}.row.me{justify-content:flex-end}.bubble{max-width:820px;line-height:1.65;word-break:break-word}.row.me .bubble{border:1px solid #d1d5db;border-radius:18px 18px 4px 18px;padding:11px}.bubble a{color:#2563eb;text-decoration:underline}.compose{border-top:1px solid #e5e7eb;padding:10px 14px}.bar{display:flex;gap:8px;align-items:flex-end;border:1px solid #d1d5db;border-radius:22px;padding:8px}.bar textarea{flex:1;border:0;outline:0;resize:none;min-height:42px;max-height:130px;font:inherit}@media(max-width:900px){.app{grid-template-columns:1fr}.side{position:fixed;z-index:10;left:0;top:0;bottom:0;width:min(84vw,360px);transform:translateX(-105%);transition:.18s;box-shadow:20px 0 60px rgba(15,23,42,.18)}.side.open{transform:translateX(0)}.hamb{display:inline-flex}.bubble{max-width:82vw}}
+body.dark{background:#0d1117;color:#e6edf3}
+body.dark .side{background:#0d1117;border-color:#30363d}
+body.dark .top{border-color:#30363d}
+body.dark .bubble{background:#161b22;color:#e6edf3}
+body.dark .row.me .bubble{background:#1f6feb;color:#fff}
+body.dark textarea,body.dark .search input,body.dark .field input{background:#0d1117;color:#e6edf3;border-color:#30363d}
+body.dark .btn,body.dark button{background:#21262d;color:#e6edf3;border-color:#30363d}
+body.dark .primary{background:#1f6feb;color:#fff}
+body.dark .tree{color:#e6edf3}
+body.dark .card{background:#161b22}
+pre.code{position:relative;background:#0d1117;color:#e6edf3;border-radius:12px;padding:34px 14px 14px;overflow-x:auto;font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:13px;margin:8px 0}
+body:not(.dark) pre.code{background:#1e293b;color:#e2e8f0}
+.copyBtn{position:absolute;top:6px;right:6px;font-size:11px;padding:4px 10px;border-radius:8px;background:#334155;color:#fff;border:0;cursor:pointer;font-weight:700}
+.copyBtn:active{background:#0ea5e9}
+.modelWrap{position:relative}
+.modelBtn{font-size:12px;padding:8px 12px;border-radius:14px;background:#f3f4f6;border:1px solid #d1d5db;font-weight:800;white-space:nowrap;cursor:pointer}
+body.dark .modelBtn{background:#21262d;border-color:#30363d;color:#e6edf3}
+.composeModel{display:flex;align-items:center;gap:8px;margin-bottom:8px;flex-wrap:wrap}
+.attach-preview{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:6px}
+.attach-thumb{position:relative;width:56px;height:56px;border-radius:10px;overflow:hidden;border:1px solid var(--border)}
+.attach-thumb img{width:100%;height:100%;object-fit:cover}
+.attach-thumb .rm{position:absolute;top:2px;right:2px;background:rgba(0,0,0,.6);color:#fff;border:none;border-radius:50%;width:18px;height:18px;cursor:pointer;font-size:11px;display:flex;align-items:center;justify-content:center;padding:0}
+.attach-file{display:flex;align-items:center;gap:4px;background:var(--border,#e5e7eb);border-radius:8px;padding:4px 8px;font-size:.75rem;max-width:140px;overflow:hidden;white-space:nowrap;text-overflow:ellipsis}
+.themeBtn{font-size:18px;padding:8px 10px;border-radius:12px;cursor:pointer}
+
+/* ── 노트 패널 ── */
+.note-overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:200}
+.note-overlay.on{display:block}
+.note-panel{position:fixed;top:0;right:0;bottom:0;width:min(780px,100vw);background:#fff;z-index:201;display:flex;flex-direction:column;box-shadow:-8px 0 40px rgba(0,0,0,.18);transform:translateX(100%);transition:.22s cubic-bezier(.4,0,.2,1)}
+.note-panel.on{transform:translateX(0)}
+body.dark .note-panel{background:#0d1117;color:#e6edf3}
+body.dark .note-panel .np-list{background:#0d1117;border-color:#30363d}
+body.dark .note-panel .np-item{border-color:#21262d;color:#e6edf3}
+body.dark .note-panel .np-item:hover{background:#161b22}
+body.dark .note-panel .np-item.active{background:#161b22;border-left-color:#1f6feb}
+body.dark .note-panel textarea,.note-panel.dark textarea{background:#0d1117;color:#e6edf3}
+body.dark .np-editor{background:#0d1117}
+body.dark .np-top{background:#161b22;border-color:#30363d}
+body.dark .np-titlebar{background:#161b22;border-color:#30363d}
+body.dark .np-titlebar input{background:#0d1117;color:#e6edf3;border-color:#30363d}
+body.dark .np-search input{background:#21262d;color:#e6edf3;border-color:#30363d}
+body.dark .np-date-group{color:#8b949e}
+.np-top{display:flex;align-items:center;gap:8px;padding:12px 16px;border-bottom:1px solid #e5e7eb;background:#f9fafb;flex-shrink:0}
+.np-top h2{font-size:1rem;font-weight:800;flex:1;margin:0}
+.np-top button{border:1px solid #d1d5db;background:#fff;border-radius:9px;padding:6px 14px;cursor:pointer;font-size:.8rem;font-weight:700}
+body.dark .np-top button{background:#21262d;color:#e6edf3;border-color:#30363d}
+.np-top .np-new{background:#1f6feb;color:#fff;border-color:#1f6feb}
+.np-body{display:flex;flex:1;overflow:hidden}
+.np-list{width:260px;flex-shrink:0;border-right:1px solid #e5e7eb;overflow-y:auto;padding:8px 0}
+.np-search{padding:8px 10px}
+.np-search input{width:100%;border:1px solid #d1d5db;border-radius:9px;padding:7px 10px;font-size:.82rem;outline:none}
+.np-date-group{padding:4px 12px;font-size:.72rem;color:#9ca3af;font-weight:700;margin-top:6px}
+.np-item{padding:10px 14px;cursor:pointer;border-left:3px solid transparent;border-bottom:1px solid #f3f4f6;transition:background .1s}
+.np-item:hover{background:#f9fafb}
+.np-item.active{background:#eff6ff;border-left-color:#1f6feb}
+.np-item-title{font-size:.84rem;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;color:#111827}
+.np-item-meta{font-size:.72rem;color:#9ca3af;margin-top:2px}
+body.dark .np-item-title{color:#e6edf3}
+.np-editor{flex:1;display:flex;flex-direction:column;overflow:hidden;background:#fff}
+.np-titlebar{display:flex;align-items:center;gap:8px;padding:10px 14px;border-bottom:1px solid #e5e7eb;background:#f9fafb;flex-shrink:0}
+.np-titlebar input{flex:1;border:1px solid #d1d5db;border-radius:8px;padding:8px 12px;font-size:.95rem;font-weight:700;outline:none}
+.np-titlebar .np-save{background:#1f6feb;color:#fff;border:none;border-radius:8px;padding:7px 16px;cursor:pointer;font-size:.82rem;font-weight:700}
+.np-titlebar .np-del{background:none;border:1px solid #f87171;color:#ef4444;border-radius:8px;padding:7px 12px;cursor:pointer;font-size:.82rem}
+.np-content{flex:1;padding:0}
+.np-content textarea{width:100%;height:100%;border:none;outline:none;padding:18px;font-size:.93rem;line-height:1.7;resize:none;font-family:system-ui,'Noto Sans KR',sans-serif;background:#fff;color:#111827}
+body.dark .np-content textarea{background:#0d1117;color:#e6edf3}
+.np-empty{display:flex;flex-direction:column;align-items:center;justify-content:center;flex:1;color:#9ca3af;gap:12px;font-size:.9rem}
+.np-saved-tag{font-size:.72rem;color:#9ca3af;padding:0 6px}
+@media(max-width:600px){.np-list{width:0;display:none}.np-panel-mobile-list .np-list{width:100%;display:block}.np-panel-mobile-list .np-editor{display:none}}
+
+.msg-actions{display:flex;gap:6px;margin-top:8px;padding-top:6px;border-top:1px solid rgba(127,127,127,.15)}
+.msgCopyBtn{background:none;border:1px solid rgba(127,127,127,.3);border-radius:8px;padding:4px 10px;font-size:.78rem;cursor:pointer;color:var(--muted,#6b7280);display:flex;align-items:center;gap:4px;transition:all .15s}
+.msgCopyBtn:hover,.msgCopyBtn:active{background:rgba(127,127,127,.15);color:var(--text,#111827)}
+</style></head><body class="dark">
+<script>
+(function(){
+  try{
+    if(!localStorage.getItem('stella_theme_migrated_v2')){
+      localStorage.setItem('stella_theme','dark');
+      localStorage.setItem('stella_theme_migrated_v2','1');
+    }
+    var t=localStorage.getItem('stella_theme');
+    if(t==='light'){document.body.classList.remove('dark');}
+  }catch(e){}
+})();
+</script>
+<div id="auth" class="auth"><div class="card"><h1>Stella</h1><p class="muted">회원 전용 AI 작업공간. 로그인은 로그아웃 전까지 유지됩니다.</p><div class="tabs"><button id="loginTab" class="active" type="button">로그인</button><button id="signupTab" type="button">회원가입</button></div><form id="authForm"><div class="field signupOnly hidden"><label>이름</label><input id="name" placeholder="이름" autocomplete="name"></div><div class="field"><label>아이디 또는 이메일</label><input id="loginId" placeholder="아이디 또는 이메일" autocomplete="username"></div><div class="field signupOnly hidden"><label>이메일</label><input id="email" placeholder="이메일" autocomplete="email"></div><div class="field signupOnly hidden"><label>생년월일</label><input id="birth" placeholder="YYYY-MM-DD"></div><div class="field"><label>비밀번호</label><input id="pw" type="password" placeholder="비밀번호" autocomplete="current-password"></div><label class="check loginOnly"><input id="rememberId" type="checkbox"> 아이디 기억하기</label><button id="submitBtn" class="primary" type="button" onclick="auth(event)">로그인</button><button type="button" id="forgotBtn">비밀번호를 잊으셨나요?</button><div id="authMsg" class="msg"></div></form></div></div><div id="app" class="app hidden"><aside id="side" class="side"><div class="brand">Stella GPT</div><div id="who" class="muted"></div><div style="display:flex;gap:8px;margin:10px 0"><button type="button" onclick="newChat()">＋ 새 채팅</button><button type="button" onclick="logout()">로그아웃</button></div><div class="search"><input id="q" placeholder="게시글/회의록/채팅 검색" onfocus="keepSide()" oninput="renderSide()"><button type="button" onclick="renderSide()">⌕</button></div><div class="section">프로젝트 카테고리</div><div id="chatList"></div><div class="section">게시판 카테고리</div><button class="tree" type="button" onclick="openNotePanel()">📝 노트</button>
+<button class="tree" type="button" onclick="location.href='/cloud'">▱ 기본 게시판</button><button class="tree" type="button" onclick="location.href='/cloud'">▱ DB / Stella Cloud</button><div class="section">바로가기</div><a class="tree" href="/cloud">Stella Cloud</a><a class="tree" href="/talk">Stella Talk</a><a class="tree" href="/developer">Developer</a>
+<!-- 노트 오버레이 -->
+<div class="note-overlay" id="noteOverlay" onclick="closeNotePanel()"></div>
+<!-- 노트 패널 -->
+<div class="note-panel" id="notePanel">
+  <div class="np-top">
+    <h2>📝 노트</h2>
+    <span class="np-saved-tag" id="npSavedTag"></span>
+    <button onclick="closeNotePanel()">닫기</button>
+    <button class="np-new" onclick="newNote()">＋ 새 노트</button>
+  </div>
+  <div class="np-body">
+    <div class="np-list" id="npList">
+      <div class="np-search"><input id="npSearch" placeholder="노트 검색..." oninput="renderNoteList()"></div>
+      <div id="npListInner"></div>
+    </div>
+    <div class="np-editor" id="npEditor">
+      <div class="np-titlebar">
+        <input id="npTitle" placeholder="제목 없음" oninput="markNoteEdited()">
+        <span class="np-saved-tag" id="npAutoTag">자동저장</span>
+        <button class="np-del" onclick="deleteNote()">🗑</button>
+        <button class="np-save" onclick="saveNote()">저장</button>
+      </div>
+      <div class="np-content">
+        <textarea id="npBody" placeholder="여기에 내용을 입력하세요..." oninput="markNoteEdited()"></textarea>
+      </div>
+    </div>
+    <div class="np-empty" id="npEmpty" style="display:none">
+      <div style="font-size:2rem">📝</div>
+      <div>노트를 선택하거나 새로 만드세요</div>
+      <button style="padding:8px 20px;border:1px solid #d1d5db;border-radius:9px;cursor:pointer;font-size:.85rem" onclick="newNote()">＋ 새 노트 만들기</button>
+    </div>
+  </div>
+</div>
+</aside><main class="main"><div class="top"><button class="btn hamb" type="button" onclick="toggleSide()">☰</button><div id="title" class="title">새 채팅</div><div class="spacer"></div><button class="btn themeBtn" type="button" onclick="installPWA()" id="installBtn" style="display:none;font-size:16px;padding:8px 10px;border-radius:12px" title="앱 설치">📲</button><button class="btn themeBtn" type="button" onclick="toggleTheme()" id="themeBtn">🌙</button></div><div id="msgs" class="msgs"></div><div class="compose"><div class="composeModel"><div class="modelWrap"><button class="modelBtn" type="button" onclick="toggleModelMenu()" id="modelBtn">Opus 4.8</button></div><select id="model" style="display:none"><optgroup label="── GPT ──"><option value="chatgpt-5.5-latest">GPT-5.5 최신</option><option value="gpt-5">GPT-5</option><option value="gpt-4o">GPT-4o</option><option value="gpt-4.1">GPT-4.1</option><option value="gpt-4.1-mini">GPT-4.1 Mini</option><option value="gpt-4o-mini">GPT-4o Mini</option></optgroup><optgroup label="── Claude ──"><option value="claude-fable-5">Claude Fable 5 (최신)</option><option value="claude-opus-4-8">Claude Opus 4.8</option><option value="claude-opus-4-7">Claude Opus 4.7</option><option value="claude-opus-4-6">Claude Opus 4.6</option><option value="claude-sonnet-4-6">Claude Sonnet 4.6</option><option value="claude-haiku-4-5-20251001">Claude Haiku 4.5</option></optgroup></select></div><div id="attachPreview" class="attach-preview"></div>
+<div class="bar">
+<button type="button" onclick="document.getElementById(\'attachInput\').click()" style="background:none;border:none;cursor:pointer;font-size:20px;padding:4px 6px;color:#6b7280" title="파일/이미지 첨부">+</button>
+<input type="file" id="attachInput" multiple accept="image/*,.pdf,.txt,.md,.csv,.xlsx,.docx" style="display:none" onchange="handleAttach(this.files)">
+<textarea id="input" placeholder="메시지 입력 (Enter 줄바꿈)" rows="1"></textarea>
+<button class="primary" type="button" onclick="send()">↑</button>
+</div></div></main></div><script>const K={session:'stella_session_final_v82',remember:'stella_remember_id_v1',chats:'stella_chats_server_v2'};let mode='login',user=null,chats=[],active=null;const $=id=>document.getElementById(id);const read=(k,d)=>{try{return JSON.parse(localStorage.getItem(k)||JSON.stringify(d))}catch{return d}};const write=(k,v)=>localStorage.setItem(k,JSON.stringify(v));function setMode(m){mode=m;$('loginTab').classList.toggle('active',m==='login');$('signupTab').classList.toggle('active',m==='signup');document.querySelectorAll('.signupOnly').forEach(x=>x.classList.toggle('hidden',m!=='signup'));document.querySelectorAll('.loginOnly').forEach(x=>x.classList.toggle('hidden',m!=='login'));$('submitBtn').textContent=m==='login'?'로그인':'회원가입';$('authMsg').style.color='#b91c1c';$('authMsg').textContent='';$('pw').value='';if(m==='signup'){$('loginId').value='';$('email').value='';$('name').value='';$('birth').value='';}else loadRemember()}function loadRemember(){const v=localStorage.getItem(K.remember)||'';$('loginId').value=v;$('rememberId').checked=!!v}async function api(url,body){const r=await fetch(url,{method:'POST',headers:{'Content-Type':'application/json','Cache-Control':'no-store'},body:JSON.stringify(body)});const t=await r.text();let d;try{d=JSON.parse(t)}catch{d={message:t}};if(!r.ok||d.ok===false){const m=(d.message||'API 오류')+(d.error?(' ('+d.error+')'):'');throw new Error(m)}return d}async function auth(e){if(e&&e.preventDefault)e.preventDefault();const id=$('loginId').value.trim(),code=$('pw').value;if(!id||!code){$('authMsg').textContent='아이디와 비밀번호를 입력하세요.';return}$('authMsg').textContent='처리 중...';try{let d;if(mode==='signup'){d=await api('/api/signup',{id,email:$('email').value.trim()||id,name:$('name').value.trim(),birth:$('birth').value.trim(),password:code})}else{d=await api('/api/auth/login',{id,password:code})}user=d.user;if(mode==='login'&&$('rememberId').checked)localStorage.setItem(K.remember,id);else if(mode==='login')localStorage.removeItem(K.remember);write(K.session,{id:user.id,user,savedAt:-1});if(mode==='signup'){$('authMsg').style.color='#16a34a';$('authMsg').textContent='회원가입 성공! 로그인합니다...';setTimeout(openApp,800);}else{openApp();}}catch(err){$('authMsg').style.color='#b91c1c';$('authMsg').textContent=err.message||'처리 실패'}}function boot(){$('loginTab').onclick=()=>setMode('login');$('signupTab').onclick=()=>setMode('signup');$('authForm').onsubmit=auth;applyTheme();syncModelBtn();const ip=$('input');if(ip){ip.addEventListener('input',()=>{ip.style.height='auto';ip.style.height=Math.min(ip.scrollHeight,160)+'px'});}if($('model'))$('model').addEventListener('change',()=>{syncModelBtn();});$('forgotBtn').onclick=()=>{const id=$('loginId').value.trim();if(!id){alert('아이디 또는 이메일을 먼저 입력하세요.');return;}$('authMsg').textContent='비밀번호 초기화 이메일을 발송했습니다.(준비중)';};loadRemember();const s=read(K.session,null);if(s&&s.user&&(s.savedAt===-1||s.savedAt>Date.now()-30*24*60*60*1000)){user=s.user;openApp()}else $('auth').classList.remove('hidden')}function openApp(){$('auth').classList.add('hidden');$('app').classList.remove('hidden');var _ini=(user.name||user.id||'?').charAt(0).toUpperCase();
+var _isDark=document.body.classList.contains('dark');
+var _avatarBg=_isDark?'#e6edf3':'#1f2937';
+var _avatarColor=_isDark?'#0d1117':'#fff';
+$('who').innerHTML='<div style="display:flex;align-items:center;gap:10px;padding:10px 0 6px"><div id="userAvatar" style="width:36px;height:36px;border-radius:50%;background:'+_avatarBg+';color:'+_avatarColor+';display:flex;align-items:center;justify-content:center;font-weight:900;font-size:16px;flex-shrink:0">'+_ini+'</div><div style="min-width:0"><div style="font-weight:700;font-size:.88rem;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+(user.name||user.id)+'</div><div style="font-size:.72rem;color:#8b949e;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+(user.email||user.id)+'</div></div></div>';
+  // 로컬 캐시 먼저 표시
+  chats=read(K.chats,[]).filter(x=>x.userId===user.id);
+  if(!chats.length){const tmp={id:'loading',userId:user.id,title:'불러오는 중...',messages:[]};chats=[tmp];active='loading';}
+  else{active=chats[0].id;}
+  render();
+  // Drive/서버에서 채팅 목록 로드
+  loadChatsFromServer();
+}
+async function loadChatsFromServer(){
+  try{
+    const r=await fetch('/api/hybrid-chat-list?userId='+encodeURIComponent(user.id),{cache:'no-store'});
+    const d=await r.json();
+    if(!d.ok||!Array.isArray(d.items)||!d.items.length){
+      // 서버 채팅 없으면 로컬 유지, 없으면 새 채팅
+      if(!chats.filter(x=>x.id!=='loading').length){chats=[];newChat();}
+      else{chats=chats.filter(x=>x.id!=='loading');active=chats[0].id;render();}
+      return;
+    }
+    // 서버 목록과 로컬 병합 (삭제 안 된 것만)
+    const localChats=read(K.chats,[]).filter(x=>x.userId===user.id&&x.id!=='loading');
+    const serverIds=new Set(d.items.map(x=>x.room_id));
+    // 서버에 있는 채팅을 로컬에서 찾아 메시지 유지, 없으면 서버 메타로 추가
+    const merged=d.items.map(function(item){
+      const local=localChats.find(x=>x.id===item.room_id);
+      if(local)return local;
+      return {id:item.room_id,userId:user.id,title:item.title||'채팅',messages:[{role:'ai',text:'☁️ 이전 대화를 불러오려면 클릭하세요.'}],driveFileId:item.drive_file_id,driveLink:item.drive_link};
+    });
+    // 로컬에만 있는 채팅 (아직 서버 미저장) 도 유지
+    const localOnly=localChats.filter(x=>!serverIds.has(x.id));
+    chats=[...merged,...localOnly];
+    if(!chats.length){newChat();return;}
+    active=chats[0].id;
+    saveLocal();render();
+  }catch(e){
+    // 실패 시 로컬 유지
+    chats=chats.filter(x=>x.id!=='loading');
+    if(!chats.length)newChat();
+    else{active=chats[0].id;render();}
+  }
+}
+// 더미 닫기 (원래 }는 openApp 닫는 것)
+function logout(){localStorage.removeItem(K.session);location.reload()}function newChat(){const c={id:'r_'+Date.now(),userId:user.id,title:'새 채팅',messages:[{role:'ai',text:'안녕하세요. Stella입니다. 무엇이든 물어보세요.'}]};chats.unshift(c);active=c.id;saveLocal();render()}function saveLocal(){write(K.chats,[...read(K.chats,[]).filter(x=>x.userId!==user.id),...chats])}function cur(){return chats.find(x=>x.id===active)}function render(){renderSide();const c=cur();$('title').textContent=c?.title||'새 채팅';$('msgs').innerHTML=(c?.messages||[]).map((m,mi)=>{
+  let inner='';
+  if(m.images&&m.images.length){
+    inner+='<div class="msg-images">'+m.images.map(function(src){
+      return '<img src="'+src+'" class="chat-img" onclick="openImgViewer(this.src)" style="max-width:200px;max-height:240px;border-radius:12px;margin:2px;display:block;cursor:pointer;object-fit:cover">';
+    }).join('')+'</div>';
+  }
+  if(m.files&&m.files.length){
+    inner+='<div class="msg-files">'+m.files.map(function(fn){
+      return '<div class="chat-file" style="display:inline-flex;align-items:center;gap:6px;padding:8px 12px;background:rgba(127,127,127,.15);border-radius:10px;margin:2px;font-size:.85rem">📄 '+esc(fn)+'</div>';
+    }).join('')+'</div>';
+  }
+  if(m.text){ inner+=md(m.text); }
+  // AI 답변에만 복사 버튼 (ChatGPT 스타일)
+  var actions='';
+  if(m.role!=='user'&&m.text){
+    actions='<div class="msg-actions"><button class="msgCopyBtn" onclick="copyMsgFull('+mi+',this)" title="답변 전체 복사">📋 복사</button></div>';
+  }
+  return '<div class="row '+(m.role==='user'?'me':'ai')+'"><div class="bubble">'+inner+actions+'</div></div>';
+}).join('');$('msgs').scrollTop=$('msgs').scrollHeight}
+
+function copyMsgFull(idx,btn){
+  var c=cur();
+  if(!c||!c.messages[idx])return;
+  var text=c.messages[idx].text||'';
+  if(navigator.clipboard&&navigator.clipboard.writeText){
+    navigator.clipboard.writeText(text).then(function(){
+      btn.textContent='✓ 복사됨';
+      setTimeout(function(){btn.textContent='📋 복사';},1500);
+    }).catch(function(){_fbCopy(text,btn);});
+  }else{_fbCopy(text,btn);}
+}
+function _fbCopy(text,btn){
+  var ta=document.createElement('textarea');ta.value=text;
+  ta.style.cssText='position:fixed;top:0;left:0;opacity:0;pointer-events:none';
+  document.body.appendChild(ta);ta.select();
+  try{document.execCommand('copy');btn.textContent='✓ 복사됨';setTimeout(function(){btn.textContent='📋 복사';},1500);}catch(e){}
+  ta.remove();
+}
+
+// 이미지 뷰어 (클릭 시 확대)
+function openImgViewer(src){
+  const ov=document.createElement('div');
+  ov.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.9);z-index:99999;display:flex;align-items:center;justify-content:center;cursor:zoom-out';
+  ov.onclick=function(){ov.remove();};
+  const im=document.createElement('img');
+  im.src=src;im.style.cssText='max-width:95vw;max-height:90vh;object-fit:contain;border-radius:8px';
+  ov.appendChild(im);
+  document.body.appendChild(ov);
+}function renderSide(){const q=($('q')?.value||'').toLowerCase();$('chatList').innerHTML=chats.filter(c=>(c.title+' '+c.messages.map(m=>m.text).join(' ')).toLowerCase().includes(q)).map(c=>'<div style="display:flex;align-items:center;gap:4px"><button class="tree '+(c.id===active?'active':'')+'" style="flex:1" onclick="active=\''+c.id+'\';render();closeSideMobile()">▱ '+esc(c.title)+'<br><span class="muted">'+c.messages.length+'개 메시지</span></button><button onclick="deleteChat(\''+c.id+'\')" style="border:0;background:none;color:#9ca3af;cursor:pointer;padding:6px;font-size:12px;border-radius:8px" title="삭제">✕</button></div>').join('')||'<div class="muted">결과 없음</div>'}
+function deleteChat(id){if(!confirm('이 채팅을 삭제하시겠습니까?'))return;chats=chats.filter(x=>x.id!==id);saveLocal();if(active===id){if(chats.length)active=chats[0].id;else newChat();}render();}function keepSide(){/* 검색창 포커스 시 사이드바 유지 - 닫지 않음 */}function toggleSide(){$('side').classList.toggle('open')}function closeSideMobile(){if(innerWidth<=900)$('side').classList.remove('open')}// ── 파일 첨부 ──
+let _attachedImages=[], _attachedFiles=[];
+function handleAttach(files){
+  for(const f of Array.from(files)){
+    // type이 없을 때를 대비해 확장자도 체크
+    const isImg=f.type.startsWith('image/')||/\.(png|jpg|jpeg|gif|webp|bmp|svg)$/i.test(f.name);
+    const reader=new FileReader();
+    reader.onload=function(e){
+      const data=e.target.result;
+      if(isImg){
+        _attachedImages.push({name:f.name,data});
+      } else {
+        _attachedFiles.push({name:f.name,data,type:f.type});
+      }
+      renderAttachPreview();
+    };
+    reader.readAsDataURL(f);
+  }
+  document.getElementById('attachInput').value='';
+}
+function renderAttachPreview(){
+  const box=document.getElementById('attachPreview');
+  if(!box)return;
+  const imgs=_attachedImages.map((f,i)=>
+    '<div class="attach-thumb"><img src="'+f.data+'"><button class="rm" onclick="_attachedImages.splice('+i+',1);renderAttachPreview()">✕</button></div>'
+  );
+  const files=_attachedFiles.map((f,i)=>
+    '<div class="attach-file">📄 '+esc(f.name)+'<button onclick="_attachedFiles.splice('+i+',1);renderAttachPreview()" style="background:none;border:none;cursor:pointer;color:#6b7280;font-size:11px;padding:0 0 0 4px">✕</button></div>'
+  );
+  box.innerHTML=imgs.join('')+files.join('');
+}
+
+// 클립보드 이미지 붙여넣기
+function handlePaste(e){
+  const cd=e.clipboardData||window.clipboardData||(e.originalEvent&&e.originalEvent.clipboardData);
+  if(!cd)return;
+  // items와 files 양쪽 모두 확인
+  let imageFile=null;
+  // 1) items에서 이미지 찾기
+  if(cd.items){
+    for(const it of cd.items){
+      if(it.kind==='file'&&it.type&&it.type.indexOf('image')!==-1){
+        imageFile=it.getAsFile();break;
+      }
+    }
+  }
+  // 2) files에서 직접 찾기 (일부 브라우저)
+  if(!imageFile&&cd.files&&cd.files.length){
+    for(const f of cd.files){
+      if(f.type&&f.type.indexOf('image')!==-1){imageFile=f;break;}
+    }
+  }
+  if(!imageFile)return; // 이미지 없으면 일반 텍스트 붙여넣기 허용
+  e.preventDefault();
+  const reader=new FileReader();
+  reader.onload=function(ev){
+    _attachedImages.push({name:'paste-'+Date.now()+'.png',data:ev.target.result});
+    renderAttachPreview();
+  };
+  reader.readAsDataURL(imageFile);
+}
+// 전역 붙여넣기 리스너 (입력창 포커스 여부 무관하게 동작)
+document.addEventListener('paste',handlePaste);
+
+// ── Drive 검색 ──
+// 지원 명령어: #구글드라이브폴더, #구글드라이브 키워드~찾아줘
+async function driveSearch(query){
+  try{
+    const r=await fetch('/api/drive-list?q='+encodeURIComponent(query),{cache:'no-store'});
+    const d=await r.json();
+    if(!d.ok)return '❌ Drive 검색 실패: '+(d.message||'오류');
+    const files=d.files||[];
+    if(!files.length)return '🔍 **"'+query+'"** 검색 결과가 없습니다.';
+    const lines=files.slice(0,20).map(function(f){
+      const icon=f.isFolder?'📁':'📄';
+      const link='['+f.name+']('+f.link+')';
+      return icon+' '+link+(f.size?' ('+fmtSz(f.size)+')':'');
+    });
+    return '🔍 **"'+query+'"** Drive 검색 결과 ('+files.length+'개):\n\n'+lines.join('\n');
+  }catch(e){return '❌ Drive 검색 오류: '+e.message;}
+}
+function fmtSz(b){if(!b)return '';b=Number(b);if(b<1024)return b+'B';if(b<1048576)return (b/1024).toFixed(1)+'KB';return (b/1048576).toFixed(1)+'MB';}
+
+// ── 메시지 전송 ──
+async function send(){
+  const text=$('input').value.trim();
+  if(!text&&!_attachedImages.length&&!_attachedFiles.length)return;
+  const c=cur();
+  // 첨부 이미지/파일을 메시지 객체에 배열로 저장 (render에서 별도 표시)
+  const _msgImages=_attachedImages.map(f=>f.data);
+  const _msgFiles=_attachedFiles.map(f=>f.name);
+  c.messages.push({role:'user',text:text||'',images:_msgImages,files:_msgFiles});
+  if(c.title==='새 채팅')c.title=(text||_attachedFiles[0]?.name||'이미지').slice(0,30);
+  $('input').value='';render();
+
+  // #구글드라이브 명령어 처리
+  // "분석/리뷰/요약/읽어" 키워드가 있으면 내용까지 읽어서 AI 분석, 없으면 파일 리스트만
+  const driveMatch=text.match(/#구글드라이브(?:폴더)?\s*(.+?)(?:찾아줘|검색|~)?\s*$/);
+  const driveMatch2=text.match(/^#구글드라이브(?:폴더)?\s*$/);
+  if(driveMatch||driveMatch2){
+    const q=driveMatch?driveMatch[1].trim():'';
+    const wantAnalyze=/분석|리뷰|요약|읽어|설명|정리|검토/.test(q);
+
+    if(wantAnalyze){
+      // 폴더/파일 내용 읽어서 AI 분석
+      // 키워드 제거하여 검색어 정제
+      const searchTerm=q.replace(/(분석|리뷰|요약|읽어|설명|정리|검토)(\s*해줘?)?/g,'').trim();
+      c.messages.push({role:'ai',text:'🔍 "'+searchTerm+'" 폴더의 파일을 읽는 중...'});
+      render();
+      try{
+        // drive-read API로 폴더 내용 읽기 (path 기반 탐색)
+        const rr=await fetch('/api/drive-read',{
+          method:'POST',headers:{'Content-Type':'application/json'},
+          body:JSON.stringify({path:searchTerm,recursive:false,maxFiles:20})
+        });
+        const rd=await rr.json();
+        // 마지막 "읽는 중" 메시지 제거
+        c.messages.pop();
+        if(rd.ok&&rd.files&&rd.files.length){
+          const readFiles=rd.files.filter(function(f){return f.read&&f.text;});
+          const unreadFiles=rd.files.filter(function(f){return !f.read||!f.text;});
+          // 읽은 파일 내용을 AI에게 전달
+          let driveContent='[Google Drive 폴더 "'+searchTerm+'" 실제 파일 내용]\n\n';
+          readFiles.forEach(function(f,i){
+            driveContent+='=== 파일 '+(i+1)+': '+f.name+' ===\n'+f.text.slice(0,8000)+'\n\n';
+          });
+          if(unreadFiles.length){
+            driveContent+='[읽지 못한 파일]\n'+unreadFiles.map(function(f){return '- '+f.name+': '+(f.error||'읽기 실패');}).join('\n');
+          }
+          // AI 분석 요청
+          const aiPrompt=text+'\n\n'+driveContent+'\n\n위 실제 파일 내용을 바탕으로 분석/요약해주세요. 읽지 못한 파일은 추측하지 마세요.';
+          const d=await api('/api/chat',{model:$('model').value,userId:user.id,message:aiPrompt,history:[]});
+          c.messages.push({role:'ai',text:d.text||d.answer||'분석 실패'});
+        }else{
+          c.messages.push({role:'ai',text:'❌ "'+searchTerm+'" 폴더를 찾지 못했거나 읽을 파일이 없습니다.\n\n경로를 정확히 입력해주세요. 예: #구글드라이브폴더 3디와이/SAP 분석해줘'});
+        }
+      }catch(e){
+        c.messages.pop();
+        c.messages.push({role:'ai',text:'❌ Drive 분석 오류: '+e.message});
+      }
+      try{await api('/api/hybrid-chat-save',{userId:user.id,roomId:c.id,title:c.title,messages:c.messages})}catch{}
+      saveLocal();render();
+      return;
+    }
+
+    // 분석 키워드 없으면 파일 리스트만 표시
+    const result=await driveSearch(q||'/');
+    c.messages.push({role:'ai',text:result+'\n\n💡 내용 분석을 원하면 "분석해줘"를 붙이세요. 예: #구글드라이브폴더 '+(q||'SAP')+' 분석해줘'});
+    try{await api('/api/hybrid-chat-save',{userId:user.id,roomId:c.id,title:c.title,messages:c.messages})}catch{}
+    saveLocal();render();
+    return;
+  }
+
+  // 일반 AI 응답
+  try{
+    const _imgs=_attachedImages.map(x=>x.data);
+    const _fnames=_attachedFiles.map(x=>x.name).join(', ');
+    const _fullText=text+(_fnames?' [첨부파일: '+_fnames+']':'');
+    _attachedImages=[];_attachedFiles=[];renderAttachPreview();
+    const d=await api('/api/chat',{model:$('model').value,userId:user.id,message:_fullText,images:_imgs,history:c.messages.slice(-10).map(m=>({role:m.role==='ai'?'assistant':'user',content:m.text||(m.images&&m.images.length?'[이미지 첨부]':'')||(m.files&&m.files.length?'[파일: '+m.files.join(', ')+']':'')||' '})).filter(m=>m.content&&m.content.trim())});
+    c.messages.push({role:'ai',text:d.text||d.answer||d.message||'응답 없음'});
+    try{await api('/api/hybrid-chat-save',{userId:user.id,roomId:c.id,title:c.title,messages:c.messages})}catch{}
+    saveLocal();render();
+  }catch(e){
+    c.messages.push({role:'ai',text:'API 연결 오류: '+e.message});
+    saveLocal();render();
+  }
+}function esc(s){return String(s||'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]))}function md(s){const blocks=[];let raw=String(s||'');raw=raw.replace(/```(\w*)\n?([\s\S]*?)```/g,(m,lang,code)=>{const idx=blocks.length;blocks.push('<pre class="code"><button class="copyBtn" onclick="copyCode(this)">복사</button><code>'+esc(code.replace(/\n$/,''))+'</code></pre>');return '\u0000BLOCK'+idx+'\u0000'});let h=esc(raw);h=h.replace(/\[([^\]]+)\]\((https?:\/\/[^\s)]+)\)/g,'<a target="_blank" rel="noopener" href="$2">$1</a>');h=h.replace(/(https?:\/\/[^\s<]+)/g,'<a target="_blank" rel="noopener" href="$1">$1</a>');h=h.replace(/`([^`]+)`/g,'<code style="background:rgba(127,127,127,.2);padding:2px 5px;border-radius:5px">$1</code>');h=h.replace(/\n/g,'<br>');h=h.replace(/\u0000BLOCK(\d+)\u0000/g,(m,i)=>blocks[Number(i)]);return h}
+function toggleTheme(){
+  const d=document.body.classList.toggle('dark');
+  localStorage.setItem('stella_theme',d?'dark':'light');
+  $('themeBtn').textContent=d?'☀️':'🌙';
+  const av=document.getElementById('userAvatar');
+  if(av){av.style.background=d?'#e6edf3':'#1f2937';av.style.color=d?'#0d1117':'#fff';}
+}
+function applyTheme(){
+  // 한 번도 설정 안 했으면 dark 강제 저장
+  if(!localStorage.getItem('stella_theme')){
+    localStorage.setItem('stella_theme','dark');
+  }
+  const t=localStorage.getItem('stella_theme');
+  if(t==='dark'){
+    document.body.classList.add('dark');
+    if($('themeBtn'))$('themeBtn').textContent='☀️';
+  } else {
+    document.body.classList.remove('dark');
+    if($('themeBtn'))$('themeBtn').textContent='🌙';
+  }
+  // S 아이콘 색상 동기화
+  const av=document.getElementById('userAvatar');
+  if(av){
+    av.style.background=t==='dark'?'#e6edf3':'#1f2937';
+    av.style.color=t==='dark'?'#0d1117':'#fff';
+  }
+}
+function toggleModelMenu(){const s=$('model');s.style.display=s.style.display==='none'?'inline-block':'none'}
+function syncModelBtn(){const s=$('model');if(!s||!$('modelBtn'))return;const o=s.options[s.selectedIndex];$('modelBtn').textContent=o?o.textContent:'모델';s.style.display='none'}
+function copyCode(btn){const pre=btn.parentElement;const code=pre.querySelector('code')||pre;const t=code.innerText.replace(/복사$|복사됨$/,'');navigator.clipboard.writeText(t).then(()=>{btn.textContent='복사됨';setTimeout(()=>btn.textContent='복사',1200)})}
+boot();
+// ════════════════════════════════
+// 노트 기능 (Google Drive 연동)
+// ════════════════════════════════
+const NK = 'stella_notes_v1';
+let _notes = [], _noteActive = null, _noteEdited = false, _noteTimer = null;
+
+function _noteUserId(){
+  try{
+    const s=JSON.parse(localStorage.getItem('stella_session_final_v82')||'{}');
+    return (s.user&&s.user.id)||s.id||s.user_id||localStorage.getItem('stella_user_id')||'';
+  }catch(e){return '';}
+}
+
+async function loadNotes(){
+  const uid=_noteUserId();
+  if(!uid){ _notes=JSON.parse(localStorage.getItem(NK)||'[]'); return; }
+  try{
+    const r=await fetch('/api/note?action=list&userId='+encodeURIComponent(uid),{cache:'no-store'});
+    const d=await r.json();
+    if(d.ok){ _notes=d.notes||[]; localStorage.setItem(NK,JSON.stringify(_notes)); }
+    else { _notes=JSON.parse(localStorage.getItem(NK)||'[]'); }
+  }catch(e){ _notes=JSON.parse(localStorage.getItem(NK)||'[]'); }
+}
+
+async function driveNoteSync(note){
+  const uid=_noteUserId(); if(!uid) return;
+  try{ await fetch('/api/note?action=save',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({userId:uid,id:note.id,title:note.title,body:note.body})}); }catch(e){}
+}
+
+async function driveNoteDelete(noteId){
+  const uid=_noteUserId(); if(!uid) return;
+  try{ await fetch('/api/note?action=delete',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({userId:uid,id:noteId})}); }catch(e){}
+}
+
+function openNotePanel(){
+  document.getElementById('npAutoTag').textContent='로딩 중...';
+  document.getElementById('notePanel').classList.add('on');
+  document.getElementById('noteOverlay').classList.add('on');
+  loadNotes().then(function(){
+    if(!_notes.length) newNote();
+    else selectNote(_notes[0].id);
+    renderNoteList();
+    document.getElementById('npAutoTag').textContent='저장됨';
+  });
+}
+function closeNotePanel(){
+  if(_noteEdited) saveNote(true);
+  document.getElementById('notePanel').classList.remove('on');
+  document.getElementById('noteOverlay').classList.remove('on');
+}
+function newNote(){
+  const id='n_'+Date.now(), now=new Date().toISOString();
+  const note={id,title:'',body:'',createdAt:now,updatedAt:now};
+  _notes.unshift(note);
+  localStorage.setItem(NK,JSON.stringify(_notes));
+  selectNote(id); renderNoteList();
+  setTimeout(()=>{ const t=document.getElementById('npTitle'); if(t){t.focus();t.select();} },80);
+}
+function selectNote(id){
+  if(_noteEdited&&_noteActive) saveNote(true);
+  _noteActive=id; _noteEdited=false;
+  const note=_notes.find(n=>n.id===id); if(!note) return;
+  document.getElementById('npTitle').value=note.title||'';
+  document.getElementById('npBody').value=note.body||'';
+  document.getElementById('npEditor').style.display='';
+  document.getElementById('npEmpty')&&(document.getElementById('npEmpty').style.display='none');
+  document.getElementById('npAutoTag').textContent='저장됨';
+  renderNoteList();
+}
+function markNoteEdited(){
+  _noteEdited=true;
+  document.getElementById('npAutoTag').textContent='편집 중...';
+  clearTimeout(_noteTimer);
+  _noteTimer=setTimeout(()=>saveNote(true),1500);
+}
+function saveNote(silent){
+  if(!_noteActive) return;
+  const idx=_notes.findIndex(n=>n.id===_noteActive); if(idx<0) return;
+  const title=(document.getElementById('npTitle').value||'').trim()||'제목 없음';
+  const body=document.getElementById('npBody').value||'';
+  _notes[idx].title=title; _notes[idx].body=body; _notes[idx].updatedAt=new Date().toISOString();
+  const note=_notes.splice(idx,1)[0]; _notes.unshift(note);
+  localStorage.setItem(NK,JSON.stringify(_notes));
+  driveNoteSync(note);
+  _noteEdited=false;
+  document.getElementById('npAutoTag').textContent='☁️ 저장됨';
+  renderNoteList();
+}
+function deleteNote(){
+  if(!_noteActive) return;
+  const note=_notes.find(n=>n.id===_noteActive);
+  if(!confirm((note?.title||'이 노트')+'를 삭제하시겠습니까?')) return;
+  driveNoteDelete(_noteActive);
+  _notes=_notes.filter(n=>n.id!==_noteActive);
+  localStorage.setItem(NK,JSON.stringify(_notes));
+  _noteActive=null; _noteEdited=false;
+  if(_notes.length){ selectNote(_notes[0].id); }
+  else {
+    document.getElementById('npTitle').value='';
+    document.getElementById('npBody').value='';
+    document.getElementById('npEditor').style.display='none';
+    document.getElementById('npEmpty').style.display='';
+  }
+  renderNoteList();
+}
+function renderNoteList(){
+  const q=(document.getElementById('npSearch')?.value||'').toLowerCase();
+  const list=_notes.filter(n=>!q||(n.title||'').toLowerCase().includes(q)||(n.body||'').toLowerCase().includes(q));
+  const el=document.getElementById('npListInner');
+  if(!list.length){el.innerHTML='<div style="padding:20px;text-align:center;color:#9ca3af;font-size:.82rem">노트가 없습니다</div>';return;}
+  const today=new Date();today.setHours(0,0,0,0);
+  const yesterday=new Date(today);yesterday.setDate(today.getDate()-1);
+  const weekAgo=new Date(today);weekAgo.setDate(today.getDate()-7);
+  const monthAgo=new Date(today);monthAgo.setDate(today.getDate()-30);
+  function getGroup(ds){const d=new Date(ds);d.setHours(0,0,0,0);if(d>=today)return'오늘';if(d>=yesterday)return'어제';if(d>=weekAgo)return'이전 7일';if(d>=monthAgo)return'이전 30일';return'더 오래전';}
+  let lastGroup='',html2='';
+  for(const n of list){
+    const group=getGroup(n.updatedAt||n.createdAt||'');
+    if(group!==lastGroup){html2+='<div class="np-date-group">'+group+'</div>';lastGroup=group;}
+    const preview=(n.body||'').replace(/\n/g,' ').slice(0,60);
+    const timeStr=new Date(n.updatedAt||n.createdAt).toLocaleString('ko-KR',{month:'numeric',day:'numeric',hour:'2-digit',minute:'2-digit'});
+    html2+='<div class="np-item'+(n.id===_noteActive?' active':'')+'" onclick="selectNote(\''+n.id+'\')"><div class="np-item-title">'+(n.title||'제목 없음')+'</div><div class="np-item-meta">'+timeStr+(preview?' · '+preview:'')+'</div></div>';
+  }
+  el.innerHTML=html2;
+}
+
+
+
+</script><script>if('serviceWorker' in navigator){navigator.serviceWorker.register('/sw.js').catch(function(){});}var _dp=null;function installPWA(){if(!_dp)return;_dp.prompt();_dp.userChoice.then(function(){_dp=null;var btn=document.getElementById('installBtn');if(btn)btn.style.display='none';});}window.addEventListener('beforeinstallprompt',function(e){e.preventDefault();_dp=e;var btn=document.getElementById('installBtn');if(btn)btn.style.display='';});window.addEventListener('appinstalled',function(){_dp=null;var btn=document.getElementById('installBtn');if(btn)btn.style.display='none';});
+
+
+</script></body></html>
+
+
+

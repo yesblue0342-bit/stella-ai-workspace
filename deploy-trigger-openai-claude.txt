@@ -1,0 +1,2 @@
+Trigger Vercel deployment after restoring OpenAI and Claude chat API.
+Commit target: api/chat.js OpenAI Claude version.
