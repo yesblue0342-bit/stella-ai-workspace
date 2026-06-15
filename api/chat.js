@@ -131,17 +131,47 @@ async function handleWeather(message) {
           const mapLink = isDomestic
             ? `[카카오맵 날씨](https://map.kakao.com/link/search/${encodeURIComponent(locationName)})`
             : `[Google Maps](https://maps.google.com/?q=${encodeURIComponent(locationName)}+weather)`;
-          return `**${locationName} 현재 날씨** — ${desc}\n| 항목 | 값 |\n|---|---|\n| 기온 | ${temp}°C |\n| 체감 | ${feels}°C |\n| 습도 | ${humid}% |\n| 바람 | ${windSpeed}m/s |\n| 강수확률 | ${precip}% |\n\n${mapLink}`;
+          const uvIdx = w.uvIndex ?? "-";
+          const visibility = w.visibility?.distance ?? "-";
+          const umbrella = Number(precip) >= 50 ? "🌂 우산 필요" : Number(precip) >= 30 ? "☔ 우산 챙기면 좋음" : "☀️ 우산 불필요";
+          return [
+            `**${locationName} 현재 날씨** — ${desc}`,
+            ``,
+            `| 항목 | 값 | 비고 |`,
+            `|---|---|---|`,
+            `| 🌡 기온 | ${temp}°C | 체감 ${feels}°C |`,
+            `| 💧 습도 | ${humid}% | ${Number(humid)>70?"높음":Number(humid)<40?"건조":"보통"} |`,
+            `| 🌬 바람 | ${windSpeed}m/s | ${Number(windSpeed)>10?"강풍 주의":Number(windSpeed)>5?"바람 있음":"바람 약함"} |`,
+            `| 🌧 강수확률 | ${precip}% | ${umbrella} |`,
+            `| ☀️ UV 지수 | ${uvIdx} | ${Number(uvIdx)>=8?"매우 높음":Number(uvIdx)>=6?"높음":Number(uvIdx)>=3?"보통":"낮음"} |`,
+            ``,
+            `${mapLink}`
+          ].join("\n");
         }
       } catch {}
     }
   }
 
-  // 3) 폴백: 카카오맵/구글맵 날씨 링크 제공
-  const mapLink = isDomestic
-    ? `[카카오맵에서 날씨 확인](https://map.kakao.com/link/search/${encodeURIComponent(locationName)})`
-    : `[Google Maps에서 날씨 확인](https://maps.google.com/?q=${encodeURIComponent(locationName)}+weather)`;
-  return `**${locationName} 날씨** 정보를 실시간으로 확인하세요.\n\n${mapLink}`;
+  // 3) 폴백: 상세 안내 + 여러 링크 제공
+  const kakaoLink = `[카카오맵 날씨](https://map.kakao.com/link/search/${encodeURIComponent(locationName)})`;
+  const naverLink = `[네이버 날씨](https://search.naver.com/search.naver?query=${encodeURIComponent(locationName+' 날씨')})`;
+  const googleLink = `[Google 날씨](https://www.google.com/search?q=${encodeURIComponent(locationName+' 날씨')})`;
+
+  const key = process.env.GOOGLE_WEATHER_API_KEY || process.env.GOOGLE_MAPS_API_KEY;
+  const keyStatus = key ? "API 키 확인됨 (Google Weather API 응답 없음 - API 활성화 필요)" : "GOOGLE_WEATHER_API_KEY 미설정";
+
+  return [
+    `**${locationName} 날씨** — 실시간 날씨 API 연결 안됨`,
+    `> ⚠️ ${keyStatus}`,
+    ``,
+    `| 날씨 서비스 | 링크 |`,
+    `|---|---|`,
+    `| 네이버 날씨 | ${naverLink} |`,
+    `| 카카오맵 | ${kakaoLink} |`,
+    `| 구글 날씨 | ${googleLink} |`,
+    ``,
+    `> 💡 Google Cloud Console → Weather API 활성화 필요`
+  ].join("\n");
 }
 
 // ───────── 메인 핸들러 ─────────
