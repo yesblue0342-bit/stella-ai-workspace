@@ -170,6 +170,7 @@ body{font-family:system-ui,'Noto Sans KR',sans-serif;background:var(--bg);color:
 <input class="filter-in" id="filterIn" placeholder="파일/폴더 필터..." oninput="renderFiles()">
 <button class="btn" onclick="mkdirPrompt()">📁＋ 폴더</button>
 <button class="btn upload-btn" onclick="document.getElementById('fileUploadIn').click()">⬆ 업로드</button>
+<button class="btn" onclick="runDiag()" title="연결 진단">🔍</button>
 <input type="file" id="fileUploadIn" multiple hidden onchange="uploadFiles(this.files)">
 </div>
 <div class="status" id="statusBar">로딩 중...</div>
@@ -334,6 +335,32 @@ async function loadFolder(folderId,name){
     }
   }
   } catch(err) { console.error('loadFolder 오류:', err); status('폴더 로딩 실패: '+err.message); }
+}
+
+// ── Drive 진단 ──
+async function runDiag(){
+  status('🔍 진단 중...');
+  try{
+    const r=await fetch('/api/drive-diagnostics',{cache:'no-store'});
+    const d=await r.json();
+    const diag=d.diagnostics||{};
+    const checks=diag.checks||{};
+    const lines=[
+      'clientId: '+(diag.clientId?.configured?'✅ ('+diag.clientId.prefix+'…)':'❌ 미설정'),
+      'clientSecret: '+(diag.clientSecret?.configured?'✅':'❌ 미설정'),
+      'refreshToken: '+(diag.refreshToken?.configured?'✅ ('+diag.refreshToken.prefix+'…)':'❌ 미설정'),
+      'rootFolder: '+(diag.rootFolderId?.configured?'✅':'❌ 미설정'),
+      'clientId형식: '+(checks.clientIdLooksOAuth?'✅':'⚠️'),
+      'refreshToken형식: '+(checks.refreshTokenLooksGoogle?'✅':'⚠️ 형식 불일치'),
+    ];
+    const msg=lines.join(' | ');
+    status('🔍 '+msg);
+    // 추가로 drive-list 직접 시도해서 실제 오류 확인
+    const r2=await fetch('/api/drive-list',{cache:'no-store'});
+    const d2=await r2.json();
+    if(!d2.ok) status('🔍 '+msg+' | drive-list 오류: '+( d2.error||d2.message||'알 수 없음'));
+    else status('🔍 '+msg+' | drive-list: ✅ 정상 ('+( d2.files?.length||0)+'개)');
+  }catch(e){status('🔍 진단 오류: '+e.message);}
 }
 
 // ── 브레드크럼 + 경로복사 ──
