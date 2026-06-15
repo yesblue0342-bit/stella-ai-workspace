@@ -1,4 +1,4 @@
-import { saveJsonToDrive, listJsonFromDrive, readJsonFromDrive, searchDrive, listDriveDirectory, ensurePath } from "../lib/drive-utils.js";
+import { saveJsonToDrive, listJsonFromDrive, readJsonFromDrive, searchDrive, listDriveDirectory, ensurePath, getDrive, getDriveRootId, FOLDER_MIME } from "../lib/drive-utils.js";
 import { getPlaceContext, getWeatherContext } from "../lib/place-weather-utils.js";
 import { getPool, sql } from "../lib/db.js";
 
@@ -165,8 +165,8 @@ async function handleBoardList(req, res) {
   if (!categoryParam || categoryParam === "all") {
     // boards/{userId}/ 하위 폴더(카테고리) 전체 순회
     try {
-      const { listDriveDirectory } = await import("../lib/drive-utils.js");
-      const boardRoot = await import("../lib/drive-utils.js").then(m => m.ensurePath(["boards", userId]));
+      // static import된 함수 직접 사용 (dynamic import 제거)
+      const boardRoot = await ensurePath(["boards", userId]);
       const catList = await listDriveDirectory({ folderId: boardRoot.id, pageSize: 100 });
       const categories = (catList.files || []).filter(f => f.isFolder).map(f => f.name);
       // 카테고리가 없으면 기본 Board, 노트 시도
