@@ -178,6 +178,7 @@ body.theme-dark .theme-btn.active{background:#1e3a5f}
     <div class="header">
       <h1>💬 Stella Talk</h1>
       <button class="hbtn" onclick="openNewRoom()">＋ 채팅</button>
+      <button class="hbtn" id="installBtn" onclick="installPWA()" style="display:none">📲 설치</button>
       <button class="icon-btn" onclick="openSettings()" title="설정">⚙️</button>
     </div>
     <div class="room-list" id="roomList"></div>
@@ -701,7 +702,21 @@ function requestNotification(){if(Notification.permission==='default')Notificati
 
 // ── PWA ──
 var _dp=null;
-window.addEventListener('beforeinstallprompt',function(e){e.preventDefault();_dp=e;const b=document.createElement('button');b.className='hbtn';b.textContent='⬇ 앱설치';b.style.cssText='position:fixed;bottom:140px;right:14px;z-index:99;border-radius:20px;padding:10px 16px;font-weight:900;box-shadow:0 4px 16px rgba(0,0,0,.2)';b.onclick=function(){_dp.prompt();_dp.userChoice.then(function(){_dp=null;b.remove();});};document.body.appendChild(b);});
+window.addEventListener('beforeinstallprompt',function(e){
+  e.preventDefault();_dp=e;
+  var btn=document.getElementById('installBtn');
+  if(btn) btn.style.display='';
+});
+window.addEventListener('appinstalled',function(){
+  _dp=null;
+  var btn=document.getElementById('installBtn');
+  if(btn) btn.style.display='none';
+});
+function installPWA(){
+  if(_dp){_dp.prompt();_dp.userChoice.then(function(r){if(r.outcome==='accepted'){_dp=null;var btn=document.getElementById('installBtn');if(btn)btn.style.display='none';}});return;}
+  // beforeinstallprompt 미지원 시 안내
+  alert('설치 방법:\n\n[Chrome] 주소창 오른쪽 설치 아이콘 클릭\n[Samsung] 메뉴(⋮) → 페이지 추가 → 홈 화면\n[Safari] 공유(↑) → 홈 화면에 추가');
+}
 if('serviceWorker' in navigator)navigator.serviceWorker.register('/sw.js').catch(function(){});
 
 window.onload=function(){
