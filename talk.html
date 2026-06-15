@@ -753,12 +753,13 @@ function serverMsgToLocal(m){
   return {
     id: m.id || ('srv_'+Date.now()+'_'+Math.random().toString(36).slice(2,6)),
     from: m.userId || m.sender || '?',
-    text: m.message || '',
-    fileName: fName || null,
-    fileUrl: fUrl,
+    text: m.deleted ? '' : (m.message || ''),
+    fileName: m.deleted ? null : (fName || null),
+    fileUrl: m.deleted ? null : fUrl,
     mimeType: fMime,
-    type: msgType,
-    data: fUrl,  // 렌더링에서 m.data 사용
+    type: m.deleted ? 'deleted' : msgType,
+    data: m.deleted ? null : fUrl,
+    deleted: !!m.deleted,
     at: m.createdAt ? new Date(m.createdAt).getTime() : Date.now()
   };
 }
@@ -1046,6 +1047,20 @@ async function deleteMessage(m){
     return;
   }
 
+  // 로컬에서 즉시 삭제 표시 (UI 즉각 반응)
+  const ridx = _cur.messages.findIndex(function(x){return x.id===m.id;});
+  if(ridx !== -1){
+    _cur.messages[ridx].deleted = true;
+    _cur.messages[ridx].type = 'deleted';
+    _cur.messages[ridx].text = '';
+    _cur.messages[ridx].fileUrl = null;
+    _cur.messages[ridx].data = null;
+    const roomIdx = _rooms.findIndex(function(r){return r.id===_cur.id;});
+    if(roomIdx >= 0) _rooms[roomIdx] = _cur;
+    saveRooms();
+    renderMessages(); // 즉시 화면 반영
+  }
+  // 서버에도 반영 (백그라운드)
   try{
     const r = await fetch('/api/chat-room?action=delete-message', {
       method: 'POST',
@@ -1054,11 +1069,10 @@ async function deleteMessage(m){
     });
     const d = await r.json();
     if(d.ok){
-      await syncRoomFromServer(true);
-    } else {
-      alert(d.message || '삭제 실패');
+      await syncRoomFromServer(false); // 서버 동기화 (스크롤 유지)
     }
-  }catch(e){ alert('삭제 실패: ' + e.message); }
+    // 실패해도 로컬은 이미 반영됨
+  }catch(e){ console.warn('서버 삭제 실패:', e.message); }
 }
 
 // ── 메시지 복사 ──
