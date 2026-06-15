@@ -113,9 +113,24 @@ function toggleTheme(){
   if(av){av.style.background=d?'#e6edf3':'#1f2937';av.style.color=d?'#0d1117':'#fff';}
 }
 function applyTheme(){
-  const t=localStorage.getItem('stella_theme')||'dark';
-  if(t==='dark'){document.body.classList.add('dark');if($('themeBtn'))$('themeBtn').textContent='☀️';}
-  else{document.body.classList.remove('dark');if($('themeBtn'))$('themeBtn').textContent='🌙';}
+  // 한 번도 설정 안 했으면 dark 강제 저장
+  if(!localStorage.getItem('stella_theme')){
+    localStorage.setItem('stella_theme','dark');
+  }
+  const t=localStorage.getItem('stella_theme');
+  if(t==='dark'){
+    document.body.classList.add('dark');
+    if($('themeBtn'))$('themeBtn').textContent='☀️';
+  } else {
+    document.body.classList.remove('dark');
+    if($('themeBtn'))$('themeBtn').textContent='🌙';
+  }
+  // S 아이콘 색상 동기화
+  const av=document.getElementById('userAvatar');
+  if(av){
+    av.style.background=t==='dark'?'#e6edf3':'#1f2937';
+    av.style.color=t==='dark'?'#0d1117':'#fff';
+  }
 }
 function toggleModelMenu(){const s=$('model');s.style.display=s.style.display==='none'?'inline-block':'none'}
 function syncModelBtn(){const s=$('model');if(!s||!$('modelBtn'))return;const o=s.options[s.selectedIndex];$('modelBtn').textContent=o?o.textContent:'모델';s.style.display='none'}
