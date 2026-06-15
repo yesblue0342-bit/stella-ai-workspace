@@ -429,12 +429,16 @@ function getMyName(){try{const s=JSON.parse(localStorage.getItem('stella_session
 function renderRooms(){
   const el=document.getElementById('roomList');
   if(!_rooms.length){el.innerHTML='<div class="empty">💬 채팅방이 없습니다.<br>＋ 채팅 버튼으로 새 방을 만드세요</div>';return;}
-  el.innerHTML=_rooms.slice().reverse().map(function(r){
-    const last=(r.messages||[]).slice(-1)[0];
+  // 나와의 채팅 맨 위 고정
+  const myChat=_rooms.find(function(r){return r.isMyChat;});
+  const others=_rooms.filter(function(r){return !r.isMyChat;}).slice().reverse();
+  const sorted=myChat?[myChat,...others]:others;
+  el.innerHTML=sorted.map(function(r){
+    const last=(r.messages||[]).filter(function(m){return m.type!=='system';}).slice(-1)[0];
     const isActive=_cur&&_cur.id===r.id;
-    const members=(r.members||[]).join(', ')||'나';
+    const avatar=r.isMyChat?'💛':'💬';
     return '<div class="room-item'+(isActive?' active':'')+'" onclick="openRoom(\''+r.id+'\')">'+
-      '<div class="room-avatar">💬</div>'+
+      '<div class="room-avatar">'+avatar+'</div>'+
       '<div class="room-info">'+
         '<div class="room-name">'+esc(r.name)+'</div>'+
         '<div class="room-last">'+(last?esc(String(last.text||last.fileName||'').slice(0,40)):'대화가 없습니다')+'</div>'+
@@ -530,7 +534,9 @@ function saveRoomName(){
   saveRooms();renderRooms();closeModal('roomSettingsModal');
 }
 function deleteRoom(){
-  if(!_cur||!confirm('"'+_cur.name+'" 채팅방을 나가시겠습니까?'))return;
+  if(!_cur)return;
+  if(_cur.isMyChat){alert('나와의 채팅은 삭제할 수 없습니다.');closeModal('roomSettingsModal');return;}
+  if(!confirm('"'+_cur.name+'" 채팅방을 나가시겠습니까?'))return;
   _rooms=_rooms.filter(r=>r.id!==_cur.id);saveRooms();
   closeModal('roomSettingsModal');
   _cur=null;
@@ -545,7 +551,7 @@ function openRoom(id){
   _cur=_rooms.find(r=>r.id===id);if(!_cur)return;
   document.getElementById('noRoom').style.display='none';
   const cr=document.getElementById('chatRoom');cr.style.display='flex';
-  document.getElementById('chatRoomName').textContent=_cur.name;
+  document.getElementById('chatRoomName').textContent=(_cur.isMyChat?'💛 ':'')+_cur.name;
   if(window.innerWidth<=700){
     document.getElementById('sidebar').classList.add('hidden-mobile');
     document.getElementById('mobileBack').style.display='';
@@ -699,8 +705,31 @@ window.addEventListener('beforeinstallprompt',function(e){e.preventDefault();_dp
 if('serviceWorker' in navigator)navigator.serviceWorker.register('/sw.js').catch(function(){});
 
 window.onload=function(){
-  applySettings();loadRooms();renderRooms();
+  applySettings();loadRooms();ensureMyChat();renderRooms();
   setTimeout(requestNotification,2000);
 };
+
+// ── 나와의 채팅 보장 ──
+function ensureMyChat(){
+  const MY_ROOM_ID='__my_chat__';
+  const exists=_rooms.find(function(r){return r.id===MY_ROOM_ID;});
+  if(!exists){
+    const myId=getMyId();
+    const myRoom={
+      id:MY_ROOM_ID,
+      name:'나와의 채팅',
+      isMyChat:true,
+      members:[myId],
+      messages:[{
+        id:'sys_0',type:'system',
+        text:'💛 나와의 채팅 — 메모, 링크, 파일을 저장하세요',
+        at:Date.now()
+      }],
+      createdAt:Date.now()
+    };
+    _rooms.unshift(myRoom);
+    saveRooms();
+  }
+}
 </script>
 </body></html>
