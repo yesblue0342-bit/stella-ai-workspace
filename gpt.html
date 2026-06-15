@@ -170,7 +170,35 @@ async function loadChatsFromServer(){
   }
 }
 // 더미 닫기 (원래 }는 openApp 닫는 것)
-function logout(){localStorage.removeItem(K.session);location.reload()}function newChat(){const c={id:'r_'+Date.now(),userId:user.id,title:'새 채팅',messages:[{role:'ai',text:'안녕하세요. Stella입니다. 무엇이든 물어보세요.'}]};chats.unshift(c);active=c.id;saveLocal();render()}function saveLocal(){write(K.chats,[...read(K.chats,[]).filter(x=>x.userId!==user.id),...chats])}function cur(){return chats.find(x=>x.id===active)}function render(){renderSide();const c=cur();$('title').textContent=c?.title||'새 채팅';$('msgs').innerHTML=(c?.messages||[]).map(m=>'<div class="row '+(m.role==='user'?'me':'ai')+'"><div class="bubble">'+md(m.text)+'</div></div>').join('');$('msgs').scrollTop=$('msgs').scrollHeight}function renderSide(){const q=($('q')?.value||'').toLowerCase();$('chatList').innerHTML=chats.filter(c=>(c.title+' '+c.messages.map(m=>m.text).join(' ')).toLowerCase().includes(q)).map(c=>'<div style="display:flex;align-items:center;gap:4px"><button class="tree '+(c.id===active?'active':'')+'" style="flex:1" onclick="active=\''+c.id+'\';render();closeSideMobile()">▱ '+esc(c.title)+'<br><span class="muted">'+c.messages.length+'개 메시지</span></button><button onclick="deleteChat(\''+c.id+'\')" style="border:0;background:none;color:#9ca3af;cursor:pointer;padding:6px;font-size:12px;border-radius:8px" title="삭제">✕</button></div>').join('')||'<div class="muted">결과 없음</div>'}
+function logout(){localStorage.removeItem(K.session);location.reload()}function newChat(){const c={id:'r_'+Date.now(),userId:user.id,title:'새 채팅',messages:[{role:'ai',text:'안녕하세요. Stella입니다. 무엇이든 물어보세요.'}]};chats.unshift(c);active=c.id;saveLocal();render()}function saveLocal(){write(K.chats,[...read(K.chats,[]).filter(x=>x.userId!==user.id),...chats])}function cur(){return chats.find(x=>x.id===active)}function render(){renderSide();const c=cur();$('title').textContent=c?.title||'새 채팅';$('msgs').innerHTML=(c?.messages||[]).map(m=>{
+  let inner='';
+  // 첨부 이미지 (사용자 메시지) - 스텔라톡처럼 채팅창에 표시
+  if(m.images&&m.images.length){
+    inner+='<div class="msg-images">'+m.images.map(function(src){
+      return '<img src="'+src+'" class="chat-img" onclick="openImgViewer(this.src)" style="max-width:200px;max-height:240px;border-radius:12px;margin:2px;display:block;cursor:pointer;object-fit:cover">';
+    }).join('')+'</div>';
+  }
+  // 첨부 파일명 (이미지 아닌 파일)
+  if(m.files&&m.files.length){
+    inner+='<div class="msg-files">'+m.files.map(function(fn){
+      return '<div class="chat-file" style="display:inline-flex;align-items:center;gap:6px;padding:8px 12px;background:rgba(127,127,127,.15);border-radius:10px;margin:2px;font-size:.85rem">📄 '+esc(fn)+'</div>';
+    }).join('')+'</div>';
+  }
+  // 텍스트 내용
+  if(m.text){ inner+=md(m.text); }
+  return '<div class="row '+(m.role==='user'?'me':'ai')+'"><div class="bubble">'+inner+'</div></div>';
+}).join('');$('msgs').scrollTop=$('msgs').scrollHeight}
+
+// 이미지 뷰어 (클릭 시 확대)
+function openImgViewer(src){
+  const ov=document.createElement('div');
+  ov.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.9);z-index:99999;display:flex;align-items:center;justify-content:center;cursor:zoom-out';
+  ov.onclick=function(){ov.remove();};
+  const im=document.createElement('img');
+  im.src=src;im.style.cssText='max-width:95vw;max-height:90vh;object-fit:contain;border-radius:8px';
+  ov.appendChild(im);
+  document.body.appendChild(ov);
+}function renderSide(){const q=($('q')?.value||'').toLowerCase();$('chatList').innerHTML=chats.filter(c=>(c.title+' '+c.messages.map(m=>m.text).join(' ')).toLowerCase().includes(q)).map(c=>'<div style="display:flex;align-items:center;gap:4px"><button class="tree '+(c.id===active?'active':'')+'" style="flex:1" onclick="active=\''+c.id+'\';render();closeSideMobile()">▱ '+esc(c.title)+'<br><span class="muted">'+c.messages.length+'개 메시지</span></button><button onclick="deleteChat(\''+c.id+'\')" style="border:0;background:none;color:#9ca3af;cursor:pointer;padding:6px;font-size:12px;border-radius:8px" title="삭제">✕</button></div>').join('')||'<div class="muted">결과 없음</div>'}
 function deleteChat(id){if(!confirm('이 채팅을 삭제하시겠습니까?'))return;chats=chats.filter(x=>x.id!==id);saveLocal();if(active===id){if(chats.length)active=chats[0].id;else newChat();}render();}function keepSide(){/* 검색창 포커스 시 사이드바 유지 - 닫지 않음 */}function toggleSide(){$('side').classList.toggle('open')}function closeSideMobile(){if(innerWidth<=900)$('side').classList.remove('open')}// ── 파일 첨부 ──
 let _attachedImages=[], _attachedFiles=[];
 function handleAttach(files){
@@ -259,10 +287,10 @@ async function send(){
   const text=$('input').value.trim();
   if(!text&&!_attachedImages.length&&!_attachedFiles.length)return;
   const c=cur();
-  const _previewImgs=_attachedImages.map(f=>'<img src="'+f.data+'" style="max-width:180px;max-height:120px;border-radius:8px;margin-top:4px">').join('');
-  const _previewFiles=_attachedFiles.map(f=>'📄 '+f.name).join(', ');
-  const displayText=(text||'')+(_previewImgs?'\n'+_previewImgs:'')+(_previewFiles?'\n'+_previewFiles:'');
-  c.messages.push({role:'user',text:displayText});
+  // 첨부 이미지/파일을 메시지 객체에 배열로 저장 (render에서 별도 표시)
+  const _msgImages=_attachedImages.map(f=>f.data);
+  const _msgFiles=_attachedFiles.map(f=>f.name);
+  c.messages.push({role:'user',text:text||'',images:_msgImages,files:_msgFiles});
   if(c.title==='새 채팅')c.title=(text||_attachedFiles[0]?.name||'이미지').slice(0,30);
   $('input').value='';render();
 
@@ -284,7 +312,7 @@ async function send(){
     const _fnames=_attachedFiles.map(x=>x.name).join(', ');
     const _fullText=text+(_fnames?' [첨부파일: '+_fnames+']':'');
     _attachedImages=[];_attachedFiles=[];renderAttachPreview();
-    const d=await api('/api/chat',{model:$('model').value,message:_fullText,images:_imgs,history:c.messages.slice(-10).map(m=>({role:m.role==='ai'?'assistant':'user',content:m.text}))});
+    const d=await api('/api/chat',{model:$('model').value,message:_fullText,images:_imgs,history:c.messages.slice(-10).map(m=>({role:m.role==='ai'?'assistant':'user',content:m.text||(m.images&&m.images.length?'[이미지 첨부]':'')||(m.files&&m.files.length?'[파일: '+m.files.join(', ')+']':'')||' '})).filter(m=>m.content&&m.content.trim())});
     c.messages.push({role:'ai',text:d.text||d.answer||d.message||'응답 없음'});
     try{await api('/api/hybrid-chat-save',{userId:user.id,roomId:c.id,title:c.title,messages:c.messages})}catch{}
     saveLocal();render();
