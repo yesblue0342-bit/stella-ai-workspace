@@ -487,6 +487,7 @@ async function mkdirPrompt(){
 }
 
 // ── 파일 업로드 ──
+// ── 파일 업로드 (Resumable - 용량 무제한) ──
 async function uploadFiles(fileList){
   if(!fileList||!fileList.length)return;
   if(!_curId){alert('업로드할 폴더 안으로 이동하세요.');return;}
@@ -495,9 +496,61 @@ async function uploadFiles(fileList){
   let ok=0;
   for(let i=0;i<fileList.length;i++){
     const file=fileList[i];
+    const label='('+(i+1)+'/'+fileList.length+') '+file.name;
     try{
-      await uploadOneResumable(file, i+1, fileList.length, pr);
-      ok++;
+      pr.textContent=label+' — 준비 중...';
+      const mt=file.type||'application/octet-stream';
+
+      // 1) 서버에서 Resumable Upload 세션 URL 발급
+      const sessRes=await fetch('/api/drive-manage?action=upload-session',{
+        method:'POST',
+        headers:{'Content-Type':'application/json'},
+        body:JSON.stringify({parentId:_curId,fileName:file.name,mimeType:mt,fileSize:file.size})
+      });
+      const sessData=await sessRes.json();
+      if(!sessData.ok||!sessData.uploadUrl){
+        pr.textContent='❌ '+file.name+': 세션 발급 실패 '+(sessData.error||sessData.message||'');
+        await sleep(1500);continue;
+      }
+
+      // 2) 브라우저 → Google Drive 직접 업로드 (청크 5MB씩)
+      const CHUNK=5*1024*1024;
+      const total=file.size;
+      let offset=0;
+      let fileId=null;
+
+      while(offset<total){
+        const end=Math.min(offset+CHUNK,total);
+        const chunk=file.slice(offset,end);
+        const pct=Math.round(end/total*100);
+        pr.textContent=label+' — '+pct+'% ('+fmtSize(end)+'/'+fmtSize(total)+')';
+
+        const upRes=await fetch(sessData.uploadUrl,{
+          method:'PUT',
+          headers:{
+            'Content-Range':'bytes '+offset+'-'+(end-1)+'/'+total,
+            'Content-Type':mt
+          },
+          body:chunk
+        });
+
+        if(upRes.status===200||upRes.status===201){
+          const data=await upRes.json();
+          fileId=data.id;
+          break;
+        } else if(upRes.status===308){
+          // 청크 완료, 다음 청크로
+          const range=upRes.headers.get('Range');
+          if(range) offset=parseInt(range.split('-')[1])+1;
+          else offset=end;
+        } else {
+          const errTxt=await upRes.text();
+          throw new Error('업로드 오류('+upRes.status+'): '+errTxt.slice(0,100));
+        }
+      }
+
+      if(fileId){ok++;pr.textContent='✅ '+file.name+' 완료';}
+      else{pr.textContent='⚠️ '+file.name+': 응답 없음';await sleep(1000);}
     }catch(e){
       pr.textContent='❌ '+file.name+': '+e.message;
       await sleep(1500);
@@ -507,66 +560,6 @@ async function uploadFiles(fileList){
   document.getElementById('fileUploadIn').value='';
   status('⬆ 업로드 완료: '+ok+'/'+fileList.length+'개');
   refresh();
-}
-
-// ── Resumable Upload (대용량 - 브라우저가 Drive로 직접 청크 전송) ──
-async function uploadOneResumable(file, idx, total, pr){
-  const prefix=idx+'/'+total+' — '+file.name+' ';
-  pr.textContent=prefix+'준비 중...';
-
-  // 1) 서버에서 업로드 세션 URL 발급
-  const sessRes=await fetch('/api/drive-upload-url',{
-    method:'POST',headers:{'Content-Type':'application/json'},
-    body:JSON.stringify({parentId:_curId,fileName:file.name,mimeType:file.type||'application/octet-stream',fileSize:file.size})
-  });
-  const sessTxt=await sessRes.text();
-  let sess;
-  try{ sess=JSON.parse(sessTxt); }
-  catch(e){ throw new Error('세션 발급 실패('+sessRes.status+')'); }
-  if(!sess.ok||!sess.uploadUrl) throw new Error(sess.message||'세션 URL 없음');
-
-  const uploadUrl=sess.uploadUrl;
-  const CHUNK=8*1024*1024; // 8MB 청크
-  const totalSize=file.size;
-
-  // 빈 파일 처리
-  if(totalSize===0){
-    const r=await fetch(uploadUrl,{method:'PUT',headers:{'Content-Range':'bytes */0'},body:new Blob([])});
-    if(!r.ok&&r.status!==200&&r.status!==201) throw new Error('빈 파일 업로드 실패');
-    pr.textContent=prefix+'✅ 완료';
-    return;
-  }
-
-  // 2) 청크 단위로 직접 전송
-  let offset=0;
-  while(offset<totalSize){
-    const end=Math.min(offset+CHUNK, totalSize);
-    const chunk=file.slice(offset, end);
-    const percent=Math.round((end/totalSize)*100);
-    pr.textContent=prefix+percent+'% ('+fmtSize(end)+'/'+fmtSize(totalSize)+')';
-
-    const r=await fetch(uploadUrl,{
-      method:'PUT',
-      headers:{ 'Content-Range':'bytes '+offset+'-'+(end-1)+'/'+totalSize },
-      body:chunk
-    });
-
-    if(r.status===308){
-      // 계속 진행 - Range 헤더로 다음 위치 확인
-      const range=r.headers.get('Range');
-      if(range){ const m=range.match(/bytes=0-(\d+)/); if(m) offset=parseInt(m[1])+1; else offset=end; }
-      else offset=end;
-    } else if(r.status===200||r.status===201){
-      // 완료
-      offset=totalSize;
-      pr.textContent=prefix+'✅ 완료';
-      return;
-    } else {
-      const errTxt=await r.text();
-      throw new Error('전송 오류('+r.status+')');
-    }
-  }
-  pr.textContent=prefix+'✅ 완료';
 }
 
 // ── PWA 설치 ──
