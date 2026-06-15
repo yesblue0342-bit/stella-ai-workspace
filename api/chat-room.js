@@ -99,6 +99,39 @@ export default async function handler(req, res) {
       return res.status(200).json({ ok: true, rooms });
     }
 
+    // ── 개별 메시지 삭제 (soft delete - 메시지 내용만 제거, 흔적은 남김) ──
+    if (action === "delete-message") {
+      const roomId = makeRoomId(req.body?.roomId || req.query.roomId);
+      const messageId = clean(req.body?.messageId || req.query.messageId);
+      const userId = clean(req.body?.userId || req.query.userId);
+      if (!roomId || !messageId) return res.status(400).json({ ok: false, message: "roomId, messageId 필요" });
+
+      const existing = await readJsonFromDrive({ folderPath: ["MemberChat"], fileName: roomId }).catch(() => null);
+      if (!existing?.data) return res.status(404).json({ ok: false, message: "방 없음" });
+
+      const messages = existing.data.messages || [];
+      const idx = messages.findIndex(m => m.id === messageId);
+      if (idx === -1) return res.status(404).json({ ok: false, message: "메시지 없음" });
+
+      // 본인 메시지만 삭제 가능 (userId 일치 확인)
+      if (userId && messages[idx].userId && messages[idx].userId !== userId) {
+        return res.status(403).json({ ok: false, message: "본인 메시지만 삭제할 수 있습니다." });
+      }
+
+      // soft delete: 내용은 지우되 "삭제된 메시지입니다" 표시 (카톡 방식)
+      messages[idx] = {
+        ...messages[idx],
+        message: "",
+        fileName: null,
+        fileUrl: null,
+        deleted: true,
+        deletedAt: new Date().toISOString()
+      };
+
+      await saveJsonToDrive({ folderPath: ["MemberChat"], fileName: roomId, data: { ...existing.data, messages } });
+      return res.status(200).json({ ok: true, message: "메시지 삭제됨" });
+    }
+
     // ── 방 삭제 ──
     if (action === "delete") {
       const roomId = makeRoomId(req.body?.roomId || req.query.roomId);
