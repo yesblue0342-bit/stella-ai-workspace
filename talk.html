@@ -187,6 +187,9 @@ body.theme-dark .theme-btn.active{background:#1e3a5f}
   .fab{display:grid}
   .msg-bubble,.msg-file{max-width:80vw}
 }
+
+@keyframes ctxFade{from{opacity:0;transform:scale(0.95)}to{opacity:1;transform:scale(1)}}
+@keyframes toastFade{0%{opacity:0;transform:translateX(-50%) translateY(10px)}15%{opacity:1;transform:translateX(-50%) translateY(0)}85%{opacity:1}100%{opacity:0}}
 </style>
 </head>
 <body class="theme-kakao">
@@ -873,6 +876,22 @@ function renderMessages(){
     // 컬럼
     const col=document.createElement('div');col.className='msg-col';
     if(!isMe){const nm=document.createElement('div');nm.className='msg-name';nm.textContent=esc(m.from||'');col.appendChild(nm);}
+    // 삭제된 메시지 (카톡 방식)
+    if(m.deleted){
+      const del=document.createElement('div');del.className='msg-bubble';
+      del.style.cssText='font-style:italic;color:var(--muted,#9ca3af);background:transparent;border:1px dashed var(--border)';
+      del.textContent='삭제된 메시지입니다.';
+      col.appendChild(del);
+      // 시간만 표시하고 종료
+      const tmW=document.createElement('div');tmW.style.cssText='display:flex;align-items:flex-end;gap:3px;flex-direction:'+(isMe?'row-reverse':'row');
+      const tmm=document.createElement('div');tmm.className='msg-time';tmm.textContent=fmtTime(m.at);tmW.appendChild(tmm);
+      col.appendChild(tmW);
+      if(isMe){row.appendChild(col);row.appendChild(av);}else{row.appendChild(av);row.appendChild(col);}
+      el.appendChild(row);
+      return;
+    }
+    // 길게 누르기(롱프레스) → 메시지 메뉴
+    attachLongPress(row, m, isMe);
     // 내용
     if(m.type==='image'){
       const imgSrc = m.data || m.fileUrl || '';
@@ -921,6 +940,166 @@ function renderMessages(){
     else{row.appendChild(av);row.appendChild(col);}
     el.appendChild(row);
   });
+}
+
+// ══ 메시지 길게 누르기 → 카톡 스타일 메뉴 ══
+let _lpTimer = null;
+let _lpTarget = null;
+
+function attachLongPress(row, m, isMe){
+  // 터치 (모바일)
+  row.addEventListener('touchstart', function(e){
+    _lpTarget = { m, isMe };
+    _lpTimer = setTimeout(function(){
+      if(navigator.vibrate) navigator.vibrate(30);
+      showMsgMenu(m, isMe, e);
+    }, 500);
+  }, { passive: true });
+  row.addEventListener('touchend', function(){ clearTimeout(_lpTimer); });
+  row.addEventListener('touchmove', function(){ clearTimeout(_lpTimer); });
+  // 마우스 우클릭 (PC)
+  row.addEventListener('contextmenu', function(e){
+    e.preventDefault();
+    showMsgMenu(m, isMe, e);
+  });
+}
+
+function showMsgMenu(m, isMe, evt){
+  closeMsgMenu();
+  const menu = document.createElement('div');
+  menu.id = 'msgCtxMenu';
+  menu.style.cssText = 'position:fixed;z-index:9999;background:var(--card,#fff);border:1px solid var(--border,#e5e7eb);border-radius:14px;box-shadow:0 8px 30px rgba(0,0,0,0.25);overflow:hidden;min-width:160px;animation:ctxFade .12s ease';
+
+  // 메뉴 항목 정의 - 삭제를 맨 위에 (본인 메시지만)
+  const items = [];
+
+  // 1) 삭제 (본인 메시지만, 맨 위)
+  if(isMe){
+    items.push({ label: '🗑 삭제', danger: true, fn: function(){ deleteMessage(m); } });
+  }
+  // 2) 복사 (텍스트 메시지만)
+  if(m.type !== 'image' && m.type !== 'file' && m.text){
+    items.push({ label: '📋 복사', fn: function(){ copyMsgText(m.text); } });
+  }
+  // 3) 답장
+  items.push({ label: '↩ 답장', fn: function(){ replyToMsg(m); } });
+  // 4) 이미지 저장 (이미지 메시지만)
+  if(m.type === 'image'){
+    const url = m.data || m.fileUrl || '';
+    items.push({ label: '⬇ 이미지 저장', fn: function(){ window.open(url, '_blank'); } });
+  }
+  // 5) 전달(공유)
+  if(m.text || m.data){
+    items.push({ label: '➡ 전달', fn: function(){ forwardMsg(m); } });
+  }
+
+  items.forEach(function(it, i){
+    const btn = document.createElement('div');
+    btn.style.cssText = 'padding:13px 18px;font-size:.92rem;cursor:pointer;color:'+(it.danger?'#ef4444':'var(--text,#111827)')+';font-weight:'+(it.danger?'700':'500')+';'+(i<items.length-1?'border-bottom:1px solid var(--border,#f0f0f0)':'');
+    btn.textContent = it.label;
+    btn.onclick = function(){ closeMsgMenu(); it.fn(); };
+    btn.ontouchstart = function(){ btn.style.background = 'var(--bg3,#f3f4f6)'; };
+    btn.ontouchend = function(){ btn.style.background = ''; };
+    menu.appendChild(btn);
+  });
+
+  document.body.appendChild(menu);
+
+  // 위치 계산 (화면 밖으로 안 나가게)
+  const x = evt.touches ? evt.touches[0].clientX : evt.clientX;
+  const y = evt.touches ? evt.touches[0].clientY : evt.clientY;
+  const mw = menu.offsetWidth, mh = menu.offsetHeight;
+  const vw = window.innerWidth, vh = window.innerHeight;
+  let left = Math.min(x, vw - mw - 10);
+  let top = Math.min(y, vh - mh - 10);
+  if(left < 10) left = 10;
+  if(top < 10) top = 10;
+  menu.style.left = left + 'px';
+  menu.style.top = top + 'px';
+
+  // 바깥 클릭 시 닫기
+  setTimeout(function(){
+    document.addEventListener('click', closeMsgMenu, { once: true });
+    document.addEventListener('touchstart', closeMsgMenuOnOutside, { once: true });
+  }, 50);
+}
+
+function closeMsgMenuOnOutside(e){
+  const menu = document.getElementById('msgCtxMenu');
+  if(menu && !menu.contains(e.target)) closeMsgMenu();
+}
+
+function closeMsgMenu(){
+  const menu = document.getElementById('msgCtxMenu');
+  if(menu) menu.remove();
+}
+
+// ── 메시지 삭제 ──
+async function deleteMessage(m){
+  if(!m || !m.id) return;
+  if(!confirm('이 메시지를 삭제하시겠습니까?')) return;
+
+  // 나와의 채팅은 로컬에서만 삭제
+  if(_cur.isMyChat){
+    const idx = _cur.messages.findIndex(function(x){return x.id===m.id;});
+    if(idx !== -1){ _cur.messages.splice(idx, 1); saveRooms(); renderMessages(); }
+    return;
+  }
+
+  try{
+    const r = await fetch('/api/chat-room?action=delete-message', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ roomId: _cur.id, messageId: m.id, userId: getMyId() })
+    });
+    const d = await r.json();
+    if(d.ok){
+      await syncRoomFromServer(true);
+    } else {
+      alert(d.message || '삭제 실패');
+    }
+  }catch(e){ alert('삭제 실패: ' + e.message); }
+}
+
+// ── 메시지 복사 ──
+function copyMsgText(text){
+  if(navigator.clipboard){
+    navigator.clipboard.writeText(text).then(function(){ toast('복사되었습니다'); });
+  } else {
+    const ta = document.createElement('textarea');
+    ta.value = text; document.body.appendChild(ta); ta.select();
+    try{ document.execCommand('copy'); toast('복사되었습니다'); }catch(e){}
+    ta.remove();
+  }
+}
+
+// ── 답장 (입력창에 인용 표시) ──
+let _replyTo = null;
+function replyToMsg(m){
+  _replyTo = m;
+  const inp = document.getElementById('chatInput');
+  if(inp){
+    const preview = (m.text || (m.type==='image'?'사진':'파일')).slice(0, 30);
+    inp.placeholder = '답장: ' + preview + '...';
+    inp.focus();
+  }
+  toast('답장할 메시지 선택됨');
+}
+
+// ── 전달 (다른 방으로 - 간단 버전: 텍스트 복사) ──
+function forwardMsg(m){
+  const text = m.text || m.data || '';
+  copyMsgText(text);
+  toast('전달할 내용이 복사되었습니다');
+}
+
+// ── 토스트 알림 ──
+function toast(msg){
+  const t = document.createElement('div');
+  t.style.cssText = 'position:fixed;bottom:80px;left:50%;transform:translateX(-50%);background:rgba(0,0,0,0.8);color:#fff;padding:10px 20px;border-radius:20px;font-size:.85rem;z-index:10000;animation:toastFade 2s ease';
+  t.textContent = msg;
+  document.body.appendChild(t);
+  setTimeout(function(){ t.remove(); }, 2000);
 }
 
 // ── 파일 첨부 ──
@@ -1066,13 +1245,22 @@ async function sendMsg(){
 
   // ④ 텍스트 전송
   if(text){
+    // 답장 인용 추가
+    let finalText = text;
+    if(_replyTo){
+      const q = (_replyTo.text || (_replyTo.type==='image'?'사진':'파일')).slice(0,40);
+      finalText = '┌ ' + q + '\n└ ' + text;
+      _replyTo = null;
+      const inp2=document.getElementById('chatInput');
+      if(inp2) inp2.placeholder='메시지 입력 (Enter=줄바꿈, ↑버튼=전송)';
+    }
     try{
       await fetch('/api/chat-room?action=send',{
         method:'POST', headers:{'Content-Type':'application/json'},
         body: JSON.stringify({
           roomId:_cur.id, title:_cur.name,
           userId:myId, sender:myName,
-          message:text, members:_cur.members||[myId]
+          message:finalText, members:_cur.members||[myId]
         })
       });
     } catch(e){
