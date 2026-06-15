@@ -429,20 +429,16 @@ function saveCurrentNote(){
   }
   savePosts();
   document.getElementById('noteMeta').textContent = '저장됨 · '+new Date().toLocaleString('ko-KR');
-  // Drive 저장
-  // Drive + Azure SQL 저장 (postId 명시적으로 전달)
+  // Drive 저장 (/api/note - users/{userId}/notes/{id}.json, soft delete 지원)
   try{
-    fetch('/api/stella?action=board-save',{
+    fetch('/api/note?action=save',{
       method:'POST',
       headers:{'Content-Type':'application/json'},
       body:JSON.stringify({
-        postId: _curNoteId,
+        id: _curNoteId,
         userId: user.id,
-        writer: user.name||user.id,
-        category: '노트',
         title: title,
-        content: body,
-        createdAt: posts.find(function(p){return p.id===_curNoteId;})?.createdAt || new Date().toISOString()
+        body: body
       })
     }).catch(function(e){console.warn('[Note] Drive 저장 실패:',e.message);});
   }catch(e){}
@@ -451,8 +447,18 @@ function saveCurrentNote(){
 function deleteCurrentNote(){
   if(!_curNoteId){ closeNoteEditor(); return; }
   if(!confirm('이 노트를 삭제하시겠습니까?')) return;
+  // 로컬에서 제거
   posts = posts.filter(function(p){return p.id!==_curNoteId;});
   savePosts();
+  // Drive soft delete (deleted:true 플래그 - 파일은 실제 삭제 안 함)
+  var delId = _curNoteId;
+  try{
+    fetch('/api/note?action=delete',{
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({ id: delId, userId: user.id })
+    }).catch(function(e){console.warn('[Note] Drive soft delete 실패:',e.message);});
+  }catch(e){}
   closeNoteEditor();
 }
 
@@ -562,24 +568,28 @@ async function loadChatHistoryFromDrive(){
 async function loadNotesFromDrive(){
   if(!user||!user.id) return;
   try{
-    const r=await fetch('/api/stella?action=board-list&userId='+encodeURIComponent(user.id)+'&category=all',{cache:'no-store'});
+    // /api/note 전용 API 사용 (Drive users/{userId}/notes/ 구조, deleted 제외)
+    const r=await fetch('/api/note?action=list&userId='+encodeURIComponent(user.id),{cache:'no-store'});
     if(!r.ok) return;
     const d=await r.json();
-    if(!d.ok||!d.posts||!d.posts.length) return;
+    if(!d.ok) return;
+    const driveNotes = d.notes || [];
+    if(!driveNotes.length) return;
+    // 로컬에 없는 것만 추가 (id 기준)
     const localIds=new Set((posts||[]).map(function(p){return p.id||p.postId;}));
     let added=0;
-    d.posts.forEach(function(dp){
-      const id=dp.postId||dp.id;
-      if(!id) return;
+    driveNotes.forEach(function(dn){
+      const id=dn.id||dn.postId;
+      if(!id || dn.deleted) return;  // soft delete 제외
       if(!localIds.has(id)){
         posts.unshift({
           id: id,
           owner: user.id,
-          title: dp.title||'(제목없음)',
-          body: dp.content||dp.body||'',
-          category: dp.category||dp._category||'노트',
-          createdAt: dp.createdAt||new Date().toISOString(),
-          updatedAt: dp.updatedAt||dp.createdAt||new Date().toISOString()
+          title: dn.title||'(제목없음)',
+          body: dn.body||dn.content||'',
+          category: dn.category||'노트',
+          createdAt: dn.createdAt||new Date().toISOString(),
+          updatedAt: dn.updatedAt||dn.createdAt||new Date().toISOString()
         });
         added++;
         localIds.add(id);
@@ -590,7 +600,7 @@ async function loadNotesFromDrive(){
       renderNoteList();
       renderBoardTree();
       renderAll();
-      console.log('[Drive] 노트/게시글 '+added+'개 복원');
+      console.log('[Drive] 노트 '+added+'개 복원');
     }
   }catch(e){console.warn('[Drive] 노트 로드 실패:',e.message);}
 }
