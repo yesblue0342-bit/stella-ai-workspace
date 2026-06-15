@@ -1,6 +1,16 @@
 import { detectSmartIntent, getSmartContextForMessage } from "../lib/place-weather-utils.js";
 import { saveJsonToDrive, readJsonFromDrive } from "../lib/drive-utils.js";
 
+// 이미지 base64 전송을 위해 body 크기 제한 상향
+export const config = {
+  api: {
+    bodyParser: {
+      sizeLimit: "20mb"
+    }
+  },
+  maxDuration: 60
+};
+
 // ───────── 시스템 프롬프트 ─────────
 const STELLA_SYSTEM_PROMPT = `You are Stella GPT, KH's personal AI workspace assistant. Reply in Korean.
 
