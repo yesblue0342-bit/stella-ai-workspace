@@ -14,8 +14,21 @@ export default async function handler(req, res) {
       const roomId = makeRoomId(req.query.roomId || req.query.room);
       if (!roomId) return res.status(400).json({ ok: false, message: "roomId 필요" });
       const f = await readJsonFromDrive({ folderPath: ["MemberChat"], fileName: roomId });
-      if (!f?.data) return res.status(200).json({ ok: true, room: null, messages: [] });
-      return res.status(200).json({ ok: true, room: f.data, messages: f.data.messages || [] });
+      if (!f?.data) return res.status(200).json({ ok: true, room: null, messages: [], reads: {} });
+      return res.status(200).json({ ok: true, room: f.data, messages: f.data.messages || [], reads: f.data.reads || {} });
+    }
+
+    // ── 읽음 처리 (사용자가 방을 읽은 시각 기록) ──
+    if (action === "read") {
+      const roomId = makeRoomId(req.body?.roomId || req.query.roomId);
+      const userId = clean(req.body?.userId || req.query.userId);
+      if (!roomId || !userId) return res.status(400).json({ ok: false, message: "roomId, userId 필요" });
+      const existing = await readJsonFromDrive({ folderPath: ["MemberChat"], fileName: roomId }).catch(() => null);
+      if (!existing?.data) return res.status(200).json({ ok: true });
+      const reads = existing.data.reads || {};
+      reads[userId] = Date.now();
+      await saveJsonToDrive({ folderPath: ["MemberChat"], fileName: roomId, data: { ...existing.data, reads } });
+      return res.status(200).json({ ok: true, reads });
     }
 
     // ── 메시지 전송 (append 방식 - 동시성 안전) ──
