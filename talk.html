@@ -547,7 +547,7 @@ function searchUsers(q, dropId, mode){
     drop.innerHTML = filtered.slice(0,8).map(function(u){
       const online = isOnline(u.id);
       const initial = (u.name||u.id||'?')[0].toUpperCase();
-      return '<div class="user-item" onclick="selectUser('+JSON.stringify(u.id)+','+JSON.stringify(u.name)+',\''+dropId+'\',\''+mode+'\')">'+
+      return '<div class="user-item" onmousedown="event.preventDefault();selectUser('+JSON.stringify(u.id)+','+JSON.stringify(u.name)+',\''+dropId+'\',\''+mode+'\')">'+
         '<div class="user-avatar">'+initial+'<span class="'+(online?'online':'offline')+'-dot" title="'+(online?'온라인':'오프라인')+'"></span></div>'+
         '<div class="user-info"><div class="user-name">'+esc(u.name)+'</div><div class="user-id">@'+esc(u.id)+(online?' 🟢':' ⚫')+'</div></div>'+
         '</div>';
@@ -572,9 +572,11 @@ function selectUser(id, name, dropId, mode){
   }
 }
 
-// 클릭 외부 시 드롭다운 닫기
-document.addEventListener('click',function(e){
-  if(!e.target.closest('.search-wrap')){ closeDrop('memberDrop'); closeDrop('inviteDrop'); }
+// 포커스 잃을 때 드롭다운 닫기 (클릭 이벤트 충돌 방지)
+document.addEventListener('mousedown',function(e){
+  if(!e.target.closest('.search-wrap')&&!e.target.closest('.user-dropdown')){
+    setTimeout(function(){closeDrop('memberDrop');closeDrop('inviteDrop');},50);
+  }
 });
 
 function addMember(){
@@ -945,7 +947,14 @@ function closeSettings(){document.getElementById('settingsPanel').classList.remo
 
 // ── 모달 ──
 function openModal(id){document.getElementById(id).classList.add('on');}
-function closeModal(id){document.getElementById(id).classList.remove('on');}
+function closeModal(id){
+  document.getElementById(id).classList.remove('on');
+  // 모달 닫히면 입력창 포커스 복원
+  setTimeout(function(){
+    var ci=document.getElementById('chatInput');
+    if(ci&&document.getElementById('chatRoom').style.display!=='none') ci.focus();
+  },100);
+}
 document.querySelectorAll('.modal-bg').forEach(function(m){m.addEventListener('click',function(e){if(e.target===m)m.classList.remove('on');});});
 
 // ── 유틸 ──
