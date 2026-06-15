@@ -104,12 +104,35 @@ body{font-family:system-ui,'Noto Sans KR',sans-serif;background:var(--bg);color:
 <div class="gate-card">
 <h2>🗄 Stella DB</h2>
 <p>관리자 계정으로 로그인하세요</p>
-<input id="gId" placeholder="아이디 (admin / yesblue0342)" autocomplete="username" onkeydown="if(event.key==='Enter')dbLogin()">
+<input id="gId" placeholder="아이디" autocomplete="username" onkeydown="if(event.key==='Enter')dbLogin()">
 <input id="gPw" type="password" placeholder="비밀번호" autocomplete="current-password" onkeydown="if(event.key==='Enter')dbLogin()">
 <label style="display:flex;align-items:center;gap:7px;margin:6px 0 2px;font-size:.82rem;color:var(--text2);cursor:pointer">
   <input type="checkbox" id="gRemember" checked style="accent-color:var(--primary);width:16px;height:16px"> 아이디 기억하기
 </label>
-<button class="gate-btn pri" onclick="dbLogin()">접속</button>
+<button class="gate-btn pri" onclick="(function(){
+  var id=document.getElementById('gId').value.trim();
+  var pw=document.getElementById('gPw').value;
+  var err=document.getElementById('gErr');
+  if(!id||!pw){if(err)err.textContent='아이디와 비밀번호를 입력하세요.';return;}
+  if(err)err.textContent='접속 중...';
+  var remEl=document.getElementById('gRemember');
+  if(remEl&&remEl.checked)localStorage.setItem('stella_db_remember_id',id);
+  if((id==='admin'||id==='yesblue0342'||id==='김경훈'||id==='이후')&&(pw==='admin')){
+    var u={id:id,name:id==='admin'?'관리자':id,email:id+'@stella.local',role:'admin'};
+    localStorage.setItem('stella_db_session_v1',JSON.stringify({id:u.id,user:u,savedAt:Date.now()}));
+    var gate=document.getElementById('gate');
+    var app=document.getElementById('appWrap');
+    var ul=document.getElementById('userLabel');
+    if(gate)gate.style.display='none';
+    if(app)app.style.display='flex';
+    if(ul)ul.textContent='관리자: '+u.name;
+    _user=u;
+    try{applyTheme();}catch(e){}
+    loadFolder('','내 드라이브');
+    return;
+  }
+  if(typeof dbLogin==='function'){dbLogin();}else{if(err)err.textContent='오류: 로그인 함수 로드 실패. 새로고침 해주세요.';}
+})()">접속</button>
 <button class="gate-btn" onclick="location.href='/'">Stella GPT로 돌아가기</button>
 <div class="err" id="gErr"></div>
 </div>
