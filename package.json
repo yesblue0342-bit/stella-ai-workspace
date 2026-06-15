@@ -8,6 +8,8 @@
     "xlsx": "^0.18.5",
     "mssql": "^11.0.1",
     "googleapis": "^144.0.0",
-    "fflate": "^0.8.2"
+    "fflate": "^0.8.2",
+    "pdf-parse": "^1.1.1",
+    "mammoth": "^1.8.0"
   }
 }
