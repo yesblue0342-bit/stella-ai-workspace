@@ -19,6 +19,11 @@ body:not(.dark) pre.code{background:#1e293b;color:#e2e8f0}
 .modelBtn{font-size:12px;padding:8px 12px;border-radius:14px;background:#f3f4f6;border:1px solid #d1d5db;font-weight:800;white-space:nowrap;cursor:pointer}
 body.dark .modelBtn{background:#21262d;border-color:#30363d;color:#e6edf3}
 .composeModel{display:flex;align-items:center;gap:8px;margin-bottom:8px;flex-wrap:wrap}
+.attach-preview{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:6px}
+.attach-thumb{position:relative;width:56px;height:56px;border-radius:10px;overflow:hidden;border:1px solid var(--border)}
+.attach-thumb img{width:100%;height:100%;object-fit:cover}
+.attach-thumb .rm{position:absolute;top:2px;right:2px;background:rgba(0,0,0,.6);color:#fff;border:none;border-radius:50%;width:18px;height:18px;cursor:pointer;font-size:11px;display:flex;align-items:center;justify-content:center;padding:0}
+.attach-file{display:flex;align-items:center;gap:4px;background:var(--border,#e5e7eb);border-radius:8px;padding:4px 8px;font-size:.75rem;max-width:140px;overflow:hidden;white-space:nowrap;text-overflow:ellipsis}
 .themeBtn{font-size:18px;padding:8px 10px;border-radius:12px;cursor:pointer}
 
 /* ── 노트 패널 ── */
@@ -113,7 +118,13 @@ body.dark .np-content textarea{background:#0d1117;color:#e6edf3}
     </div>
   </div>
 </div>
-</aside><main class="main"><div class="top"><button class="btn hamb" type="button" onclick="toggleSide()">☰</button><div id="title" class="title">새 채팅</div><div class="spacer"></div><button class="btn themeBtn" type="button" onclick="installPWA()" id="installBtn" style="display:none;font-size:16px;padding:8px 10px;border-radius:12px" title="앱 설치">📲</button><button class="btn themeBtn" type="button" onclick="toggleTheme()" id="themeBtn">🌙</button></div><div id="msgs" class="msgs"></div><div class="compose"><div class="composeModel"><div class="modelWrap"><button class="modelBtn" type="button" onclick="toggleModelMenu()" id="modelBtn">Opus 4.8</button></div><select id="model" style="display:none"><optgroup label="── GPT ──"><option value="chatgpt-5.5-latest">GPT-5.5 최신</option><option value="gpt-5">GPT-5</option><option value="gpt-4o">GPT-4o</option><option value="gpt-4.1">GPT-4.1</option><option value="gpt-4.1-mini">GPT-4.1 Mini</option><option value="gpt-4o-mini">GPT-4o Mini</option></optgroup><optgroup label="── Claude ──"><option value="claude-fable-5">Claude Fable 5 (최신)</option><option value="claude-opus-4-8">Claude Opus 4.8</option><option value="claude-opus-4-7">Claude Opus 4.7</option><option value="claude-opus-4-6">Claude Opus 4.6</option><option value="claude-sonnet-4-6">Claude Sonnet 4.6</option><option value="claude-haiku-4-5-20251001">Claude Haiku 4.5</option></optgroup></select></div><div class="bar"><textarea id="input" placeholder="메시지를 입력하세요. (Enter 줄바꿈)" rows="1"></textarea><button class="primary" type="button" onclick="send()">↑</button></div></div></main></div><script>const K={session:'stella_session_final_v82',remember:'stella_remember_id_v1',chats:'stella_chats_server_v2'};let mode='login',user=null,chats=[],active=null;const $=id=>document.getElementById(id);const read=(k,d)=>{try{return JSON.parse(localStorage.getItem(k)||JSON.stringify(d))}catch{return d}};const write=(k,v)=>localStorage.setItem(k,JSON.stringify(v));function setMode(m){mode=m;$('loginTab').classList.toggle('active',m==='login');$('signupTab').classList.toggle('active',m==='signup');document.querySelectorAll('.signupOnly').forEach(x=>x.classList.toggle('hidden',m!=='signup'));document.querySelectorAll('.loginOnly').forEach(x=>x.classList.toggle('hidden',m!=='login'));$('submitBtn').textContent=m==='login'?'로그인':'회원가입';$('authMsg').style.color='#b91c1c';$('authMsg').textContent='';$('pw').value='';if(m==='signup'){$('loginId').value='';$('email').value='';$('name').value='';$('birth').value='';}else loadRemember()}function loadRemember(){const v=localStorage.getItem(K.remember)||'';$('loginId').value=v;$('rememberId').checked=!!v}async function api(url,body){const r=await fetch(url,{method:'POST',headers:{'Content-Type':'application/json','Cache-Control':'no-store'},body:JSON.stringify(body)});const t=await r.text();let d;try{d=JSON.parse(t)}catch{d={message:t}};if(!r.ok||d.ok===false){const m=(d.message||'API 오류')+(d.error?(' ('+d.error+')'):'');throw new Error(m)}return d}async function auth(e){if(e&&e.preventDefault)e.preventDefault();const id=$('loginId').value.trim(),code=$('pw').value;if(!id||!code){$('authMsg').textContent='아이디와 비밀번호를 입력하세요.';return}$('authMsg').textContent='처리 중...';try{let d;if(mode==='signup'){d=await api('/api/signup',{id,email:$('email').value.trim()||id,name:$('name').value.trim(),birth:$('birth').value.trim(),password:code})}else{d=await api('/api/auth/login',{id,password:code})}user=d.user;if(mode==='login'&&$('rememberId').checked)localStorage.setItem(K.remember,id);else if(mode==='login')localStorage.removeItem(K.remember);write(K.session,{id:user.id,user,savedAt:-1});if(mode==='signup'){$('authMsg').style.color='#16a34a';$('authMsg').textContent='회원가입 성공! 로그인합니다...';setTimeout(openApp,800);}else{openApp();}}catch(err){$('authMsg').style.color='#b91c1c';$('authMsg').textContent=err.message||'처리 실패'}}function boot(){$('loginTab').onclick=()=>setMode('login');$('signupTab').onclick=()=>setMode('signup');$('authForm').onsubmit=auth;applyTheme();syncModelBtn();const ip=$('input');if(ip){ip.addEventListener('input',()=>{ip.style.height='auto';ip.style.height=Math.min(ip.scrollHeight,160)+'px'});}if($('model'))$('model').addEventListener('change',()=>{syncModelBtn();});$('forgotBtn').onclick=()=>{const id=$('loginId').value.trim();if(!id){alert('아이디 또는 이메일을 먼저 입력하세요.');return;}$('authMsg').textContent='비밀번호 초기화 이메일을 발송했습니다.(준비중)';};loadRemember();const s=read(K.session,null);if(s&&s.user&&(s.savedAt===-1||s.savedAt>Date.now()-30*24*60*60*1000)){user=s.user;openApp()}else $('auth').classList.remove('hidden')}function openApp(){$('auth').classList.add('hidden');$('app').classList.remove('hidden');var _ini=(user.name||user.id||'?').charAt(0).toUpperCase();
+</aside><main class="main"><div class="top"><button class="btn hamb" type="button" onclick="toggleSide()">☰</button><div id="title" class="title">새 채팅</div><div class="spacer"></div><button class="btn themeBtn" type="button" onclick="installPWA()" id="installBtn" style="display:none;font-size:16px;padding:8px 10px;border-radius:12px" title="앱 설치">📲</button><button class="btn themeBtn" type="button" onclick="toggleTheme()" id="themeBtn">🌙</button></div><div id="msgs" class="msgs"></div><div class="compose"><div class="composeModel"><div class="modelWrap"><button class="modelBtn" type="button" onclick="toggleModelMenu()" id="modelBtn">Opus 4.8</button></div><select id="model" style="display:none"><optgroup label="── GPT ──"><option value="chatgpt-5.5-latest">GPT-5.5 최신</option><option value="gpt-5">GPT-5</option><option value="gpt-4o">GPT-4o</option><option value="gpt-4.1">GPT-4.1</option><option value="gpt-4.1-mini">GPT-4.1 Mini</option><option value="gpt-4o-mini">GPT-4o Mini</option></optgroup><optgroup label="── Claude ──"><option value="claude-fable-5">Claude Fable 5 (최신)</option><option value="claude-opus-4-8">Claude Opus 4.8</option><option value="claude-opus-4-7">Claude Opus 4.7</option><option value="claude-opus-4-6">Claude Opus 4.6</option><option value="claude-sonnet-4-6">Claude Sonnet 4.6</option><option value="claude-haiku-4-5-20251001">Claude Haiku 4.5</option></optgroup></select></div><div id="attachPreview" class="attach-preview"></div>
+<div class="bar">
+<button type="button" onclick="document.getElementById(\'attachInput\').click()" style="background:none;border:none;cursor:pointer;font-size:20px;padding:4px 6px;color:#6b7280" title="파일/이미지 첨부">+</button>
+<input type="file" id="attachInput" multiple accept="image/*,.pdf,.txt,.md,.csv,.xlsx,.docx" style="display:none" onchange="handleAttach(this.files)">
+<textarea id="input" placeholder="메시지 입력 (Enter 줄바꿈)" rows="1"></textarea>
+<button class="primary" type="button" onclick="send()">↑</button>
+</div></div></main></div><script>const K={session:'stella_session_final_v82',remember:'stella_remember_id_v1',chats:'stella_chats_server_v2'};let mode='login',user=null,chats=[],active=null;const $=id=>document.getElementById(id);const read=(k,d)=>{try{return JSON.parse(localStorage.getItem(k)||JSON.stringify(d))}catch{return d}};const write=(k,v)=>localStorage.setItem(k,JSON.stringify(v));function setMode(m){mode=m;$('loginTab').classList.toggle('active',m==='login');$('signupTab').classList.toggle('active',m==='signup');document.querySelectorAll('.signupOnly').forEach(x=>x.classList.toggle('hidden',m!=='signup'));document.querySelectorAll('.loginOnly').forEach(x=>x.classList.toggle('hidden',m!=='login'));$('submitBtn').textContent=m==='login'?'로그인':'회원가입';$('authMsg').style.color='#b91c1c';$('authMsg').textContent='';$('pw').value='';if(m==='signup'){$('loginId').value='';$('email').value='';$('name').value='';$('birth').value='';}else loadRemember()}function loadRemember(){const v=localStorage.getItem(K.remember)||'';$('loginId').value=v;$('rememberId').checked=!!v}async function api(url,body){const r=await fetch(url,{method:'POST',headers:{'Content-Type':'application/json','Cache-Control':'no-store'},body:JSON.stringify(body)});const t=await r.text();let d;try{d=JSON.parse(t)}catch{d={message:t}};if(!r.ok||d.ok===false){const m=(d.message||'API 오류')+(d.error?(' ('+d.error+')'):'');throw new Error(m)}return d}async function auth(e){if(e&&e.preventDefault)e.preventDefault();const id=$('loginId').value.trim(),code=$('pw').value;if(!id||!code){$('authMsg').textContent='아이디와 비밀번호를 입력하세요.';return}$('authMsg').textContent='처리 중...';try{let d;if(mode==='signup'){d=await api('/api/signup',{id,email:$('email').value.trim()||id,name:$('name').value.trim(),birth:$('birth').value.trim(),password:code})}else{d=await api('/api/auth/login',{id,password:code})}user=d.user;if(mode==='login'&&$('rememberId').checked)localStorage.setItem(K.remember,id);else if(mode==='login')localStorage.removeItem(K.remember);write(K.session,{id:user.id,user,savedAt:-1});if(mode==='signup'){$('authMsg').style.color='#16a34a';$('authMsg').textContent='회원가입 성공! 로그인합니다...';setTimeout(openApp,800);}else{openApp();}}catch(err){$('authMsg').style.color='#b91c1c';$('authMsg').textContent=err.message||'처리 실패'}}function boot(){$('loginTab').onclick=()=>setMode('login');$('signupTab').onclick=()=>setMode('signup');$('authForm').onsubmit=auth;applyTheme();syncModelBtn();const ip=$('input');if(ip){ip.addEventListener('input',()=>{ip.style.height='auto';ip.style.height=Math.min(ip.scrollHeight,160)+'px'});}if($('model'))$('model').addEventListener('change',()=>{syncModelBtn();});$('forgotBtn').onclick=()=>{const id=$('loginId').value.trim();if(!id){alert('아이디 또는 이메일을 먼저 입력하세요.');return;}$('authMsg').textContent='비밀번호 초기화 이메일을 발송했습니다.(준비중)';};loadRemember();const s=read(K.session,null);if(s&&s.user&&(s.savedAt===-1||s.savedAt>Date.now()-30*24*60*60*1000)){user=s.user;openApp()}else $('auth').classList.remove('hidden')}function openApp(){$('auth').classList.add('hidden');$('app').classList.remove('hidden');var _ini=(user.name||user.id||'?').charAt(0).toUpperCase();
 var _isDark=document.body.classList.contains('dark');
 var _avatarBg=_isDark?'#e6edf3':'#1f2937';
 var _avatarColor=_isDark?'#0d1117':'#fff';
@@ -160,7 +171,53 @@ async function loadChatsFromServer(){
 }
 // 더미 닫기 (원래 }는 openApp 닫는 것)
 function _unused_openapp_end(){function logout(){localStorage.removeItem(K.session);location.reload()}function newChat(){const c={id:'r_'+Date.now(),userId:user.id,title:'새 채팅',messages:[{role:'ai',text:'안녕하세요. Stella입니다. 무엇이든 물어보세요.'}]};chats.unshift(c);active=c.id;saveLocal();render()}function saveLocal(){write(K.chats,[...read(K.chats,[]).filter(x=>x.userId!==user.id),...chats])}function cur(){return chats.find(x=>x.id===active)}function render(){renderSide();const c=cur();$('title').textContent=c?.title||'새 채팅';$('msgs').innerHTML=(c?.messages||[]).map(m=>'<div class="row '+(m.role==='user'?'me':'ai')+'"><div class="bubble">'+md(m.text)+'</div></div>').join('');$('msgs').scrollTop=$('msgs').scrollHeight}function renderSide(){const q=($('q')?.value||'').toLowerCase();$('chatList').innerHTML=chats.filter(c=>(c.title+' '+c.messages.map(m=>m.text).join(' ')).toLowerCase().includes(q)).map(c=>'<div style="display:flex;align-items:center;gap:4px"><button class="tree '+(c.id===active?'active':'')+'" style="flex:1" onclick="active=\''+c.id+'\';render();closeSideMobile()">▱ '+esc(c.title)+'<br><span class="muted">'+c.messages.length+'개 메시지</span></button><button onclick="deleteChat(\''+c.id+'\'" style="border:0;background:none;color:#9ca3af;cursor:pointer;padding:6px;font-size:12px;border-radius:8px" title="삭제">✕</button></div>').join('')||'<div class="muted">결과 없음</div>'}
-function deleteChat(id){if(!confirm('이 채팅을 삭제하시겠습니까?'))return;chats=chats.filter(x=>x.id!==id);saveLocal();if(active===id){if(chats.length)active=chats[0].id;else newChat();}render();}function keepSide(){/* 검색창 포커스 시 사이드바 유지 - 닫지 않음 */}function toggleSide(){$('side').classList.toggle('open')}function closeSideMobile(){if(innerWidth<=900)$('side').classList.remove('open')}// ── Drive 검색 ──
+function deleteChat(id){if(!confirm('이 채팅을 삭제하시겠습니까?'))return;chats=chats.filter(x=>x.id!==id);saveLocal();if(active===id){if(chats.length)active=chats[0].id;else newChat();}render();}function keepSide(){/* 검색창 포커스 시 사이드바 유지 - 닫지 않음 */}function toggleSide(){$('side').classList.toggle('open')}function closeSideMobile(){if(innerWidth<=900)$('side').classList.remove('open')}// ── 파일 첨부 ──
+let _attachedImages=[], _attachedFiles=[];
+function handleAttach(files){
+  for(const f of Array.from(files)){
+    const isImg=f.type.startsWith('image/');
+    const reader=new FileReader();
+    reader.onload=function(e){
+      const data=e.target.result;
+      if(isImg){
+        _attachedImages.push({name:f.name,data});
+      } else {
+        _attachedFiles.push({name:f.name,data,type:f.type});
+      }
+      renderAttachPreview();
+    };
+    reader.readAsDataURL(f);
+  }
+  document.getElementById('attachInput').value='';
+}
+function renderAttachPreview(){
+  const box=document.getElementById('attachPreview');
+  if(!box)return;
+  const imgs=_attachedImages.map((f,i)=>
+    '<div class="attach-thumb"><img src="'+f.data+'"><button class="rm" onclick="_attachedImages.splice('+i+',1);renderAttachPreview()">✕</button></div>'
+  );
+  const files=_attachedFiles.map((f,i)=>
+    '<div class="attach-file">📄 '+esc(f.name)+'<button onclick="_attachedFiles.splice('+i+',1);renderAttachPreview()" style="background:none;border:none;cursor:pointer;color:#6b7280;font-size:11px;padding:0 0 0 4px">✕</button></div>'
+  );
+  box.innerHTML=imgs.join('')+files.join('');
+}
+
+// 클립보드 이미지 붙여넣기
+document.addEventListener('paste',function(e){
+  const items=Array.from(e.clipboardData?.items||[]);
+  const imgItem=items.find(x=>x.type.startsWith('image/'));
+  if(!imgItem)return;
+  const file=imgItem.getAsFile();
+  if(!file)return;
+  const reader=new FileReader();
+  reader.onload=function(ev){
+    _attachedImages.push({name:'capture-'+Date.now()+'.png',data:ev.target.result});
+    renderAttachPreview();
+  };
+  reader.readAsDataURL(file);
+});
+
+// ── Drive 검색 ──
 // 지원 명령어: #구글드라이브폴더, #구글드라이브 키워드~찾아줘
 async function driveSearch(query){
   try{
@@ -182,10 +239,13 @@ function fmtSz(b){if(!b)return '';b=Number(b);if(b<1024)return b+'B';if(b<104857
 // ── 메시지 전송 ──
 async function send(){
   const text=$('input').value.trim();
-  if(!text)return;
+  if(!text&&!_attachedImages.length&&!_attachedFiles.length)return;
   const c=cur();
-  c.messages.push({role:'user',text});
-  if(c.title==='새 채팅')c.title=text.slice(0,30);
+  const _previewImgs=_attachedImages.map(f=>'<img src="'+f.data+'" style="max-width:180px;max-height:120px;border-radius:8px;margin-top:4px">').join('');
+  const _previewFiles=_attachedFiles.map(f=>'📄 '+f.name).join(', ');
+  const displayText=(text||'')+(_previewImgs?'\n'+_previewImgs:'')+(_previewFiles?'\n'+_previewFiles:'');
+  c.messages.push({role:'user',text:displayText});
+  if(c.title==='새 채팅')c.title=(text||_attachedFiles[0]?.name||'이미지').slice(0,30);
   $('input').value='';render();
 
   // #구글드라이브 명령어 처리
@@ -202,7 +262,11 @@ async function send(){
 
   // 일반 AI 응답
   try{
-    const d=await api('/api/chat',{model:$('model').value,message:text,history:c.messages.slice(-10).map(m=>({role:m.role==='ai'?'assistant':'user',content:m.text}))});
+    const _imgs=_attachedImages.map(x=>x.data);
+    const _fnames=_attachedFiles.map(x=>x.name).join(', ');
+    const _fullText=text+(_fnames?' [첨부파일: '+_fnames+']':'');
+    _attachedImages=[];_attachedFiles=[];renderAttachPreview();
+    const d=await api('/api/chat',{model:$('model').value,message:_fullText,images:_imgs,history:c.messages.slice(-10).map(m=>({role:m.role==='ai'?'assistant':'user',content:m.text}))});
     c.messages.push({role:'ai',text:d.text||d.answer||d.message||'응답 없음'});
     try{await api('/api/hybrid-chat-save',{userId:user.id,roomId:c.id,title:c.title,messages:c.messages})}catch{}
     saveLocal();render();
