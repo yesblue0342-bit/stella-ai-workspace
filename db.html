@@ -497,7 +497,8 @@ async function uploadFiles(fileList){
     const file=fileList[i];
     pr.textContent=(i+1)+'/'+fileList.length+' — '+file.name;
     try{
-      if(file.size>10*1024*1024){pr.textContent='⚠️ '+file.name+' (10MB 초과 스킵)';await sleep(800);continue;}
+      // base64는 ~33% 커지므로 실제 한도는 ~37MB
+      if(file.size>37*1024*1024){pr.textContent='⚠️ '+file.name+' (37MB 초과 - 스킵)';await sleep(1500);continue;}
       const base64data=await new Promise(function(resolve,reject){
         const fr=new FileReader();
         fr.onload=function(e){const result=e.target.result;const b64=result.includes(',')?result.split(',')[1]:result;resolve(b64);};
@@ -507,10 +508,21 @@ async function uploadFiles(fileList){
         method:'POST',headers:{'Content-Type':'application/json'},
         body:JSON.stringify({parentId:_curId,fileName:file.name,mimeType:file.type||'application/octet-stream',base64data})
       });
-      const d=await r.json();
+      // JSON 파싱 안전 처리 (서버가 HTML/텍스트 에러 반환 시)
+      let d;
+      const txt=await r.text();
+      try{ d=JSON.parse(txt); }
+      catch(parseErr){
+        if(r.status===413||/too large|entity/i.test(txt)){
+          pr.textContent='❌ '+file.name+': 파일이 너무 큽니다 (서버 한도 초과)';
+        } else {
+          pr.textContent='❌ '+file.name+': 서버 오류('+r.status+')';
+        }
+        await sleep(1500);continue;
+      }
       if(d.ok)ok++;
-      else{pr.textContent='❌ '+file.name+': '+(d.error||d.message);await sleep(1200);}
-    }catch(e){pr.textContent='❌ '+file.name+': '+e.message;await sleep(1200);}
+      else{pr.textContent='❌ '+file.name+': '+(d.error||d.message);await sleep(1500);}
+    }catch(e){pr.textContent='❌ '+file.name+': '+e.message;await sleep(1500);}
   }
   ov.classList.remove('on');
   document.getElementById('fileUploadIn').value='';
