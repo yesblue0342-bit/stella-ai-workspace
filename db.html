@@ -63,6 +63,11 @@ body{font-family:system-ui,'Noto Sans KR',sans-serif;background:var(--bg);color:
 .mvcard h3{color:var(--text);margin-bottom:10px;font-size:.92rem}
 .mvcard input{width:100%;background:var(--bg);border:1px solid var(--border);border-radius:9px;padding:9px;color:var(--text);font-size:.85rem;margin-bottom:10px}
 .mvcard input::placeholder{color:var(--text2)}
+
+/* ── 드래그&드롭 ── */
+.file-list.drag-over{outline:3px dashed var(--primary);outline-offset:-4px;background:rgba(31,111,235,.07)}
+.drop-hint{display:none;position:fixed;inset:0;z-index:2000;background:rgba(31,111,235,.18);border:4px dashed #1f6feb;pointer-events:none;align-items:center;justify-content:center;flex-direction:column;gap:12px;font-size:1.4rem;font-weight:900;color:#1f6feb}
+.drop-hint.on{display:flex}
 </style>
 </head>
 <body>
@@ -421,9 +426,72 @@ async function installPWA(){
 }
 
 // ── 초기화 ──
+
+// ── 드래그&드롭 업로드 ──
+(function(){
+  const body = document.body;
+  let _dragCount = 0;
+
+  // 전체 화면 드래그 진입
+  body.addEventListener('dragenter', function(e){
+    if(!e.dataTransfer.types.includes('Files')) return;
+    e.preventDefault();
+    _dragCount++;
+    document.getElementById('dropHint').classList.add('on');
+  });
+
+  body.addEventListener('dragleave', function(e){
+    _dragCount--;
+    if(_dragCount <= 0){
+      _dragCount = 0;
+      document.getElementById('dropHint').classList.remove('on');
+    }
+  });
+
+  body.addEventListener('dragover', function(e){
+    if(!e.dataTransfer.types.includes('Files')) return;
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'copy';
+  });
+
+  body.addEventListener('drop', function(e){
+    e.preventDefault();
+    _dragCount = 0;
+    document.getElementById('dropHint').classList.remove('on');
+    document.getElementById('fileList').classList.remove('drag-over');
+
+    const files = e.dataTransfer.files;
+    if(!files || !files.length) return;
+
+    if(!_curId){
+      alert('폴더 안으로 이동 후 드래그하세요.');
+      return;
+    }
+    uploadFiles(files);
+  });
+
+  // 파일 목록 영역 호버 강조
+  document.addEventListener('dragover', function(e){
+    const fl = document.getElementById('fileList');
+    if(fl) fl.classList.add('drag-over');
+  });
+  document.addEventListener('dragleave', function(e){
+    if(e.relatedTarget === null){
+      const fl = document.getElementById('fileList');
+      if(fl) fl.classList.remove('drag-over');
+    }
+  });
+})();
+
 window.onload=function(){
   const u=getSession();
   if(u&&isAdmin(u)){enterApp(u);}
 };
 </script>
+
+<div class="drop-hint" id="dropHint">
+  <div style="font-size:3rem">📂</div>
+  <div>여기에 파일을 놓으세요</div>
+  <div style="font-size:.9rem;font-weight:400;opacity:.7">현재 폴더에 업로드됩니다</div>
+</div>
 </body></html>
