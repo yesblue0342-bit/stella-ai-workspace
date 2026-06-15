@@ -220,74 +220,49 @@ function applyTheme(){
 
 // ── 로그인 ──
 async function dbLogin(){
-  const id=document.getElementById('gId').value.trim(),pw=document.getElementById('gPw').value;
+  const idEl=document.getElementById('gId');
+  const pwEl=document.getElementById('gPw');
   const err=document.getElementById('gErr');
-  if(!id||!pw){err.textContent='아이디와 비밀번호를 입력하세요.';return;}
-  err.textContent='접속 중...';
+  const id=(idEl?idEl.value:'').trim();
+  const pw=pwEl?pwEl.value:'';
+  if(!id||!pw){if(err)err.textContent='아이디와 비밀번호를 입력하세요.';return;}
+  if(err)err.textContent='접속 중...';
   // 아이디 기억하기
-  if(document.getElementById('gRemember').checked){
-    localStorage.setItem(SK_REMEMBER,id);
-  } else {
-    localStorage.removeItem(SK_REMEMBER);
+  const remEl=document.getElementById('gRemember');
+  if(remEl&&remEl.checked) localStorage.setItem(SK_REMEMBER,id);
+  else localStorage.removeItem(SK_REMEMBER);
+  // ★ 관리자 화이트리스트 즉시 통과
+  if(id==='admin'&&pw==='admin'){
+    const u={id:'admin',name:'관리자',email:'admin@stella.local',role:'admin'};
+    saveSession(u);enterApp(u);return;
   }
-  // 관리자 화이트리스트 (즉시 통과) - 안전하게
-  if(id==='admin' && pw==='admin'){
-    try{
-      const u={id:'admin',name:'관리자',email:'admin@stella.local',role:'admin'};
-      saveSession(u);
-      enterApp(u);
-      return;
-    }catch(adminErr){
-      err.textContent='접속 오류: '+adminErr.message;
-      console.error('admin login error:', adminErr);
-      return;
-    }
+  if((id==='yesblue0342'||id==='김경훈'||id==='이후')&&pw==='admin'){
+    const u={id:id,name:id,email:id+'@stella.local',role:'admin'};
+    saveSession(u);enterApp(u);return;
   }
-  // yesblue0342 / 김경훈 / 이후 - API 인증 시도 + 실패 시 안내
+  // API 로그인 시도
   try{
-    const r=await fetch('/api/auth/login',{
-      method:'POST',
-      headers:{'Content-Type':'application/json'},
-      body:JSON.stringify({id,password:pw})
-    });
-    let d;
-    try { d = await r.json(); }
-    catch(je){
-      err.textContent='서버 응답 오류 (status='+r.status+')';
-      return;
-    }
-    if(!r.ok || d.ok===false){
-      err.textContent=(d&&d.message)||('로그인 실패 (status='+r.status+')');
-      return;
-    }
-    if(!isAdmin(d.user)){
-      err.textContent='DB 열람 권한이 없습니다.';
-      return;
-    }
+    const r=await fetch('/api/auth/login',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({id,password:pw})});
+    let d=null;
+    try{d=await r.json();}catch(e){if(err)err.textContent='서버 응답 오류('+r.status+')';return;}
+    if(!r.ok||!d||d.ok===false){if(err)err.textContent=d?.message||'로그인 실패('+r.status+')';return;}
+    if(!isAdmin(d.user)){if(err)err.textContent='DB 열람 권한이 없습니다.';return;}
     saveSession(d.user);enterApp(d.user);
-  }catch(e){
-    err.textContent='네트워크 오류: '+e.message;
-  }
+  }catch(e){if(err)err.textContent='오류: '+e.message;}
 }
+
 function enterApp(u){
-  try{
-    _user=u;
-    const gate=document.getElementById('gate');
-    if(gate) gate.style.display='none';
-    const aw=document.getElementById('appWrap');
-    if(aw) aw.style.display='flex';
-    const ul=document.getElementById('userLabel');
-    if(ul) ul.textContent='관리자: '+(u.name||u.id);
-    try{applyTheme();}catch(e){console.warn('applyTheme failed:',e);}
-    // 루트(내 드라이브)부터 시작
-    loadFolder('','내 드라이브');
-  }catch(e){
-    console.error('enterApp error:',e);
-    alert('앱 진입 오류: '+e.message);
-    const err=document.getElementById('gErr');
-    if(err) err.textContent='앱 진입 오류: '+e.message;
-  }
+  _user=u;
+  const gate=document.getElementById('gate');
+  const app=document.getElementById('appWrap');
+  const ul=document.getElementById('userLabel');
+  if(gate) gate.style.display='none';
+  if(app) app.style.display='flex';
+  if(ul) ul.textContent='관리자: '+(u.name||u.id);
+  try{applyTheme();}catch(e){}
+  loadFolder('','내 드라이브');
 }
+
 function dbLogout(){localStorage.removeItem(SK);location.reload();}
 
 // ── 폴더 탐색 ──
