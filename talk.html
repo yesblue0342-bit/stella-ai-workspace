@@ -709,14 +709,24 @@ function stopPolling(){ if(_pollTimer){clearInterval(_pollTimer);_pollTimer=null
 
 // 서버 메시지를 로컬 형식으로 변환
 function serverMsgToLocal(m){
+  const fUrl = m.fileUrl||null;
+  const fName = m.fileName||'';
+  let msgType = 'text';
+  if(fUrl){
+    if(/^data:image\//.test(fUrl) || /(jpg|jpeg|png|gif|webp)$/i.test(fName) || /\/uc\?export=view/.test(fUrl)){
+      msgType = 'image';
+    } else {
+      msgType = 'file';
+    }
+  }
   return {
     id: m.id,
     from: m.userId||m.sender,
     text: m.message||'',
-    fileName: m.fileName||null,
-    fileUrl: m.fileUrl||null,
-    type: m.fileUrl ? (/(jpg|jpeg|png|gif|webp)$/i.test(m.fileName||'')?'image':'file') : 'text',
-    data: m.fileUrl||null,
+    fileName: fName||null,
+    fileUrl: fUrl,
+    type: msgType,
+    data: fUrl,
     at: new Date(m.createdAt).getTime()
   };
 }
@@ -909,16 +919,54 @@ async function sendMsg(){
 
   inp.value='';inp.style.height='auto';
 
-  // 파일 전송 (Drive 업로드 후 링크 전송)
+  // 파일 전송 - Drive Resumable Upload → webContentLink 방식
   for(const f of _attachFiles){
     try{
-      const data=await readFileAsDataURL(f);
-      // 작은 파일은 base64 inline, 큰 파일은 별도 처리 가능
-      await fetch('/api/chat-room?action=send',{
+      const isImg=f.type.startsWith('image/');
+      // ① Drive upload-url 세션 발급
+      const sessRes=await fetch('/api/drive-upload-url',{
         method:'POST',headers:{'Content-Type':'application/json'},
-        body:JSON.stringify({roomId:_cur.id,title:_cur.name,userId:myId,sender:myId,message:'',fileName:f.name,fileUrl:data,members:_cur.members||[myId]})
+        body:JSON.stringify({parentId:'appDataFolder_MemberChat',fileName:f.name,mimeType:f.type,fileSize:f.size})
       });
-    }catch(e){}
+      const sessData=await sessRes.json();
+      if(sessData.ok && sessData.uploadUrl){
+        // ② 실제 파일을 Drive에 직접 PUT
+        const upRes=await fetch(sessData.uploadUrl,{method:'PUT',headers:{'Content-Type':f.type,'Content-Length':String(f.size)},body:f});
+        const upJson=await upRes.json().catch(()=>({}));
+        const fileId=upJson.id||'';
+        // ③ webContentLink = 직접 다운로드 가능한 공개 URL
+        const fileUrl=fileId?('https://drive.google.com/uc?export=view&id='+fileId):'';
+        if(fileUrl){
+          await fetch('/api/chat-room?action=send',{
+            method:'POST',headers:{'Content-Type':'application/json'},
+            body:JSON.stringify({roomId:_cur.id,title:_cur.name,userId:myId,sender:myId,message:'',fileName:f.name,fileUrl:fileUrl,members:_cur.members||[myId]})
+          });
+          continue;
+        }
+      }
+      // fallback: 소용량 이미지는 base64 inline (300KB 미만만)
+      if(f.size < 300*1024){
+        const data=await readFileAsDataURL(f);
+        await fetch('/api/chat-room?action=send',{
+          method:'POST',headers:{'Content-Type':'application/json'},
+          body:JSON.stringify({roomId:_cur.id,title:_cur.name,userId:myId,sender:myId,message:'',fileName:f.name,fileUrl:data,members:_cur.members||[myId]})
+        });
+      } else {
+        // 대용량은 파일명만
+        await fetch('/api/chat-room?action=send',{
+          method:'POST',headers:{'Content-Type':'application/json'},
+          body:JSON.stringify({roomId:_cur.id,title:_cur.name,userId:myId,sender:myId,message:'📎 '+f.name+' ('+Math.round(f.size/1024)+'KB)',members:_cur.members||[myId]})
+        });
+      }
+    }catch(e){
+      // 에러 시 파일명만 전송
+      try{
+        await fetch('/api/chat-room?action=send',{
+          method:'POST',headers:{'Content-Type':'application/json'},
+          body:JSON.stringify({roomId:_cur.id,title:_cur.name,userId:myId,sender:myId,message:'📎 '+f.name,members:_cur.members||[myId]})
+        });
+      }catch(e2){}
+    }
   }
   _attachFiles=[];renderAttachPreview();
 
