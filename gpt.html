@@ -117,7 +117,50 @@ body.dark .np-content textarea{background:#0d1117;color:#e6edf3}
 var _isDark=document.body.classList.contains('dark');
 var _avatarBg=_isDark?'#e6edf3':'#1f2937';
 var _avatarColor=_isDark?'#0d1117':'#fff';
-$('who').innerHTML='<div style="display:flex;align-items:center;gap:10px;padding:10px 0 6px"><div id="userAvatar" style="width:36px;height:36px;border-radius:50%;background:'+_avatarBg+';color:'+_avatarColor+';display:flex;align-items:center;justify-content:center;font-weight:900;font-size:16px;flex-shrink:0">'+_ini+'</div><div style="min-width:0"><div style="font-weight:700;font-size:.88rem;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+(user.name||user.id)+'</div><div style="font-size:.72rem;color:#8b949e;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+(user.email||user.id)+'</div></div></div>';chats=read(K.chats,[]).filter(x=>x.userId===user.id);if(!chats.length)newChat();else{active=chats[0].id;render()}}function logout(){localStorage.removeItem(K.session);location.reload()}function newChat(){const c={id:'r_'+Date.now(),userId:user.id,title:'새 채팅',messages:[{role:'ai',text:'안녕하세요. Stella입니다. 무엇이든 물어보세요.'}]};chats.unshift(c);active=c.id;saveLocal();render()}function saveLocal(){write(K.chats,[...read(K.chats,[]).filter(x=>x.userId!==user.id),...chats])}function cur(){return chats.find(x=>x.id===active)}function render(){renderSide();const c=cur();$('title').textContent=c?.title||'새 채팅';$('msgs').innerHTML=(c?.messages||[]).map(m=>'<div class="row '+(m.role==='user'?'me':'ai')+'"><div class="bubble">'+md(m.text)+'</div></div>').join('');$('msgs').scrollTop=$('msgs').scrollHeight}function renderSide(){const q=($('q')?.value||'').toLowerCase();$('chatList').innerHTML=chats.filter(c=>(c.title+' '+c.messages.map(m=>m.text).join(' ')).toLowerCase().includes(q)).map(c=>'<button class="tree '+(c.id===active?'active':'')+'" onclick="active=\''+c.id+'\';render();closeSideMobile()">▱ '+esc(c.title)+'<br><span class="muted">'+c.messages.length+'개 메시지</span></button>').join('')||'<div class="muted">결과 없음</div>'}function keepSide(){/* 검색창 포커스 시 사이드바 유지 - 닫지 않음 */}function toggleSide(){$('side').classList.toggle('open')}function closeSideMobile(){if(innerWidth<=900)$('side').classList.remove('open')}async function send(){const text=$('input').value.trim();if(!text)return;const c=cur();c.messages.push({role:'user',text});if(c.title==='새 채팅')c.title=text.slice(0,30);$('input').value='';render();try{const d=await api('/api/chat',{model:$('model').value,message:text,history:c.messages.slice(-10).map(m=>({role:m.role==='ai'?'assistant':'user',content:m.text}))});c.messages.push({role:'ai',text:d.text||d.answer||d.message||'응답 없음'});try{await api('/api/hybrid-chat-save',{userId:user.id,roomId:c.id,title:c.title,messages:c.messages})}catch{}saveLocal();render()}catch(e){c.messages.push({role:'ai',text:'API 연결 오류: '+e.message});saveLocal();render()}}function esc(s){return String(s||'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]))}function md(s){const blocks=[];let raw=String(s||'');raw=raw.replace(/```(\w*)\n?([\s\S]*?)```/g,(m,lang,code)=>{const idx=blocks.length;blocks.push('<pre class="code"><button class="copyBtn" onclick="copyCode(this)">복사</button><code>'+esc(code.replace(/\n$/,''))+'</code></pre>');return '\u0000BLOCK'+idx+'\u0000'});let h=esc(raw);h=h.replace(/\[([^\]]+)\]\((https?:\/\/[^\s)]+)\)/g,'<a target="_blank" rel="noopener" href="$2">$1</a>');h=h.replace(/(https?:\/\/[^\s<]+)/g,'<a target="_blank" rel="noopener" href="$1">$1</a>');h=h.replace(/`([^`]+)`/g,'<code style="background:rgba(127,127,127,.2);padding:2px 5px;border-radius:5px">$1</code>');h=h.replace(/\n/g,'<br>');h=h.replace(/\u0000BLOCK(\d+)\u0000/g,(m,i)=>blocks[Number(i)]);return h}
+$('who').innerHTML='<div style="display:flex;align-items:center;gap:10px;padding:10px 0 6px"><div id="userAvatar" style="width:36px;height:36px;border-radius:50%;background:'+_avatarBg+';color:'+_avatarColor+';display:flex;align-items:center;justify-content:center;font-weight:900;font-size:16px;flex-shrink:0">'+_ini+'</div><div style="min-width:0"><div style="font-weight:700;font-size:.88rem;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+(user.name||user.id)+'</div><div style="font-size:.72rem;color:#8b949e;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+(user.email||user.id)+'</div></div></div>';
+  // 로컬 캐시 먼저 표시
+  chats=read(K.chats,[]).filter(x=>x.userId===user.id);
+  if(!chats.length){const tmp={id:'loading',userId:user.id,title:'불러오는 중...',messages:[]};chats=[tmp];active='loading';}
+  else{active=chats[0].id;}
+  render();
+  // Drive/서버에서 채팅 목록 로드
+  loadChatsFromServer();
+}
+async function loadChatsFromServer(){
+  try{
+    const r=await fetch('/api/hybrid-chat-list?userId='+encodeURIComponent(user.id),{cache:'no-store'});
+    const d=await r.json();
+    if(!d.ok||!Array.isArray(d.items)||!d.items.length){
+      // 서버 채팅 없으면 로컬 유지, 없으면 새 채팅
+      if(!chats.filter(x=>x.id!=='loading').length){chats=[];newChat();}
+      else{chats=chats.filter(x=>x.id!=='loading');active=chats[0].id;render();}
+      return;
+    }
+    // 서버 목록과 로컬 병합 (삭제 안 된 것만)
+    const localChats=read(K.chats,[]).filter(x=>x.userId===user.id&&x.id!=='loading');
+    const serverIds=new Set(d.items.map(x=>x.room_id));
+    // 서버에 있는 채팅을 로컬에서 찾아 메시지 유지, 없으면 서버 메타로 추가
+    const merged=d.items.map(function(item){
+      const local=localChats.find(x=>x.id===item.room_id);
+      if(local)return local;
+      return {id:item.room_id,userId:user.id,title:item.title||'채팅',messages:[{role:'ai',text:'☁️ 이전 대화를 불러오려면 클릭하세요.'}],driveFileId:item.drive_file_id,driveLink:item.drive_link};
+    });
+    // 로컬에만 있는 채팅 (아직 서버 미저장) 도 유지
+    const localOnly=localChats.filter(x=>!serverIds.has(x.id));
+    chats=[...merged,...localOnly];
+    if(!chats.length){newChat();return;}
+    active=chats[0].id;
+    saveLocal();render();
+  }catch(e){
+    // 실패 시 로컬 유지
+    chats=chats.filter(x=>x.id!=='loading');
+    if(!chats.length)newChat();
+    else{active=chats[0].id;render();}
+  }
+}
+// 더미 닫기 (원래 }는 openApp 닫는 것)
+function _unused_openapp_end(){function logout(){localStorage.removeItem(K.session);location.reload()}function newChat(){const c={id:'r_'+Date.now(),userId:user.id,title:'새 채팅',messages:[{role:'ai',text:'안녕하세요. Stella입니다. 무엇이든 물어보세요.'}]};chats.unshift(c);active=c.id;saveLocal();render()}function saveLocal(){write(K.chats,[...read(K.chats,[]).filter(x=>x.userId!==user.id),...chats])}function cur(){return chats.find(x=>x.id===active)}function render(){renderSide();const c=cur();$('title').textContent=c?.title||'새 채팅';$('msgs').innerHTML=(c?.messages||[]).map(m=>'<div class="row '+(m.role==='user'?'me':'ai')+'"><div class="bubble">'+md(m.text)+'</div></div>').join('');$('msgs').scrollTop=$('msgs').scrollHeight}function renderSide(){const q=($('q')?.value||'').toLowerCase();$('chatList').innerHTML=chats.filter(c=>(c.title+' '+c.messages.map(m=>m.text).join(' ')).toLowerCase().includes(q)).map(c=>'<div style="display:flex;align-items:center;gap:4px"><button class="tree '+(c.id===active?'active':'')+'" style="flex:1" onclick="active=\''+c.id+'\';render();closeSideMobile()">▱ '+esc(c.title)+'<br><span class="muted">'+c.messages.length+'개 메시지</span></button><button onclick="deleteChat(\''+c.id+'\'" style="border:0;background:none;color:#9ca3af;cursor:pointer;padding:6px;font-size:12px;border-radius:8px" title="삭제">✕</button></div>').join('')||'<div class="muted">결과 없음</div>'}
+function deleteChat(id){if(!confirm('이 채팅을 삭제하시겠습니까?'))return;chats=chats.filter(x=>x.id!==id);saveLocal();if(active===id){if(chats.length)active=chats[0].id;else newChat();}render();}function keepSide(){/* 검색창 포커스 시 사이드바 유지 - 닫지 않음 */}function toggleSide(){$('side').classList.toggle('open')}function closeSideMobile(){if(innerWidth<=900)$('side').classList.remove('open')}async function send(){const text=$('input').value.trim();if(!text)return;const c=cur();c.messages.push({role:'user',text});if(c.title==='새 채팅')c.title=text.slice(0,30);$('input').value='';render();try{const d=await api('/api/chat',{model:$('model').value,message:text,history:c.messages.slice(-10).map(m=>({role:m.role==='ai'?'assistant':'user',content:m.text}))});c.messages.push({role:'ai',text:d.text||d.answer||d.message||'응답 없음'});try{await api('/api/hybrid-chat-save',{userId:user.id,roomId:c.id,title:c.title,messages:c.messages})}catch{}saveLocal();render()}catch(e){c.messages.push({role:'ai',text:'API 연결 오류: '+e.message});saveLocal();render()}}function esc(s){return String(s||'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]))}function md(s){const blocks=[];let raw=String(s||'');raw=raw.replace(/```(\w*)\n?([\s\S]*?)```/g,(m,lang,code)=>{const idx=blocks.length;blocks.push('<pre class="code"><button class="copyBtn" onclick="copyCode(this)">복사</button><code>'+esc(code.replace(/\n$/,''))+'</code></pre>');return '\u0000BLOCK'+idx+'\u0000'});let h=esc(raw);h=h.replace(/\[([^\]]+)\]\((https?:\/\/[^\s)]+)\)/g,'<a target="_blank" rel="noopener" href="$2">$1</a>');h=h.replace(/(https?:\/\/[^\s<]+)/g,'<a target="_blank" rel="noopener" href="$1">$1</a>');h=h.replace(/`([^`]+)`/g,'<code style="background:rgba(127,127,127,.2);padding:2px 5px;border-radius:5px">$1</code>');h=h.replace(/\n/g,'<br>');h=h.replace(/\u0000BLOCK(\d+)\u0000/g,(m,i)=>blocks[Number(i)]);return h}
 function toggleTheme(){
   const d=document.body.classList.toggle('dark');
   localStorage.setItem('stella_theme',d?'dark':'light');
