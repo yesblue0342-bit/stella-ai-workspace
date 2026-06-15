@@ -63,6 +63,8 @@ body.theme-dark .chat-area::before{opacity:0.06}
 .room-last{font-size:.75rem;color:var(--text2);margin-top:2px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .room-meta{display:flex;flex-direction:column;align-items:flex-end;gap:3px;flex-shrink:0}
 .room-time{font-size:.7rem;color:var(--text2)}
+.unread-badge{background:#ff3b30;color:#fff;border-radius:11px;min-width:20px;height:20px;padding:0 6px;font-size:.7rem;font-weight:800;display:inline-flex;align-items:center;justify-content:center;margin-top:4px}
+.msg-read{font-size:.65rem;color:#ffd400;margin-right:3px}
 .room-badge{background:#ef4444;color:#fff;border-radius:10px;padding:1px 6px;font-size:.68rem;font-weight:700}
 .empty{padding:40px 20px;text-align:center;color:var(--text2);font-size:.85rem;line-height:1.8}
 
@@ -369,6 +371,10 @@ function setTheme(t){
   document.querySelectorAll('.theme-btn').forEach(b=>b.classList.remove('active'));
   const el=document.getElementById('theme'+t.charAt(0).toUpperCase()+t.slice(1));
   if(el)el.classList.add('active');
+  // 상태바 색상도 테마에 맞게 변경
+  const colors={kakao:'#7c3aed',dark:'#161b22',light:'#ffffff'};
+  const meta=document.querySelector('meta[name="theme-color"]');
+  if(meta)meta.setAttribute('content',colors[t]||'#161b22');
 }
 function applySettings(){
   const s=loadSettings();
@@ -465,10 +471,20 @@ function renderRooms(){
   const myChat=_rooms.find(function(r){return r.isMyChat;});
   const others=_rooms.filter(function(r){return !r.isMyChat;}).slice().reverse();
   const sorted=myChat?[myChat,...others]:others;
+  const myId=getMyId();
   el.innerHTML=sorted.map(function(r){
     const last=(r.messages||[]).filter(function(m){return m.type!=='system';}).slice(-1)[0];
     const isActive=_cur&&_cur.id===r.id;
     const avatar=r.isMyChat?'💛':'💬';
+    // 안읽은 메시지 카운트 (마지막 읽은 시각 이후 상대 메시지)
+    let unread=0;
+    if(!r.isMyChat&&!isActive){
+      const lastRead=r.lastReadAt||0;
+      unread=(r.messages||[]).filter(function(m){
+        return m.from!==myId && (m.at||0)>lastRead && m.type!=='system';
+      }).length;
+    }
+    const badge=unread>0?'<div class="unread-badge">'+(unread>99?'99+':unread)+'</div>':'';
     return '<div class="room-item'+(isActive?' active':'')+'" onclick="openRoom(\''+r.id+'\')">'+
       '<div class="room-avatar">'+avatar+'</div>'+
       '<div class="room-info">'+
@@ -477,6 +493,7 @@ function renderRooms(){
       '</div>'+
       '<div class="room-meta">'+
         '<div class="room-time">'+(last?fmtTime(last.at):'')+'</div>'+
+        badge+
       '</div>'+
       '</div>';
   }).join('');
@@ -664,6 +681,9 @@ function deleteRoom(){
 let _pollTimer=null;
 function openRoom(id){
   _cur=_rooms.find(r=>r.id===id);if(!_cur)return;
+  // 방 열면 읽음 처리 (현재 시각으로 lastReadAt 갱신)
+  const idx=_rooms.findIndex(r=>r.id===id);
+  if(idx>=0){_rooms[idx].lastReadAt=Date.now();_cur=_rooms[idx];saveRooms();}
   document.getElementById('noRoom').style.display='none';
   const cr=document.getElementById('chatRoom');cr.style.display='flex';
   document.getElementById('chatRoomName').textContent=(_cur.isMyChat?'💛 ':'')+_cur.name;
@@ -676,6 +696,7 @@ function openRoom(id){
   scrollBottom();
   // 서버에서 메시지 동기화 + 폴링 시작
   syncRoomFromServer(true);
+  reportRead(id);
   startPolling();
 }
 function startPolling(){
@@ -711,8 +732,14 @@ async function syncRoomFromServer(scrollAfter){
     // 서버 메시지로 교체 (서버가 진실의 원천)
     _rooms[idx].messages=serverMsgs;
     if(d.room&&d.room.members) _rooms[idx].members=d.room.members;
+    // 상대방 읽음 정보 저장 (카톡 "1" 표시용)
+    if(d.reads) _rooms[idx].reads=d.reads;
+    // 현재 방을 보고 있으므로 읽음 처리
+    _rooms[idx].lastReadAt=Date.now();
     _cur=_rooms[idx];
     saveRooms();
+    // 서버에 내가 읽었다고 보고
+    reportRead(_cur.id);
     if(serverMsgs.length!==prevCount){
       renderMessages();renderRooms();
       if(scrollAfter||serverMsgs.length>prevCount) scrollBottom();
@@ -725,6 +752,14 @@ async function syncRoomFromServer(scrollAfter){
         }
       }
     }
+  }catch(e){}
+}
+function reportRead(roomId){
+  const myId=getMyId();
+  if(!myId||myId==='나')return;
+  try{
+    fetch('/api/chat-room?action=read',{method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({roomId:roomId,userId:myId})}).catch(function(){});
   }catch(e){}
 }
 function notify(title,body){
@@ -741,6 +776,21 @@ function closeMobileRoom(){
 }
 
 // ── 메시지 렌더 ──
+// 이 메시지를 안 읽은 상대 수 계산 (카톡 "1")
+function countUnreadByOthers(m){
+  if(!_cur||_cur.isMyChat)return 0;
+  const myId=getMyId();
+  const members=(_cur.members||[]).filter(function(x){return x!==myId;});
+  if(!members.length)return 0;
+  const reads=_cur.reads||{};
+  let unread=0;
+  for(const mem of members){
+    const readAt=reads[mem]||0;
+    if((m.at||0)>readAt) unread++;
+  }
+  return unread;
+}
+
 function renderMessages(){
   const el=document.getElementById('chatMessages');
   const bgLayer=document.getElementById('chatBgLayer');
@@ -785,7 +835,19 @@ function renderMessages(){
     } else {
       const bub=document.createElement('div');bub.className='msg-bubble';bub.textContent=m.text||'';col.appendChild(bub);
     }
-    const tm=document.createElement('div');tm.className='msg-time';tm.textContent=fmtTime(m.at);col.appendChild(tm);
+    // 시간 + 읽음표시(카톡식 "1")
+    const tmWrap=document.createElement('div');tmWrap.style.cssText='display:flex;align-items:flex-end;gap:3px;flex-direction:'+(isMe?'row-reverse':'row');
+    const tm=document.createElement('div');tm.className='msg-time';tm.textContent=fmtTime(m.at);
+    tmWrap.appendChild(tm);
+    // 내 메시지이고, 상대가 아직 안 읽었으면 "1" 표시
+    if(isMe&&!_cur.isMyChat){
+      const unreadCount=countUnreadByOthers(m);
+      if(unreadCount>0){
+        const rd=document.createElement('div');rd.className='msg-read';rd.textContent=unreadCount>1?String(unreadCount):'1';
+        tmWrap.appendChild(rd);
+      }
+    }
+    col.appendChild(tmWrap);
     if(isMe){row.appendChild(col);row.appendChild(av);}
     else{row.appendChild(av);row.appendChild(col);}
     el.appendChild(row);
