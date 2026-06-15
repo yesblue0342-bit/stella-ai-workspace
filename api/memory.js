@@ -5,7 +5,7 @@ const MEMORY_FOLDER = ["memory"];
 
 export default async function handler(req, res) {
   const action = String(req.query.action || req.body?.action || "get").trim();
-  const userId = String(req.query.userId || req.body?.userId || "kh").trim();
+  const userId = String(req.query.userId || req.body?.userId || "anonymous").trim();
 
   try {
     // ── 메모리 조회 ──
