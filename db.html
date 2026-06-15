@@ -147,7 +147,7 @@ function saveSession(u){localStorage.setItem(SK,JSON.stringify({id:u.id,user:u,s
 function esc(s){return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');}
 function fmtDate(d){if(!d)return'';const dt=new Date(d);return dt.toLocaleDateString('ko-KR')+' '+dt.toLocaleTimeString('ko-KR',{hour:'2-digit',minute:'2-digit'});}
 function fmtSize(s){if(!s)return'';const n=Number(s);if(n<1024)return n+'B';if(n<1048576)return(n/1024).toFixed(1)+'KB';return(n/1048576).toFixed(1)+'MB';}
-function getIcon(f){if(f.isFolder)return'📁';const n=String(f.name||'');if(n.endsWith('.json'))return'📋';if(n.endsWith('.html'))return'🌐';if(n.endsWith('.js'))return'⚡';if(n.endsWith('.pdf'))return'📄';if(/\.(png|jpg|jpeg|gif|webp)$/.test(n))return'🖼';if(/\.(xlsx|csv|xls)$/.test(n))return'📊';if(/\.(mp4|mov|avi)$/.test(n))return'🎬';if(/\.(zip|tar|gz)$/.test(n))return'📦';return'📃';}
+function getIcon(f){if(f.isFolder)return'📁';const n=String(f.name||'');if(n.endsWith('.json'))return'📋';if(n.endsWith('.html'))return'🌐';if(n.endsWith('.js'))return'⚡';if(n.endsWith('.pdf'))return'📄';if(/\.(png|jpg|jpeg|gif|webp)$/.test(n))return'🖼';if(/\.(xlsx|csv|xls)$/.test(n))return'📊';if(/\.(mp4|mov|avi)$/.test(n))return'🎬';if(/\.zip$/.test(n))return'🗜️';if(/\.(tar|gz|7z|rar)$/.test(n))return'📦';return'📃';}
 function status(t){document.getElementById('statusBar').textContent=t;}
 function sleep(ms){return new Promise(r=>setTimeout(r,ms));}
 
@@ -287,7 +287,8 @@ function renderFiles(){
       +'<div class="file-meta">'+fmtDate(f.modifiedTime)+(f.size?' · '+fmtSize(f.size):'')+'</div>'
       +'</div>'
       +'<div class="file-acts">'
-      +'<button class="act" onclick="event.stopPropagation();renameItem(\''+esc(f.id)+'\',\''+esc(f.name)+'\')">✏️</button>'
+      +(String(f.name||'').endsWith('.zip')?'<button class="act" onclick="event.stopPropagation();unzipItem(\''+esc(f.id)+'\',\''+esc(f.name)+'\')" title="압축 풀기">🗜️ 풀기</button>':'')+
+      '<button class="act" onclick="event.stopPropagation();renameItem(\''+esc(f.id)+'\',\''+esc(f.name)+'\')">✏️</button>'
       +'<button class="act del" onclick="event.stopPropagation();deleteItem(\''+esc(f.id)+'\',\''+esc(f.name)+'\')">🗑</button>'
       +'</div>'
       +'</div>';
@@ -314,6 +315,37 @@ function updateSelBar(){
   const bar=document.getElementById('selBar');
   document.getElementById('selCount').textContent=_sel.size+'개 선택';
   bar.classList.toggle('show',_sel.size>0);
+}
+
+// ── 압축 풀기 ──
+async function unzipItem(fileId, name){
+  if(!_curId){alert('폴더 안에서 실행하세요.');return;}
+  if(!confirm('"'+name+'" 압축을 현재 폴더에 풀겠습니까?'))return;
+  status('🗜️ 압축 해제 중... 잠시 기다려주세요');
+  const ov=document.getElementById('upoverlay'),pr=document.getElementById('upProgress');
+  ov.classList.add('on');
+  pr.textContent='ZIP 파일 다운로드 및 압축 해제 중...';
+  try{
+    const r=await fetch('/api/drive-manage?action=unzip',{
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({fileId, parentId:_curId})
+    });
+    const d=await r.json();
+    ov.classList.remove('on');
+    if(d.ok){
+      const errMsg=d.errors&&d.errors.length?' (오류 '+d.errors.length+'개)':'';
+      status('✅ 압축 해제 완료: '+d.uploaded+'/'+(d.total||d.uploaded)+'개 파일'+errMsg);
+      refresh();
+    } else {
+      status('❌ 압축 해제 실패: '+(d.error||d.message));
+      alert('압축 해제 실패: '+(d.error||d.message));
+    }
+  }catch(e){
+    ov.classList.remove('on');
+    status('❌ 오류: '+e.message);
+    alert('오류: '+e.message);
+  }
 }
 
 // ── 삭제 ──
