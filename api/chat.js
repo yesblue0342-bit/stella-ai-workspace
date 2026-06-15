@@ -1,5 +1,5 @@
 import { detectSmartIntent, getSmartContextForMessage } from "../lib/place-weather-utils.js";
-import { saveJsonToDrive, readJsonFromDrive, buildDriveContextForChat } from "../lib/drive-utils.js";
+import { saveJsonToDrive, readJsonFromDrive, listJsonFromDrive, buildDriveContextForChat } from "../lib/drive-utils.js";
 
 // 이미지 base64 전송을 위해 body 크기 제한 상향
 export const config = {
@@ -433,17 +433,65 @@ async function prepareSearchContext(message) {
 const MEMORY_FOLDER = ["memory"];
 const MAX_MEMORY_ITEMS = 50; // 항목별 최대 개수
 
-// 메모리 로드
+// 메모리 로드 (기본 파일 + 폴더 내 추가 파일 모두 합치기)
+// memory/ 폴더에 chatgpt_history.json, claude_memory.json 등 추가 파일을 넣으면 자동으로 합쳐짐
 async function loadMemory(userId) {
+  const base = { userId, facts: [], patterns: [], preferences: [], context: [], updatedAt: null };
+
+  // 1) 기본 메모리 파일 로드
   try {
     const data = await readJsonFromDrive({
       folderPath: MEMORY_FOLDER,
       fileName: `${userId}_memory`
     });
-    return data || { userId, facts: [], patterns: [], preferences: [], context: [], updatedAt: null };
-  } catch { 
-    return { userId, facts: [], patterns: [], preferences: [], context: [], updatedAt: null };
-  }
+    if (data) {
+      base.facts = Array.isArray(data.facts) ? data.facts : [];
+      base.patterns = Array.isArray(data.patterns) ? data.patterns : [];
+      base.preferences = Array.isArray(data.preferences) ? data.preferences : [];
+      base.context = Array.isArray(data.context) ? data.context : [];
+      base.updatedAt = data.updatedAt || null;
+    }
+  } catch(e) {}
+
+  // 2) 폴더 내 추가 파일들 스캔 (ChatGPT/Claude 히스토리 등)
+  // 파일명이 {userId}_memory.json 이 아닌 .json 파일 모두 읽어서 합침
+  try {
+    const files = await listJsonFromDrive({ folderPath: MEMORY_FOLDER, pageSize: 50 });
+    for (const f of files) {
+      const fname = f.name.replace(/\.json$/i, "");
+      // 기본 파일은 이미 읽었으므로 스킵
+      if (fname === `${userId}_memory`) continue;
+      try {
+        const ext = await readJsonFromDrive({ folderPath: MEMORY_FOLDER, fileName: fname });
+        if (!ext || !ext.data) continue;
+        const d = ext.data;
+        // 형식 1: {facts:[], patterns:[], preferences:[], context:[]} - 표준 형식
+        if (Array.isArray(d.facts))       base.facts       = [...base.facts,       ...d.facts];
+        if (Array.isArray(d.patterns))    base.patterns    = [...base.patterns,    ...d.patterns];
+        if (Array.isArray(d.preferences)) base.preferences = [...base.preferences, ...d.preferences];
+        if (Array.isArray(d.context))     base.context     = [...base.context,     ...d.context];
+        // 형식 2: {memories: [...]} - ChatGPT 메모리 export 형식
+        if (Array.isArray(d.memories)) {
+          base.facts = [...base.facts, ...d.memories.map(m => typeof m === "string" ? m : (m.memory || m.text || JSON.stringify(m)))];
+        }
+        // 형식 3: {items: [...]} or {entries: [...]} - 기타 형식
+        if (Array.isArray(d.items))   base.facts = [...base.facts,   ...d.items.map(m => typeof m === "string" ? m : JSON.stringify(m))];
+        if (Array.isArray(d.entries)) base.facts = [...base.facts, ...d.entries.map(m => typeof m === "string" ? m : JSON.stringify(m))];
+        // 형식 4: 단순 문자열 배열
+        if (Array.isArray(d) && d.every(x => typeof x === "string")) base.facts = [...base.facts, ...d];
+        console.log(`[Memory] 추가 파일 로드: ${fname}`);
+      } catch(e2) {}
+    }
+  } catch(e) {}
+
+  // 중복 제거 + MAX 적용
+  const dedup = arr => [...new Set(arr.filter(Boolean))].slice(-MAX_MEMORY_ITEMS);
+  base.facts       = dedup(base.facts);
+  base.patterns    = dedup(base.patterns);
+  base.preferences = dedup(base.preferences);
+  base.context     = dedup(base.context);
+
+  return base;
 }
 
 // 메모리 저장
