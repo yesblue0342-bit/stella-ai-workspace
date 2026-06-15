@@ -276,23 +276,62 @@ function renderFiles(){
     return String(a.name||'').localeCompare(String(b.name||''));
   });
   const el=document.getElementById('fileList');
+  el.innerHTML='';
   if(!list.length){el.innerHTML='<div class="empty">📭 항목이 없습니다.</div>';return;}
-  el.innerHTML=list.map(function(f){
-    const checked=_sel.has(f.id)?'checked':'';
-    return '<div class="file-row'+(checked?' sel':'')+'" id="row_'+esc(f.id)+'">'
-      +'<input type="checkbox" class="file-chk" data-id="'+esc(f.id)+'" '+checked+' onclick="event.stopPropagation();toggleSel(\''+esc(f.id)+'\')">'
-      +'<div class="file-icon" onclick="openItem(\''+esc(f.id)+'\',\''+esc(f.name)+'\','+!!f.isFolder+')">'+getIcon(f)+'</div>'
-      +'<div class="file-info" onclick="openItem(\''+esc(f.id)+'\',\''+esc(f.name)+'\','+!!f.isFolder+')">'
-      +'<div class="file-name">'+esc(f.name||'(이름없음)')+'</div>'
-      +'<div class="file-meta">'+fmtDate(f.modifiedTime)+(f.size?' · '+fmtSize(f.size):'')+'</div>'
-      +'</div>'
-      +'<div class="file-acts">'
-      +(String(f.name||'').endsWith('.zip')?'<button class="act" onclick="event.stopPropagation();unzipItem(\''+esc(f.id)+'\',\''+esc(f.name)+'\')" title="압축 풀기">🗜️ 풀기</button>':'')+
-      '<button class="act" onclick="event.stopPropagation();renameItem(\''+esc(f.id)+'\',\''+esc(f.name)+'\')">✏️</button>'
-      +'<button class="act del" onclick="event.stopPropagation();deleteItem(\''+esc(f.id)+'\',\''+esc(f.name)+'\')">🗑</button>'
-      +'</div>'
-      +'</div>';
-  }).join('');
+  list.forEach(function(f){
+    const row=document.createElement('div');
+    row.className='file-row'+(_sel.has(f.id)?' sel':'');
+    row.id='row_'+f.id;
+
+    // 체크박스
+    const chk=document.createElement('input');
+    chk.type='checkbox';chk.className='file-chk';
+    chk.checked=_sel.has(f.id);
+    chk.onclick=function(e){e.stopPropagation();toggleSel(f.id);};
+    row.appendChild(chk);
+
+    // 아이콘
+    const icon=document.createElement('div');
+    icon.className='file-icon';icon.textContent=getIcon(f);
+    icon.onclick=function(){openItem(f.id,f.name,f.isFolder);};
+    row.appendChild(icon);
+
+    // 파일 정보
+    const info=document.createElement('div');
+    info.className='file-info';
+    info.onclick=function(){openItem(f.id,f.name,f.isFolder);};
+    const nm=document.createElement('div');nm.className='file-name';nm.textContent=f.name||'(이름없음)';
+    const mt=document.createElement('div');mt.className='file-meta';
+    mt.textContent=fmtDate(f.modifiedTime)+(f.size?' · '+fmtSize(f.size):'');
+    info.appendChild(nm);info.appendChild(mt);
+    row.appendChild(info);
+
+    // 액션 버튼
+    const acts=document.createElement('div');acts.className='file-acts';
+
+    // ZIP 압축풀기 버튼
+    if(String(f.name||'').toLowerCase().endsWith('.zip')){
+      const uzBtn=document.createElement('button');
+      uzBtn.className='act';uzBtn.textContent='🗜️ 풀기';uzBtn.title='압축 풀기';
+      uzBtn.onclick=function(e){e.stopPropagation();unzipItem(f.id,f.name);};
+      acts.appendChild(uzBtn);
+    }
+
+    // 이름 변경 버튼
+    const rnBtn=document.createElement('button');
+    rnBtn.className='act';rnBtn.textContent='✏️';
+    rnBtn.onclick=function(e){e.stopPropagation();renameItem(f.id,f.name);};
+    acts.appendChild(rnBtn);
+
+    // 삭제 버튼
+    const delBtn=document.createElement('button');
+    delBtn.className='act del';delBtn.textContent='🗑';
+    delBtn.onclick=function(e){e.stopPropagation();deleteItem(f.id,f.name);};
+    acts.appendChild(delBtn);
+
+    row.appendChild(acts);
+    el.appendChild(row);
+  });
 }
 
 function openItem(id,name,isFolder){
