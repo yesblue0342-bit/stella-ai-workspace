@@ -175,7 +175,8 @@ function deleteChat(id){if(!confirm('이 채팅을 삭제하시겠습니까?'))r
 let _attachedImages=[], _attachedFiles=[];
 function handleAttach(files){
   for(const f of Array.from(files)){
-    const isImg=f.type.startsWith('image/');
+    // type이 없을 때를 대비해 확장자도 체크
+    const isImg=f.type.startsWith('image/')||/\.(png|jpg|jpeg|gif|webp|bmp|svg)$/i.test(f.name);
     const reader=new FileReader();
     reader.onload=function(e){
       const data=e.target.result;
@@ -205,14 +206,18 @@ function renderAttachPreview(){
 // 클립보드 이미지 붙여넣기
 function handlePaste(e){
   const items=Array.from((e.clipboardData||e.originalEvent?.clipboardData)?.items||[]);
+  // 이미지 아이템 찾기 (type으로 먼저, 없으면 kind=file 전체)
   const imgItem=items.find(x=>x.type.startsWith('image/'));
-  if(!imgItem)return;
+  if(!imgItem){
+    // 이미지 없으면 기본 붙여넣기 허용
+    return;
+  }
   e.preventDefault();
   const file=imgItem.getAsFile();
   if(!file)return;
   const reader=new FileReader();
   reader.onload=function(ev){
-    _attachedImages.push({name:'capture-'+Date.now()+'.png',data:ev.target.result});
+    _attachedImages.push({name:'paste-'+Date.now()+'.png',data:ev.target.result});
     renderAttachPreview();
   };
   reader.readAsDataURL(file);
