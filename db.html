@@ -106,33 +106,7 @@ body{font-family:system-ui,'Noto Sans KR',sans-serif;background:var(--bg);color:
 <p>관리자 계정으로 로그인하세요</p>
 <input id="gId" placeholder="아이디" autocomplete="username" onkeydown="if(event.key==='Enter')dbLogin()">
 <input id="gPw" type="password" placeholder="비밀번호" autocomplete="current-password" onkeydown="if(event.key==='Enter')dbLogin()">
-<label style="display:flex;align-items:center;gap:7px;margin:6px 0 2px;font-size:.82rem;color:var(--text2);cursor:pointer">
-  <input type="checkbox" id="gRemember" checked style="accent-color:var(--primary);width:16px;height:16px"> 아이디 기억하기
-</label>
-<button class="gate-btn pri" onclick="(function(){
-  var id=document.getElementById('gId').value.trim();
-  var pw=document.getElementById('gPw').value;
-  var err=document.getElementById('gErr');
-  if(!id||!pw){if(err)err.textContent='아이디와 비밀번호를 입력하세요.';return;}
-  if(err)err.textContent='접속 중...';
-  var remEl=document.getElementById('gRemember');
-  if(remEl&&remEl.checked)localStorage.setItem('stella_db_remember_id',id);
-  if((id==='admin'&&pw==='admin')||(( id==='yesblue0342'||id==='김경훈'||id==='이후')&&pw==='!kh2080312')){
-    var u={id:id,name:id==='admin'?'관리자':id,email:id+'@stella.local',role:'admin'};
-    localStorage.setItem('stella_db_session_v1',JSON.stringify({id:u.id,user:u,savedAt:Date.now()}));
-    var gate=document.getElementById('gate');
-    var app=document.getElementById('appWrap');
-    var ul=document.getElementById('userLabel');
-    if(gate)gate.style.display='none';
-    if(app)app.style.display='flex';
-    if(ul)ul.textContent='관리자: '+u.name;
-    _user=u;
-    try{applyTheme();}catch(e){}
-    loadFolder('','내 드라이브');
-    return;
-  }
-  if(typeof dbLogin==='function'){dbLogin();}else{if(err)err.textContent='오류: 로그인 함수 로드 실패. 새로고침 해주세요.';}
-})()">접속</button>
+<button class="gate-btn pri" onclick="dbLogin()">접속</button>
 <button class="gate-btn" onclick="location.href='/'">Stella GPT로 돌아가기</button>
 <div class="err" id="gErr"></div>
 </div>
@@ -170,7 +144,6 @@ body{font-family:system-ui,'Noto Sans KR',sans-serif;background:var(--bg);color:
 <input class="filter-in" id="filterIn" placeholder="파일/폴더 필터..." oninput="renderFiles()">
 <button class="btn" onclick="mkdirPrompt()">📁＋ 폴더</button>
 <button class="btn upload-btn" onclick="document.getElementById('fileUploadIn').click()">⬆ 업로드</button>
-<button class="btn" onclick="runDiag()" title="연결 진단">🔍</button>
 <input type="file" id="fileUploadIn" multiple hidden onchange="uploadFiles(this.files)">
 </div>
 <div class="status" id="statusBar">로딩 중...</div>
@@ -196,46 +169,15 @@ body{font-family:system-ui,'Noto Sans KR',sans-serif;background:var(--bg);color:
 </div>
 </div>
 
-<!-- ── 진단 모달 ── -->
-<div id="diagModal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.7);z-index:9000;align-items:center;justify-content:center;padding:16px">
-<div style="background:var(--bg2);border:1px solid var(--border);border-radius:16px;width:min(520px,100%);max-height:80vh;overflow-y:auto;padding:20px">
-<div style="display:flex;align-items:center;gap:8px;margin-bottom:14px">
-<span style="font-size:1.1rem;font-weight:900;color:var(--text)">🔍 Drive 연결 진단</span>
-<button onclick="document.getElementById('diagModal').style.display='none'" style="margin-left:auto;background:var(--bg3);border:1px solid var(--border);border-radius:8px;padding:4px 10px;cursor:pointer;color:var(--text);font-size:.8rem">닫기</button>
-</div>
-<div id="diagContent" style="font-size:.82rem;color:var(--text);line-height:2"></div>
-<div style="margin-top:14px;display:flex;gap:8px;flex-wrap:wrap">
-<button onclick="retryLoad()" style="flex:1;padding:9px;border-radius:10px;cursor:pointer;font-weight:800;background:#1f6feb;color:#fff;border:none;font-size:.85rem">↻ 다시 로드</button>
-<button onclick="document.getElementById('diagModal').style.display='none'" style="flex:1;padding:9px;border-radius:10px;cursor:pointer;font-weight:800;background:var(--bg3);color:var(--text);border:1px solid var(--border);font-size:.85rem">닫기</button>
-</div>
-</div>
-</div>
-
 <script>
-const SK='stella_db_session_v1';
-const SK_REMEMBER='stella_db_remember_id';
-const SESSION_TTL=8*60*60*1000; // 8시간
+const SK='stella_session_final_v82';
 const ADMINS=['admin','admin@stella.local','yesblue0342','yesblue0342@naver.com','yesblue0342@gmail.com','김경훈','이후'];
 let _user=null,_stack=[],_files=[],_curId='',_sel=new Set(),_theme='dark';
 
 // ── 유틸 ──
 function isAdmin(u){if(!u)return false;const id=String(u.id||'').toLowerCase(),em=String(u.email||'').toLowerCase();return ADMINS.some(a=>a.toLowerCase()===id||a.toLowerCase()===em)||id==='admin'||String(u.role)==='admin';}
-function getSession(){
-  try{
-    const s=JSON.parse(localStorage.getItem(SK)||'null');
-    if(!s||!s.user) return null;
-    // 세션 만료 체크 (savedAt가 -1이면 무제한, 아니면 TTL 체크)
-    if(s.savedAt!==-1 && s.savedAt>0){
-      if(Date.now()-s.savedAt>SESSION_TTL){
-        localStorage.removeItem(SK);
-        return null;
-      }
-    }
-    return s.user;
-  }catch(e){}
-  return null;
-}
-function saveSession(u){localStorage.setItem(SK,JSON.stringify({id:u.id,user:u,savedAt:Date.now()}));}
+function getSession(){try{const s=JSON.parse(localStorage.getItem(SK)||'null');if(s&&s.user)return s.user;}catch(e){}return null;}
+function saveSession(u){localStorage.setItem(SK,JSON.stringify({id:u.id,user:u,savedAt:-1}));}
 function esc(s){return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');}
 function fmtDate(d){if(!d)return'';const dt=new Date(d);return dt.toLocaleDateString('ko-KR')+' '+dt.toLocaleTimeString('ko-KR',{hour:'2-digit',minute:'2-digit'});}
 function fmtSize(s){if(!s)return'';const n=Number(s);if(n<1024)return n+'B';if(n<1048576)return(n/1024).toFixed(1)+'KB';return(n/1048576).toFixed(1)+'MB';}
@@ -259,18 +201,10 @@ function applyTheme(){
 
 // ── 로그인 ──
 async function dbLogin(){
-  const idEl=document.getElementById('gId');
-  const pwEl=document.getElementById('gPw');
+  const id=document.getElementById('gId').value.trim(),pw=document.getElementById('gPw').value;
   const err=document.getElementById('gErr');
-  const id=(idEl?idEl.value:'').trim();
-  const pw=pwEl?pwEl.value:'';
-  if(!id||!pw){if(err)err.textContent='아이디와 비밀번호를 입력하세요.';return;}
-  if(err)err.textContent='접속 중...';
-  // 아이디 기억하기
-  const remEl=document.getElementById('gRemember');
-  if(remEl&&remEl.checked) localStorage.setItem(SK_REMEMBER,id);
-  else localStorage.removeItem(SK_REMEMBER);
-  // ★ 관리자 화이트리스트 즉시 통과
+  if(!id||!pw){err.textContent='아이디와 비밀번호를 입력하세요.';return;}
+  err.textContent='접속 중...';
   if(id==='admin'&&pw==='admin'){
     const u={id:'admin',name:'관리자',email:'admin@stella.local',role:'admin'};
     saveSession(u);enterApp(u);return;
@@ -279,135 +213,46 @@ async function dbLogin(){
     const u={id:id,name:id,email:id+'@stella.local',role:'admin'};
     saveSession(u);enterApp(u);return;
   }
-  // API 로그인 시도
   try{
     const r=await fetch('/api/auth/login',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({id,password:pw})});
-    let d=null;
-    try{d=await r.json();}catch(e){if(err)err.textContent='서버 응답 오류('+r.status+')';return;}
-    if(!r.ok||!d||d.ok===false){if(err)err.textContent=d?.message||'로그인 실패('+r.status+')';return;}
-    if(!isAdmin(d.user)){if(err)err.textContent='DB 열람 권한이 없습니다.';return;}
+    const d=await r.json();
+    if(!r.ok||d.ok===false){err.textContent=d.message||'로그인 실패';return;}
+    if(!isAdmin(d.user)){err.textContent='DB 열람 권한이 없습니다.';return;}
     saveSession(d.user);enterApp(d.user);
-  }catch(e){if(err)err.textContent='오류: '+e.message;}
+  }catch(e){err.textContent=e.message;}
 }
-
 function enterApp(u){
   _user=u;
-  var gate=document.getElementById('gate');
-  var app=document.getElementById('appWrap');
-  var ul=document.getElementById('userLabel');
-  if(gate) gate.style.display='none';
-  if(app) app.style.display='flex';
-  if(ul) ul.textContent='관리자: '+(u.name||u.id);
-  try{applyTheme();}catch(e){}
-  status('Drive 연결 중...');
-  // 비동기로 실행 — UI 블로킹 방지
-  setTimeout(function(){ loadFolder('','내 드라이브'); }, 0);
+  document.getElementById('gate').style.display='none';
+  const aw=document.getElementById('appWrap');aw.style.display='flex';
+  document.getElementById('userLabel').textContent='관리자: '+(u.name||u.id);
+  applyTheme();
+  // 루트(내 드라이브)부터 시작
+  loadFolder('','내 드라이브');
 }
-
 function dbLogout(){localStorage.removeItem(SK);location.reload();}
 
 // ── 폴더 탐색 ──
-async function fetchWithTimeout(url,options,ms){
-  ms=ms||12000;options=options||{};
-  const ctrl=new AbortController();
-  const tid=setTimeout(function(){ctrl.abort();},ms);
-  try{return await fetch(url,Object.assign({},options,{signal:ctrl.signal}));}finally{clearTimeout(tid);}
-}
-
 async function loadFolder(folderId,name){
   status('로딩 중...');
   document.getElementById('fileList').innerHTML='';
   clearSel();
   _curId=folderId||'';
-  var lastErr=null;
   try{
-    var url='/api/drive-list'+(folderId?'?folderId='+encodeURIComponent(folderId):'');
-    var r=await fetchWithTimeout(url,{cache:'no-store'},8000);
-    var d=await r.json();
-    if(d.ok){
-      _files=Array.isArray(d.files)?d.files:[];
-      var cid=folderId||'ROOT';
-      if(!_stack.length||_stack[_stack.length-1].id!==cid){
-        _stack.push({id:cid,name:name||folderId||'내 드라이브'});
-      }
-      renderBreadcrumb();renderFiles();
-      status('📁 '+(_stack[_stack.length-1]?.name||'내 드라이브')+' — '+_files.length+'개 항목');
-      return;
-    }
-    lastErr=(d.error||d.message||'Drive 응답 오류');
-  }catch(e){
-    lastErr=(e.name==='AbortError'?'응답 없음 (8초 초과)':e.message);
-  }
-  status('❌ 로딩 실패: '+lastErr);
-  // 자동 진단 팝업
-  runDiag();
-}
-
-// ── Drive 진단 ──
-function retryLoad(){
-  document.getElementById('diagModal').style.display='none';
-  _stack=[];
-  loadFolder('','내 드라이브');
-}
-
-async function runDiag(){
-  const modal=document.getElementById('diagModal');
-  const content=document.getElementById('diagContent');
-  if(!modal||!content)return;
-  modal.style.display='flex';
-  content.innerHTML='<div style="color:var(--text2)">진단 중...</div>';
-  status('🔍 진단 중...');
-  try{
-    // 1) 환경변수 진단
-    const r=await fetchWithTimeout('/api/drive-diagnostics',{cache:'no-store'},8000);
+    // folderId 없으면 루트, 있으면 해당 폴더
+    const url='/api/drive-list'+(folderId?'?folderId='+encodeURIComponent(folderId):'');
+    const r=await fetch(url,{cache:'no-store'});
     const d=await r.json();
-    const diag=d.diagnostics||{};
-    const checks=diag.checks||{};
-    const rows=[
-      {label:'GOOGLE_CLIENT_ID',ok:diag.clientId?.configured,detail:diag.clientId?.configured?diag.clientId.prefix+'…':'미설정'},
-      {label:'GOOGLE_CLIENT_SECRET',ok:diag.clientSecret?.configured,detail:diag.clientSecret?.configured?'설정됨':'미설정'},
-      {label:'GOOGLE_REFRESH_TOKEN',ok:diag.refreshToken?.configured,detail:diag.refreshToken?.configured?diag.refreshToken.prefix+'…':'미설정'},
-      {label:'DRIVE_FOLDER_ID',ok:diag.rootFolderId?.configured,detail:diag.rootFolderId?.configured?'설정됨':'미설정'},
-      {label:'clientId 형식',ok:checks.clientIdLooksOAuth,detail:checks.clientIdLooksOAuth?'정상':'⚠️ googleapis.com 형식 아님'},
-      {label:'refreshToken 형식',ok:checks.refreshTokenLooksGoogle,detail:checks.refreshTokenLooksGoogle?'정상':'⚠️ 1// 로 시작해야 함'},
-    ];
-    let html=rows.map(function(row){
-      return '<div style="display:flex;gap:8px;align-items:center;padding:5px 0;border-bottom:1px solid var(--border)">'
-        +'<span style="width:20px;text-align:center">'+(row.ok?'✅':'❌')+'</span>'
-        +'<span style="flex:1;font-weight:700">'+row.label+'</span>'
-        +'<span style="color:var(--text2)">'+row.detail+'</span></div>';
-    }).join('');
-
-    // 2) drive-list 실제 호출
-    html+='<div style="margin-top:12px;font-weight:900;color:var(--text)">📡 Drive API 실제 호출 결과</div>';
-    try{
-      const r2=await fetchWithTimeout('/api/drive-list',{cache:'no-store'},12000);
-      const d2=await r2.json();
-      if(d2.ok){
-        html+='<div style="color:#22c55e;padding:6px 0">✅ 성공 — '+( d2.files?.length||0)+'개 항목</div>';
-        status('✅ Drive 연결 정상');
-        content.innerHTML=html;
-        // 성공이면 자동 로드
-        setTimeout(function(){
-          document.getElementById('diagModal').style.display='none';
-          _stack=[];loadFolder('','내 드라이브');
-        },1500);
-        return;
-      } else {
-        html+='<div style="color:#ef4444;padding:6px 0">❌ API 오류: '+(d2.error||d2.message||'알 수 없음')+'</div>';
-        status('❌ Drive API 오류: '+(d2.error||d2.message||''));
-      }
-    }catch(e2){
-      const msg=e2.name==='AbortError'?'응답 없음 (12초 타임아웃)':e2.message;
-      html+='<div style="color:#ef4444;padding:6px 0">❌ 네트워크 오류: '+msg+'</div>';
-      status('❌ Drive 연결 실패: '+msg);
+    if(!d.ok){status('오류: '+(d.message||'로드 실패'));return;}
+    _files=Array.isArray(d.files)?d.files:[];
+    const cid=folderId||'ROOT';
+    // 스택: 같은 위치면 중복 추가 안 함
+    if(!_stack.length||_stack[_stack.length-1].id!==cid){
+      _stack.push({id:cid,name:name||folderId||'내 드라이브'});
     }
-    content.innerHTML=html;
-  }catch(e){
-    const msg='진단 API 호출 실패: '+e.message;
-    content.innerHTML='<div style="color:#ef4444">❌ '+msg+'</div>';
-    status('❌ '+msg);
-  }
+    renderBreadcrumb();renderFiles();
+    status('📁 '+(_stack[_stack.length-1]?.name||'내 드라이브')+' — '+_files.length+'개 항목');
+  }catch(e){status('오류: '+e.message);}
 }
 
 // ── 브레드크럼 + 경로복사 ──
@@ -995,13 +840,6 @@ async function pickerConfirm(){
 })();
 
 window.onload=function(){
-  // 기억된 아이디 자동 입력
-  const rememberedId=localStorage.getItem(SK_REMEMBER);
-  if(rememberedId){
-    const gId=document.getElementById('gId');
-    if(gId) gId.value=rememberedId;
-  }
-  // 세션 확인
   const u=getSession();
   if(u&&isAdmin(u)){enterApp(u);}
 };
