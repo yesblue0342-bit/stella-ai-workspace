@@ -251,12 +251,9 @@ async function handleWeather(message) {
       `| ☀️ UV 지수 | ${uv} | ${uvDesc} |`,
       ``,
       `${mapLink}`
-    ].join("
-");
+    ].join("\n");
   } catch(e) {
-    return `**${resolvedName} 날씨** API 일시 오류
-
-[네이버 날씨](https://search.naver.com/search.naver?query=${encodeURIComponent(resolvedName+" 날씨")})`;
+    return `**${resolvedName} 날씨** API 일시 오류\n\n[네이버 날씨](https://search.naver.com/search.naver?query=${encodeURIComponent(resolvedName+" 날씨")})`;
   }
 }
 
