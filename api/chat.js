@@ -321,32 +321,52 @@ export default async function handler(req, res) {
       }
     }
 
-    // ③ 일반 AI 처리 (모델 완전 분리 - 중복 과금 방지)
-    const searchContext = await prepareSearchContext(message);
+    // ③ 일반 AI 처리 - 키워드 기반 조건부 실행 (속도 최적화)
+    const msg = message.toLowerCase();
 
-    // Google Drive 경로가 들어오면 실제 folderId/fileId 기준으로 파일 내용 읽기
+    // [웹검색/날씨] 키워드가 있을 때만 실행
+    const needsSearch  = /구글|검색|최신|뉴스|오늘|지금|현재|실시간/.test(msg);
+    const needsWeather = /날씨|기온|우산|비|눈|더위|추위|forecast|weather/.test(msg);
+    const needsDrive   = /내 드라이브|my drive|#폴더|드라이브|drive/.test(msg)
+                      || /내 드라이브/.test(message); // 원문 대소문자 유지
+    const needsSapSearch = /sap|qa32|qm|pp|abap|inspection|bom|migo|mb51|검사|품질|공정|자재|트랜잭션/.test(msg);
+
+    // 웹/날씨 검색 (조건부)
+    let searchContext = { used: false };
+    if (needsSearch || needsWeather) {
+      try { searchContext = await prepareSearchContext(message); } catch(e) {}
+    }
+
+    // Drive 파일 읽기 (경로 지시어 있을 때만)
     let driveContext = null;
-    try {
-      actualDriveContext = await buildDriveContextForChat(message);
-      if (actualDriveContext?.prompt) {
-        aiMessage = message + actualDriveContext.prompt;
-        driveContext = [
-          `선택 경로: ${actualDriveContext.path}`,
-          `실제로 읽은 파일: ${(actualDriveContext.files || []).filter(f => f.read).map(f => f.name).join(", ") || "없음"}`,
-          `읽지 못한 파일: ${(actualDriveContext.files || []).filter(f => !f.read).map(f => f.name).join(", ") || "없음"}`
-        ].join("\n");
+    if (needsDrive) {
+      try {
+        actualDriveContext = await buildDriveContextForChat(message);
+        if (actualDriveContext?.prompt) {
+          aiMessage = message + actualDriveContext.prompt;
+          driveContext = [
+            `선택 경로: ${actualDriveContext.path}`,
+            `실제로 읽은 파일: ${(actualDriveContext.files||[]).filter(f=>f.read).map(f=>f.name).join(", ")||"없음"}`,
+            `읽지 못한 파일: ${(actualDriveContext.files||[]).filter(f=>!f.read).map(f=>f.name).join(", ")||"없음"}`
+          ].join("\n");
+        }
+      } catch(driveErr) {
+        aiMessage = message + `\n\n[STELLA_GOOGLE_DRIVE_READ_ERROR]\n${driveErr.message}\n[/STELLA_GOOGLE_DRIVE_READ_ERROR]\n\nDrive 파일 내용을 읽지 못했습니다.`;
+        driveContext = `Drive 읽기 오류: ${driveErr.message}`;
       }
-    } catch (driveErr) {
-      aiMessage = message + `\n\n[STELLA_GOOGLE_DRIVE_READ_ERROR]\n${driveErr.message}\n[/STELLA_GOOGLE_DRIVE_READ_ERROR]\n\nDrive 파일 내용을 읽지 못했습니다. 추측하지 말고 사용자에게 파일 내용을 읽지 못했다고 안내하세요.`;
-      driveContext = `Drive 읽기 오류: ${driveErr.message}`;
     }
 
-    if (!driveContext) {
-      driveContext = await searchDriveContext(message); // 기존 Drive 검색 연동
+    // SAP/업무 키워드 있을 때만 Drive 검색 (최대 3개 요약)
+    if (!driveContext && needsSapSearch) {
+      driveContext = await searchDriveContext(message);
     }
-    
-    // ④ 메모리 노드 로드 (KH 장기 기억)
-    const memory = await loadMemory(userId);
+
+    // ④ 메모리 로드
+    // - 첫 대화(history 없음) 또는 기억 관련 질문일 때만 전체 로드
+    // - 그 외엔 기본 파일만 빠르게 로드 (폴더 스캔 없음)
+    const needsFullMemory = history.length === 0
+      || /기억|메모리|이전|내 정보|나에 대해|알고 있|히스토리/.test(msg);
+    const memory = await loadMemory(userId, needsFullMemory);
     const memoryPrompt = memoryToPrompt(memory);
     const prompt = buildSystemPrompt(
       (memoryPrompt ? memoryPrompt + "\n\n" : "") + system,
@@ -408,7 +428,7 @@ async function searchDriveContext(message) {
     const { searchDrive } = await import("../lib/drive-utils.js");
     const results = await searchDrive(message, { scope: "StellaGPT", pageSize: 5 }).catch(() => null);
     if (!results || !results.length) return null;
-    return results.slice(0,3).map(r => `[Drive:${r.name}] ${r.snippet||r.name}`).join("\n");
+    return results.slice(0,3).map(r => `[Drive:${r.name}] ${(r.snippet||r.name).slice(0,200)}`).join("\n");
   } catch { return null; }
 }
 
@@ -435,7 +455,7 @@ const MAX_MEMORY_ITEMS = 50; // 항목별 최대 개수
 
 // 메모리 로드 (기본 파일 + 폴더 내 추가 파일 모두 합치기)
 // memory/ 폴더에 chatgpt_history.json, claude_memory.json 등 추가 파일을 넣으면 자동으로 합쳐짐
-async function loadMemory(userId) {
+async function loadMemory(userId, fullScan = false) {
   const base = { userId, facts: [], patterns: [], preferences: [], context: [], updatedAt: null };
 
   // 1) 기본 메모리 파일 로드
@@ -453,8 +473,9 @@ async function loadMemory(userId) {
     }
   } catch(e) {}
 
-  // 2) 폴더 내 추가 파일들 스캔 (ChatGPT/Claude 히스토리 등)
-  // 파일명이 {userId}_memory.json 이 아닌 .json 파일 모두 읽어서 합침
+  // 2) 폴더 내 추가 파일들 스캔 (fullScan=true 일 때만 - 속도 최적화)
+  // 기본은 {userId}_memory.json 하나만 읽고, 필요할 때만 폴더 전체 스캔
+  if (!fullScan) return base;
   try {
     const files = await listJsonFromDrive({ folderPath: MEMORY_FOLDER, pageSize: 50 });
     for (const f of files) {
