@@ -103,7 +103,7 @@ body{font-family:system-ui,'Noto Sans KR',sans-serif;background:var(--bg);color:
 <div id="gate">
 <div class="gate-card">
 <h2>🗄 Stella DB</h2>
-<p style="line-height:1.6">관리자 계정으로 로그인하세요<br><small style="opacity:.7">기본: <b>admin</b> / <b>admin</b></small></p>
+<p>관리자 계정으로 로그인하세요</p>
 <input id="gId" placeholder="아이디 (admin / yesblue0342)" autocomplete="username" onkeydown="if(event.key==='Enter')dbLogin()">
 <input id="gPw" type="password" placeholder="비밀번호" autocomplete="current-password" onkeydown="if(event.key==='Enter')dbLogin()">
 <label style="display:flex;align-items:center;gap:7px;margin:6px 0 2px;font-size:.82rem;color:var(--text2);cursor:pointer">
@@ -245,7 +245,7 @@ async function dbLogin(){
     let d;
     try { d = await r.json(); }
     catch(je){
-      err.textContent='서버 응답 오류 (status='+r.status+'). admin/admin으로 접속 가능합니다.';
+      err.textContent='서버 응답 오류 (status='+r.status+')';
       return;
     }
     if(!r.ok || d.ok===false){
@@ -258,7 +258,7 @@ async function dbLogin(){
     }
     saveSession(d.user);enterApp(d.user);
   }catch(e){
-    err.textContent='네트워크 오류: '+e.message+' / admin/admin으로 접속 가능';
+    err.textContent='네트워크 오류: '+e.message;
   }
 }
 function enterApp(u){
