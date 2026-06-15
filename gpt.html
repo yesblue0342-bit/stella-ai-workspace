@@ -295,12 +295,58 @@ async function send(){
   $('input').value='';render();
 
   // #구글드라이브 명령어 처리
+  // "분석/리뷰/요약/읽어" 키워드가 있으면 내용까지 읽어서 AI 분석, 없으면 파일 리스트만
   const driveMatch=text.match(/#구글드라이브(?:폴더)?\s*(.+?)(?:찾아줘|검색|~)?\s*$/);
   const driveMatch2=text.match(/^#구글드라이브(?:폴더)?\s*$/);
   if(driveMatch||driveMatch2){
     const q=driveMatch?driveMatch[1].trim():'';
+    const wantAnalyze=/분석|리뷰|요약|읽어|설명|정리|검토/.test(q);
+
+    if(wantAnalyze){
+      // 폴더/파일 내용 읽어서 AI 분석
+      // 키워드 제거하여 검색어 정제
+      const searchTerm=q.replace(/(분석|리뷰|요약|읽어|설명|정리|검토)(\s*해줘?)?/g,'').trim();
+      c.messages.push({role:'ai',text:'🔍 "'+searchTerm+'" 폴더의 파일을 읽는 중...'});
+      render();
+      try{
+        // drive-read API로 폴더 내용 읽기 (path 기반 탐색)
+        const rr=await fetch('/api/drive-read',{
+          method:'POST',headers:{'Content-Type':'application/json'},
+          body:JSON.stringify({path:searchTerm,recursive:false,maxFiles:20})
+        });
+        const rd=await rr.json();
+        // 마지막 "읽는 중" 메시지 제거
+        c.messages.pop();
+        if(rd.ok&&rd.files&&rd.files.length){
+          const readFiles=rd.files.filter(function(f){return f.read&&f.text;});
+          const unreadFiles=rd.files.filter(function(f){return !f.read||!f.text;});
+          // 읽은 파일 내용을 AI에게 전달
+          let driveContent='[Google Drive 폴더 "'+searchTerm+'" 실제 파일 내용]\n\n';
+          readFiles.forEach(function(f,i){
+            driveContent+='=== 파일 '+(i+1)+': '+f.name+' ===\n'+f.text.slice(0,8000)+'\n\n';
+          });
+          if(unreadFiles.length){
+            driveContent+='[읽지 못한 파일]\n'+unreadFiles.map(function(f){return '- '+f.name+': '+(f.error||'읽기 실패');}).join('\n');
+          }
+          // AI 분석 요청
+          const aiPrompt=text+'\n\n'+driveContent+'\n\n위 실제 파일 내용을 바탕으로 분석/요약해주세요. 읽지 못한 파일은 추측하지 마세요.';
+          const d=await api('/api/chat',{model:$('model').value,userId:user.id,message:aiPrompt,history:[]});
+          c.messages.push({role:'ai',text:d.text||d.answer||'분석 실패'});
+        }else{
+          c.messages.push({role:'ai',text:'❌ "'+searchTerm+'" 폴더를 찾지 못했거나 읽을 파일이 없습니다.\n\n경로를 정확히 입력해주세요. 예: #구글드라이브폴더 3디와이/SAP 분석해줘'});
+        }
+      }catch(e){
+        c.messages.pop();
+        c.messages.push({role:'ai',text:'❌ Drive 분석 오류: '+e.message});
+      }
+      try{await api('/api/hybrid-chat-save',{userId:user.id,roomId:c.id,title:c.title,messages:c.messages})}catch{}
+      saveLocal();render();
+      return;
+    }
+
+    // 분석 키워드 없으면 파일 리스트만 표시
     const result=await driveSearch(q||'/');
-    c.messages.push({role:'ai',text:result});
+    c.messages.push({role:'ai',text:result+'\n\n💡 내용 분석을 원하면 "분석해줘"를 붙이세요. 예: #구글드라이브폴더 '+(q||'SAP')+' 분석해줘'});
     try{await api('/api/hybrid-chat-save',{userId:user.id,roomId:c.id,title:c.title,messages:c.messages})}catch{}
     saveLocal();render();
     return;
@@ -312,7 +358,7 @@ async function send(){
     const _fnames=_attachedFiles.map(x=>x.name).join(', ');
     const _fullText=text+(_fnames?' [첨부파일: '+_fnames+']':'');
     _attachedImages=[];_attachedFiles=[];renderAttachPreview();
-    const d=await api('/api/chat',{model:$('model').value,message:_fullText,images:_imgs,history:c.messages.slice(-10).map(m=>({role:m.role==='ai'?'assistant':'user',content:m.text||(m.images&&m.images.length?'[이미지 첨부]':'')||(m.files&&m.files.length?'[파일: '+m.files.join(', ')+']':'')||' '})).filter(m=>m.content&&m.content.trim())});
+    const d=await api('/api/chat',{model:$('model').value,userId:user.id,message:_fullText,images:_imgs,history:c.messages.slice(-10).map(m=>({role:m.role==='ai'?'assistant':'user',content:m.text||(m.images&&m.images.length?'[이미지 첨부]':'')||(m.files&&m.files.length?'[파일: '+m.files.join(', ')+']':'')||' '})).filter(m=>m.content&&m.content.trim())});
     c.messages.push({role:'ai',text:d.text||d.answer||d.message||'응답 없음'});
     try{await api('/api/hybrid-chat-save',{userId:user.id,roomId:c.id,title:c.title,messages:c.messages})}catch{}
     saveLocal();render();
