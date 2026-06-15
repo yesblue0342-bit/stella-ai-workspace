@@ -160,7 +160,57 @@ async function loadChatsFromServer(){
 }
 // 더미 닫기 (원래 }는 openApp 닫는 것)
 function _unused_openapp_end(){function logout(){localStorage.removeItem(K.session);location.reload()}function newChat(){const c={id:'r_'+Date.now(),userId:user.id,title:'새 채팅',messages:[{role:'ai',text:'안녕하세요. Stella입니다. 무엇이든 물어보세요.'}]};chats.unshift(c);active=c.id;saveLocal();render()}function saveLocal(){write(K.chats,[...read(K.chats,[]).filter(x=>x.userId!==user.id),...chats])}function cur(){return chats.find(x=>x.id===active)}function render(){renderSide();const c=cur();$('title').textContent=c?.title||'새 채팅';$('msgs').innerHTML=(c?.messages||[]).map(m=>'<div class="row '+(m.role==='user'?'me':'ai')+'"><div class="bubble">'+md(m.text)+'</div></div>').join('');$('msgs').scrollTop=$('msgs').scrollHeight}function renderSide(){const q=($('q')?.value||'').toLowerCase();$('chatList').innerHTML=chats.filter(c=>(c.title+' '+c.messages.map(m=>m.text).join(' ')).toLowerCase().includes(q)).map(c=>'<div style="display:flex;align-items:center;gap:4px"><button class="tree '+(c.id===active?'active':'')+'" style="flex:1" onclick="active=\''+c.id+'\';render();closeSideMobile()">▱ '+esc(c.title)+'<br><span class="muted">'+c.messages.length+'개 메시지</span></button><button onclick="deleteChat(\''+c.id+'\'" style="border:0;background:none;color:#9ca3af;cursor:pointer;padding:6px;font-size:12px;border-radius:8px" title="삭제">✕</button></div>').join('')||'<div class="muted">결과 없음</div>'}
-function deleteChat(id){if(!confirm('이 채팅을 삭제하시겠습니까?'))return;chats=chats.filter(x=>x.id!==id);saveLocal();if(active===id){if(chats.length)active=chats[0].id;else newChat();}render();}function keepSide(){/* 검색창 포커스 시 사이드바 유지 - 닫지 않음 */}function toggleSide(){$('side').classList.toggle('open')}function closeSideMobile(){if(innerWidth<=900)$('side').classList.remove('open')}async function send(){const text=$('input').value.trim();if(!text)return;const c=cur();c.messages.push({role:'user',text});if(c.title==='새 채팅')c.title=text.slice(0,30);$('input').value='';render();try{const d=await api('/api/chat',{model:$('model').value,message:text,history:c.messages.slice(-10).map(m=>({role:m.role==='ai'?'assistant':'user',content:m.text}))});c.messages.push({role:'ai',text:d.text||d.answer||d.message||'응답 없음'});try{await api('/api/hybrid-chat-save',{userId:user.id,roomId:c.id,title:c.title,messages:c.messages})}catch{}saveLocal();render()}catch(e){c.messages.push({role:'ai',text:'API 연결 오류: '+e.message});saveLocal();render()}}function esc(s){return String(s||'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]))}function md(s){const blocks=[];let raw=String(s||'');raw=raw.replace(/```(\w*)\n?([\s\S]*?)```/g,(m,lang,code)=>{const idx=blocks.length;blocks.push('<pre class="code"><button class="copyBtn" onclick="copyCode(this)">복사</button><code>'+esc(code.replace(/\n$/,''))+'</code></pre>');return '\u0000BLOCK'+idx+'\u0000'});let h=esc(raw);h=h.replace(/\[([^\]]+)\]\((https?:\/\/[^\s)]+)\)/g,'<a target="_blank" rel="noopener" href="$2">$1</a>');h=h.replace(/(https?:\/\/[^\s<]+)/g,'<a target="_blank" rel="noopener" href="$1">$1</a>');h=h.replace(/`([^`]+)`/g,'<code style="background:rgba(127,127,127,.2);padding:2px 5px;border-radius:5px">$1</code>');h=h.replace(/\n/g,'<br>');h=h.replace(/\u0000BLOCK(\d+)\u0000/g,(m,i)=>blocks[Number(i)]);return h}
+function deleteChat(id){if(!confirm('이 채팅을 삭제하시겠습니까?'))return;chats=chats.filter(x=>x.id!==id);saveLocal();if(active===id){if(chats.length)active=chats[0].id;else newChat();}render();}function keepSide(){/* 검색창 포커스 시 사이드바 유지 - 닫지 않음 */}function toggleSide(){$('side').classList.toggle('open')}function closeSideMobile(){if(innerWidth<=900)$('side').classList.remove('open')}// ── Drive 검색 ──
+// 지원 명령어: #구글드라이브폴더, #구글드라이브 키워드~찾아줘
+async function driveSearch(query){
+  try{
+    const r=await fetch('/api/drive-list?q='+encodeURIComponent(query),{cache:'no-store'});
+    const d=await r.json();
+    if(!d.ok)return '❌ Drive 검색 실패: '+(d.message||'오류');
+    const files=d.files||[];
+    if(!files.length)return '🔍 **"'+query+'"** 검색 결과가 없습니다.';
+    const lines=files.slice(0,20).map(function(f){
+      const icon=f.isFolder?'📁':'📄';
+      const link='['+f.name+']('+f.link+')';
+      return icon+' '+link+(f.size?' ('+fmtSz(f.size)+')':'');
+    });
+    return '🔍 **"'+query+'"** Drive 검색 결과 ('+files.length+'개):\n\n'+lines.join('\n');
+  }catch(e){return '❌ Drive 검색 오류: '+e.message;}
+}
+function fmtSz(b){if(!b)return '';b=Number(b);if(b<1024)return b+'B';if(b<1048576)return (b/1024).toFixed(1)+'KB';return (b/1048576).toFixed(1)+'MB';}
+
+// ── 메시지 전송 ──
+async function send(){
+  const text=$('input').value.trim();
+  if(!text)return;
+  const c=cur();
+  c.messages.push({role:'user',text});
+  if(c.title==='새 채팅')c.title=text.slice(0,30);
+  $('input').value='';render();
+
+  // #구글드라이브 명령어 처리
+  const driveMatch=text.match(/#구글드라이브(?:폴더)?\s*(.+?)(?:찾아줘|검색|~)?\s*$/);
+  const driveMatch2=text.match(/^#구글드라이브(?:폴더)?\s*$/);
+  if(driveMatch||driveMatch2){
+    const q=driveMatch?driveMatch[1].trim():'';
+    const result=await driveSearch(q||'/');
+    c.messages.push({role:'ai',text:result});
+    try{await api('/api/hybrid-chat-save',{userId:user.id,roomId:c.id,title:c.title,messages:c.messages})}catch{}
+    saveLocal();render();
+    return;
+  }
+
+  // 일반 AI 응답
+  try{
+    const d=await api('/api/chat',{model:$('model').value,message:text,history:c.messages.slice(-10).map(m=>({role:m.role==='ai'?'assistant':'user',content:m.text}))});
+    c.messages.push({role:'ai',text:d.text||d.answer||d.message||'응답 없음'});
+    try{await api('/api/hybrid-chat-save',{userId:user.id,roomId:c.id,title:c.title,messages:c.messages})}catch{}
+    saveLocal();render();
+  }catch(e){
+    c.messages.push({role:'ai',text:'API 연결 오류: '+e.message});
+    saveLocal();render();
+  }
+}function esc(s){return String(s||'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]))}function md(s){const blocks=[];let raw=String(s||'');raw=raw.replace(/```(\w*)\n?([\s\S]*?)```/g,(m,lang,code)=>{const idx=blocks.length;blocks.push('<pre class="code"><button class="copyBtn" onclick="copyCode(this)">복사</button><code>'+esc(code.replace(/\n$/,''))+'</code></pre>');return '\u0000BLOCK'+idx+'\u0000'});let h=esc(raw);h=h.replace(/\[([^\]]+)\]\((https?:\/\/[^\s)]+)\)/g,'<a target="_blank" rel="noopener" href="$2">$1</a>');h=h.replace(/(https?:\/\/[^\s<]+)/g,'<a target="_blank" rel="noopener" href="$1">$1</a>');h=h.replace(/`([^`]+)`/g,'<code style="background:rgba(127,127,127,.2);padding:2px 5px;border-radius:5px">$1</code>');h=h.replace(/\n/g,'<br>');h=h.replace(/\u0000BLOCK(\d+)\u0000/g,(m,i)=>blocks[Number(i)]);return h}
 function toggleTheme(){
   const d=document.body.classList.toggle('dark');
   localStorage.setItem('stella_theme',d?'dark':'light');
