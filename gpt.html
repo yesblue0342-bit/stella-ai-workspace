@@ -157,8 +157,8 @@ let _notes = [], _noteActive = null, _noteEdited = false, _noteTimer = null;
 
 function _noteUserId(){
   try{
-    const s=JSON.parse(localStorage.getItem('stella_session')||'{}');
-    return s.id||s.user_id||localStorage.getItem('stella_user_id')||'';
+    const s=JSON.parse(localStorage.getItem('stella_session_final_v82')||'{}');
+    return (s.user&&s.user.id)||s.id||s.user_id||localStorage.getItem('stella_user_id')||'';
   }catch(e){return '';}
 }
 
