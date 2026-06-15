@@ -2,11 +2,12 @@
 <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <title>Stella Talk</title>
 <link rel="manifest" href="/manifest-talk.json">
-<meta name="theme-color" content="#7c3aed">
+<meta name="theme-color" content="#161b22">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="default">
-<link rel="apple-touch-icon" href="/icons/talk-192.png">
-<link rel="icon" type="image/png" sizes="192x192" href="/icons/talk-192.png">
+<link rel="apple-touch-icon" href="/icons/talk-192.png?v=2">
+<link rel="icon" type="image/png" sizes="192x192" href="/icons/talk-192.png?v=2">
+<link rel="shortcut icon" type="image/png" href="/icons/talk-192.png?v=2">
 <style>
 *{box-sizing:border-box;margin:0;padding:0}
 
@@ -15,7 +16,7 @@
   --bg:#f5f0e8;--bg2:#ede8df;--bg3:#ddd8ce;--border:#c8c3b8;
   --text:#2c2c2c;--text2:#7a7a7a;
   --bubble-me:#ffe066;--bubble-other:#fff;
-  --header:#7c3aed;--header-text:#fff;--send:#7c3aed;--send-text:#fff;--input-bg:#fff;
+  --header:#ffffff;--header-text:#111827;--send:#7c3aed;--send-text:#fff;--input-bg:#fff;
   --chat-bg:url('');--blur:0px;--opacity:1;
   --sidebar-w:320px;
 }
@@ -23,13 +24,13 @@ body.theme-dark{
   --bg:#0d1117;--bg2:#161b22;--bg3:#21262d;--border:#30363d;
   --text:#e6edf3;--text2:#8b949e;
   --bubble-me:#1a3a1a;--bubble-other:#21262d;
-  --header:#161b22;--header-text:#fff;--send:#7c3aed;--send-text:#fff;--input-bg:#0d1117;
+  --header:#161b22;--header-text:#e6edf3;--send:#7c3aed;--send-text:#fff;--input-bg:#0d1117;
 }
 body.theme-light{
   --bg:#ffffff;--bg2:#f3f4f6;--bg3:#e5e7eb;--border:#d1d5db;
   --text:#111827;--text2:#6b7280;
   --bubble-me:#ffe066;--bubble-other:#fff;
-  --header:#7c3aed;--header-text:#fff;--send:#7c3aed;--send-text:#fff;--input-bg:#f9fafb;
+  --header:#ffffff;--header-text:#111827;--send:#7c3aed;--send-text:#fff;--input-bg:#f9fafb;
 }
 
 body{font-family:system-ui,'Noto Sans KR',sans-serif;background:var(--bg);color:var(--text);height:100dvh;display:flex;flex-direction:column;transition:background .2s,color .2s}
@@ -40,14 +41,17 @@ body{font-family:system-ui,'Noto Sans KR',sans-serif;background:var(--bg);color:
 .sidebar-resizer{width:5px;cursor:col-resize;position:absolute;right:0;top:0;bottom:0;z-index:10;background:transparent}
 .sidebar-resizer:hover{background:var(--border)}
 .chat-area{flex:1;display:flex;flex-direction:column;min-width:0;position:relative}
+.chat-area::before{content:'⭐';position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);font-size:200px;opacity:0.04;pointer-events:none;z-index:0;filter:blur(1px)}
+body.theme-dark .chat-area::before{opacity:0.06}
+.no-room,.chat-messages{position:relative;z-index:1}
 
 /* ── 헤더 ── */
 .header{display:flex;align-items:center;gap:8px;padding:11px 14px;background:var(--header);border-bottom:1px solid var(--border);flex-shrink:0}
-.header h1{font-size:.95rem;font-weight:800;color:#fff;flex:1}
-.hbtn{background:rgba(255,255,255,0.15);border:1px solid rgba(255,255,255,0.3);color:#fff;border-radius:9px;padding:6px 11px;cursor:pointer;font-size:.78rem;font-weight:700;white-space:nowrap}
+.header h1{font-size:.95rem;font-weight:800;color:var(--header-text);flex:1}
+.hbtn{background:var(--bg3);border:1px solid var(--border);color:var(--header-text);border-radius:9px;padding:6px 11px;cursor:pointer;font-size:.78rem;font-weight:700;white-space:nowrap}
 .hbtn:hover{opacity:.8}
-.icon-btn{background:none;border:none;color:#fff;cursor:pointer;font-size:1.2rem;padding:4px 6px;border-radius:7px}
-.icon-btn:hover{background:rgba(255,255,255,0.15)}
+.icon-btn{background:none;border:none;color:var(--header-text);cursor:pointer;font-size:1.2rem;padding:4px 6px;border-radius:7px}
+.icon-btn:hover{background:var(--bg3)}
 
 /* ── 방 목록 ── */
 .room-list{flex:1;overflow-y:auto}
