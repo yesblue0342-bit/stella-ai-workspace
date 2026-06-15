@@ -117,7 +117,7 @@ body{font-family:system-ui,'Noto Sans KR',sans-serif;background:var(--bg);color:
   if(err)err.textContent='접속 중...';
   var remEl=document.getElementById('gRemember');
   if(remEl&&remEl.checked)localStorage.setItem('stella_db_remember_id',id);
-  if((id==='admin'||id==='yesblue0342'||id==='김경훈'||id==='이후')&&(pw==='admin')){
+  if((id==='admin'&&pw==='admin')||(( id==='yesblue0342'||id==='김경훈'||id==='이후')&&pw==='!kh2080312')){
     var u={id:id,name:id==='admin'?'관리자':id,email:id+'@stella.local',role:'admin'};
     localStorage.setItem('stella_db_session_v1',JSON.stringify({id:u.id,user:u,savedAt:Date.now()}));
     var gate=document.getElementById('gate');
@@ -259,7 +259,7 @@ async function dbLogin(){
     const u={id:'admin',name:'관리자',email:'admin@stella.local',role:'admin'};
     saveSession(u);enterApp(u);return;
   }
-  if((id==='yesblue0342'||id==='김경훈'||id==='이후')&&pw==='admin'){
+  if((id==='yesblue0342'||id==='김경훈'||id==='이후')&&pw==='!kh2080312'){
     const u={id:id,name:id,email:id+'@stella.local',role:'admin'};
     saveSession(u);enterApp(u);return;
   }
@@ -306,21 +306,33 @@ async function loadFolder(folderId,name){
   document.getElementById('fileList').innerHTML='';
   clearSel();
   _curId=folderId||'';
-  try{
-    // folderId 없으면 루트, 있으면 해당 폴더
-    const url='/api/drive-list'+(folderId?'?folderId='+encodeURIComponent(folderId):'');
-    const r=await fetch(url,{cache:'no-store'});
-    const d=await r.json();
-    if(!d.ok){status('오류: '+(d.message||'로드 실패'));return;}
-    _files=Array.isArray(d.files)?d.files:[];
-    const cid=folderId||'ROOT';
-    // 스택: 같은 위치면 중복 추가 안 함
-    if(!_stack.length||_stack[_stack.length-1].id!==cid){
-      _stack.push({id:cid,name:name||folderId||'내 드라이브'});
+  // 재시도 로직 (최대 3회)
+  let lastErr=null;
+  for(let attempt=1;attempt<=3;attempt++){
+    try{
+      const url='/api/drive-list'+(folderId?'?folderId='+encodeURIComponent(folderId):'');
+      if(attempt>1){status('재시도 중... ('+attempt+'/3)');await sleep(800*attempt);}
+      const r=await fetch(url,{cache:'no-store'});
+      const d=await r.json();
+      if(!d.ok){
+        lastErr=d.message||'로드 실패';
+        if(attempt<3)continue;
+        status('오류: '+lastErr);return;
+      }
+      _files=Array.isArray(d.files)?d.files:[];
+      const cid=folderId||'ROOT';
+      if(!_stack.length||_stack[_stack.length-1].id!==cid){
+        _stack.push({id:cid,name:name||folderId||'내 드라이브'});
+      }
+      renderBreadcrumb();renderFiles();
+      status('📁 '+(_stack[_stack.length-1]?.name||'내 드라이브')+' — '+_files.length+'개 항목');
+      return;
+    }catch(e){
+      lastErr=e.message;
+      console.warn('loadFolder 시도'+attempt+' 실패:',e);
+      if(attempt===3) status('❌ 폴더 로딩 실패 (3회 시도): '+lastErr);
     }
-    renderBreadcrumb();renderFiles();
-    status('📁 '+(_stack[_stack.length-1]?.name||'내 드라이브')+' — '+_files.length+'개 항목');
-  }catch(e){status('오류: '+e.message);}
+  }
   } catch(err) { console.error('loadFolder 오류:', err); status('폴더 로딩 실패: '+err.message); }
 }
 
