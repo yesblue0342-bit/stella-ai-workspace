@@ -150,87 +150,101 @@ function syncModelBtn(){const s=$('model');if(!s||!$('modelBtn'))return;const o=
 function copyCode(btn){const pre=btn.parentElement;const code=pre.querySelector('code')||pre;const t=code.innerText.replace(/복사$|복사됨$/,'');navigator.clipboard.writeText(t).then(()=>{btn.textContent='복사됨';setTimeout(()=>btn.textContent='복사',1200)})}
 boot();
 // ════════════════════════════════
-// 노트 기능
+// 노트 기능 (Google Drive 연동)
 // ════════════════════════════════
 const NK = 'stella_notes_v1';
 let _notes = [], _noteActive = null, _noteEdited = false, _noteTimer = null;
 
-function loadNotes(){ _notes = read(NK, []); }
-function saveNotes(){ localStorage.setItem(NK, JSON.stringify(_notes)); }
+function _noteUserId(){
+  try{
+    const s=JSON.parse(localStorage.getItem('stella_session')||'{}');
+    return s.id||s.user_id||localStorage.getItem('stella_user_id')||'';
+  }catch(e){return '';}
+}
+
+async function loadNotes(){
+  const uid=_noteUserId();
+  if(!uid){ _notes=JSON.parse(localStorage.getItem(NK)||'[]'); return; }
+  try{
+    const r=await fetch('/api/note?action=list&userId='+encodeURIComponent(uid),{cache:'no-store'});
+    const d=await r.json();
+    if(d.ok){ _notes=d.notes||[]; localStorage.setItem(NK,JSON.stringify(_notes)); }
+    else { _notes=JSON.parse(localStorage.getItem(NK)||'[]'); }
+  }catch(e){ _notes=JSON.parse(localStorage.getItem(NK)||'[]'); }
+}
+
+async function driveNoteSync(note){
+  const uid=_noteUserId(); if(!uid) return;
+  try{ await fetch('/api/note?action=save',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({userId:uid,id:note.id,title:note.title,body:note.body})}); }catch(e){}
+}
+
+async function driveNoteDelete(noteId){
+  const uid=_noteUserId(); if(!uid) return;
+  try{ await fetch('/api/note?action=delete',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({userId:uid,id:noteId})}); }catch(e){}
+}
 
 function openNotePanel(){
-  loadNotes();
-  if(!_notes.length) newNote();
-  else { selectNote(_notes[0].id); }
-  renderNoteList();
+  document.getElementById('npAutoTag').textContent='로딩 중...';
   document.getElementById('notePanel').classList.add('on');
   document.getElementById('noteOverlay').classList.add('on');
+  loadNotes().then(function(){
+    if(!_notes.length) newNote();
+    else selectNote(_notes[0].id);
+    renderNoteList();
+    document.getElementById('npAutoTag').textContent='저장됨';
+  });
 }
 function closeNotePanel(){
   if(_noteEdited) saveNote(true);
   document.getElementById('notePanel').classList.remove('on');
   document.getElementById('noteOverlay').classList.remove('on');
 }
-
 function newNote(){
-  const id = 'n_' + Date.now();
-  const now = new Date().toISOString();
-  const note = { id, title: '', body: '', createdAt: now, updatedAt: now };
+  const id='n_'+Date.now(), now=new Date().toISOString();
+  const note={id,title:'',body:'',createdAt:now,updatedAt:now};
   _notes.unshift(note);
-  saveNotes();
-  selectNote(id);
-  renderNoteList();
-  setTimeout(()=>{ const t=document.getElementById('npTitle'); if(t){t.focus();t.select();} }, 80);
+  localStorage.setItem(NK,JSON.stringify(_notes));
+  selectNote(id); renderNoteList();
+  setTimeout(()=>{ const t=document.getElementById('npTitle'); if(t){t.focus();t.select();} },80);
 }
-
 function selectNote(id){
-  if(_noteEdited && _noteActive) saveNote(true);
-  _noteActive = id;
-  _noteEdited = false;
-  const note = _notes.find(n=>n.id===id);
-  if(!note) return;
-  document.getElementById('npTitle').value = note.title || '';
-  document.getElementById('npBody').value = note.body || '';
-  document.getElementById('npEditor').style.display = '';
-  document.getElementById('npEmpty') && (document.getElementById('npEmpty').style.display='none');
-  document.getElementById('npAutoTag').textContent = '저장됨';
+  if(_noteEdited&&_noteActive) saveNote(true);
+  _noteActive=id; _noteEdited=false;
+  const note=_notes.find(n=>n.id===id); if(!note) return;
+  document.getElementById('npTitle').value=note.title||'';
+  document.getElementById('npBody').value=note.body||'';
+  document.getElementById('npEditor').style.display='';
+  document.getElementById('npEmpty')&&(document.getElementById('npEmpty').style.display='none');
+  document.getElementById('npAutoTag').textContent='저장됨';
   renderNoteList();
 }
-
 function markNoteEdited(){
-  _noteEdited = true;
-  document.getElementById('npAutoTag').textContent = '편집 중...';
+  _noteEdited=true;
+  document.getElementById('npAutoTag').textContent='편집 중...';
   clearTimeout(_noteTimer);
-  _noteTimer = setTimeout(()=>saveNote(true), 1500);
+  _noteTimer=setTimeout(()=>saveNote(true),1500);
 }
-
 function saveNote(silent){
   if(!_noteActive) return;
-  const idx = _notes.findIndex(n=>n.id===_noteActive);
-  if(idx<0) return;
-  const title = (document.getElementById('npTitle').value||'').trim() || '제목 없음';
-  const body = document.getElementById('npBody').value || '';
-  _notes[idx].title = title;
-  _notes[idx].body = body;
-  _notes[idx].updatedAt = new Date().toISOString();
-  // 최근 수정순 정렬
-  const note = _notes.splice(idx,1)[0];
-  _notes.unshift(note);
-  saveNotes();
-  _noteEdited = false;
-  document.getElementById('npAutoTag').textContent = '저장됨';
-  if(!silent) renderNoteList();
-  else renderNoteList();
+  const idx=_notes.findIndex(n=>n.id===_noteActive); if(idx<0) return;
+  const title=(document.getElementById('npTitle').value||'').trim()||'제목 없음';
+  const body=document.getElementById('npBody').value||'';
+  _notes[idx].title=title; _notes[idx].body=body; _notes[idx].updatedAt=new Date().toISOString();
+  const note=_notes.splice(idx,1)[0]; _notes.unshift(note);
+  localStorage.setItem(NK,JSON.stringify(_notes));
+  driveNoteSync(note);
+  _noteEdited=false;
+  document.getElementById('npAutoTag').textContent='☁️ 저장됨';
+  renderNoteList();
 }
-
 function deleteNote(){
   if(!_noteActive) return;
-  const note = _notes.find(n=>n.id===_noteActive);
-  if(!confirm((note?.title||'이 노트') + '를 삭제하시겠습니까?')) return;
-  _notes = _notes.filter(n=>n.id!==_noteActive);
-  saveNotes();
-  _noteActive = null;
-  _noteEdited = false;
+  const note=_notes.find(n=>n.id===_noteActive);
+  if(!confirm((note?.title||'이 노트')+'를 삭제하시겠습니까?')) return;
+  driveNoteDelete(_noteActive);
+  _notes=_notes.filter(n=>n.id!==_noteActive);
+  localStorage.setItem(NK,JSON.stringify(_notes));
+  _noteActive=null; _noteEdited=false;
   if(_notes.length){ selectNote(_notes[0].id); }
   else {
     document.getElementById('npTitle').value='';
@@ -240,177 +254,31 @@ function deleteNote(){
   }
   renderNoteList();
 }
-
 function renderNoteList(){
-  const q = (document.getElementById('npSearch')?.value||'').toLowerCase();
-  const list = _notes.filter(n=> !q || (n.title||'').toLowerCase().includes(q) || (n.body||'').toLowerCase().includes(q));
-  const el = document.getElementById('npListInner');
-  if(!list.length){ el.innerHTML='<div style="padding:20px;text-align:center;color:#9ca3af;font-size:.82rem">노트가 없습니다</div>'; return; }
-
-  // 날짜 그룹
-  const today = new Date(); today.setHours(0,0,0,0);
-  const yesterday = new Date(today); yesterday.setDate(today.getDate()-1);
-  const weekAgo = new Date(today); weekAgo.setDate(today.getDate()-7);
-  const monthAgo = new Date(today); monthAgo.setDate(today.getDate()-30);
-
-  function getGroup(dateStr){
-    const d = new Date(dateStr); d.setHours(0,0,0,0);
-    if(d>=today) return '오늘';
-    if(d>=yesterday) return '어제';
-    if(d>=weekAgo) return '이전 7일';
-    if(d>=monthAgo) return '이전 30일';
-    return '더 오래전';
-  }
-
-  let lastGroup = '';
-  let html2 = '';
+  const q=(document.getElementById('npSearch')?.value||'').toLowerCase();
+  const list=_notes.filter(n=>!q||(n.title||'').toLowerCase().includes(q)||(n.body||'').toLowerCase().includes(q));
+  const el=document.getElementById('npListInner');
+  if(!list.length){el.innerHTML='<div style="padding:20px;text-align:center;color:#9ca3af;font-size:.82rem">노트가 없습니다</div>';return;}
+  const today=new Date();today.setHours(0,0,0,0);
+  const yesterday=new Date(today);yesterday.setDate(today.getDate()-1);
+  const weekAgo=new Date(today);weekAgo.setDate(today.getDate()-7);
+  const monthAgo=new Date(today);monthAgo.setDate(today.getDate()-30);
+  function getGroup(ds){const d=new Date(ds);d.setHours(0,0,0,0);if(d>=today)return'오늘';if(d>=yesterday)return'어제';if(d>=weekAgo)return'이전 7일';if(d>=monthAgo)return'이전 30일';return'더 오래전';}
+  let lastGroup='',html2='';
   for(const n of list){
-    const group = getGroup(n.updatedAt);
-    if(group !== lastGroup){
-      html2 += '<div class="np-date-group">'+group+'</div>';
-      lastGroup = group;
-    }
-    const preview = (n.body||'').replace(/\n/g,' ').slice(0,60);
-    const timeStr = new Date(n.updatedAt).toLocaleString('ko-KR',{month:'numeric',day:'numeric',hour:'2-digit',minute:'2-digit'});
-    html2 += '<div class="np-item'+(n.id===_noteActive?' active':'')+'" onclick="selectNote(\''+n.id+'\')">'+
-      '<div class="np-item-title">'+(n.title||'제목 없음')+'</div>'+
-      '<div class="np-item-meta">'+timeStr+(preview?' · '+preview:'')+'</div>'+
-      '</div>';
+    const group=getGroup(n.updatedAt||n.createdAt||'');
+    if(group!==lastGroup){html2+='<div class="np-date-group">'+group+'</div>';lastGroup=group;}
+    const preview=(n.body||'').replace(/\n/g,' ').slice(0,60);
+    const timeStr=new Date(n.updatedAt||n.createdAt).toLocaleString('ko-KR',{month:'numeric',day:'numeric',hour:'2-digit',minute:'2-digit'});
+    html2+='<div class="np-item'+(n.id===_noteActive?' active':'')+'" onclick="selectNote(\''+n.id+'\')"><div class="np-item-title">'+(n.title||'제목 없음')+'</div><div class="np-item-meta">'+timeStr+(preview?' · '+preview:'')+'</div></div>';
   }
-  el.innerHTML = html2;
+  el.innerHTML=html2;
 }
+
+
 
 </script><script>if('serviceWorker' in navigator){navigator.serviceWorker.register('/sw.js').catch(function(){});}var _dp=null;window.addEventListener('beforeinstallprompt',function(e){e.preventDefault();_dp=e;showInstall();});function showInstall(){if(document.getElementById('pwaInstall'))return;var b=document.createElement('button');b.id='pwaInstall';b.textContent='⬇ 앱 설치';b.style.cssText='position:fixed;right:14px;bottom:80px;z-index:9998;background:#0f172a;color:#fff;border:0;border-radius:24px;padding:12px 18px;font-weight:900;box-shadow:0 8px 24px rgba(0,0,0,.25);cursor:pointer';b.onclick=function(){if(!_dp)return;_dp.prompt();_dp.userChoice.then(function(){_dp=null;b.remove();});};document.body.appendChild(b);}window.addEventListener('appinstalled',function(){var b=document.getElementById('pwaInstall');if(b)b.remove();});
-// ════════════════════════════════
-// 노트 기능
-// ════════════════════════════════
-const NK = 'stella_notes_v1';
-let _notes = [], _noteActive = null, _noteEdited = false, _noteTimer = null;
 
-function loadNotes(){ _notes = read(NK, []); }
-function saveNotes(){ localStorage.setItem(NK, JSON.stringify(_notes)); }
-
-function openNotePanel(){
-  loadNotes();
-  if(!_notes.length) newNote();
-  else { selectNote(_notes[0].id); }
-  renderNoteList();
-  document.getElementById('notePanel').classList.add('on');
-  document.getElementById('noteOverlay').classList.add('on');
-}
-function closeNotePanel(){
-  if(_noteEdited) saveNote(true);
-  document.getElementById('notePanel').classList.remove('on');
-  document.getElementById('noteOverlay').classList.remove('on');
-}
-
-function newNote(){
-  const id = 'n_' + Date.now();
-  const now = new Date().toISOString();
-  const note = { id, title: '', body: '', createdAt: now, updatedAt: now };
-  _notes.unshift(note);
-  saveNotes();
-  selectNote(id);
-  renderNoteList();
-  setTimeout(()=>{ const t=document.getElementById('npTitle'); if(t){t.focus();t.select();} }, 80);
-}
-
-function selectNote(id){
-  if(_noteEdited && _noteActive) saveNote(true);
-  _noteActive = id;
-  _noteEdited = false;
-  const note = _notes.find(n=>n.id===id);
-  if(!note) return;
-  document.getElementById('npTitle').value = note.title || '';
-  document.getElementById('npBody').value = note.body || '';
-  document.getElementById('npEditor').style.display = '';
-  document.getElementById('npEmpty') && (document.getElementById('npEmpty').style.display='none');
-  document.getElementById('npAutoTag').textContent = '저장됨';
-  renderNoteList();
-}
-
-function markNoteEdited(){
-  _noteEdited = true;
-  document.getElementById('npAutoTag').textContent = '편집 중...';
-  clearTimeout(_noteTimer);
-  _noteTimer = setTimeout(()=>saveNote(true), 1500);
-}
-
-function saveNote(silent){
-  if(!_noteActive) return;
-  const idx = _notes.findIndex(n=>n.id===_noteActive);
-  if(idx<0) return;
-  const title = (document.getElementById('npTitle').value||'').trim() || '제목 없음';
-  const body = document.getElementById('npBody').value || '';
-  _notes[idx].title = title;
-  _notes[idx].body = body;
-  _notes[idx].updatedAt = new Date().toISOString();
-  // 최근 수정순 정렬
-  const note = _notes.splice(idx,1)[0];
-  _notes.unshift(note);
-  saveNotes();
-  _noteEdited = false;
-  document.getElementById('npAutoTag').textContent = '저장됨';
-  if(!silent) renderNoteList();
-  else renderNoteList();
-}
-
-function deleteNote(){
-  if(!_noteActive) return;
-  const note = _notes.find(n=>n.id===_noteActive);
-  if(!confirm((note?.title||'이 노트') + '를 삭제하시겠습니까?')) return;
-  _notes = _notes.filter(n=>n.id!==_noteActive);
-  saveNotes();
-  _noteActive = null;
-  _noteEdited = false;
-  if(_notes.length){ selectNote(_notes[0].id); }
-  else {
-    document.getElementById('npTitle').value='';
-    document.getElementById('npBody').value='';
-    document.getElementById('npEditor').style.display='none';
-    document.getElementById('npEmpty').style.display='';
-  }
-  renderNoteList();
-}
-
-function renderNoteList(){
-  const q = (document.getElementById('npSearch')?.value||'').toLowerCase();
-  const list = _notes.filter(n=> !q || (n.title||'').toLowerCase().includes(q) || (n.body||'').toLowerCase().includes(q));
-  const el = document.getElementById('npListInner');
-  if(!list.length){ el.innerHTML='<div style="padding:20px;text-align:center;color:#9ca3af;font-size:.82rem">노트가 없습니다</div>'; return; }
-
-  // 날짜 그룹
-  const today = new Date(); today.setHours(0,0,0,0);
-  const yesterday = new Date(today); yesterday.setDate(today.getDate()-1);
-  const weekAgo = new Date(today); weekAgo.setDate(today.getDate()-7);
-  const monthAgo = new Date(today); monthAgo.setDate(today.getDate()-30);
-
-  function getGroup(dateStr){
-    const d = new Date(dateStr); d.setHours(0,0,0,0);
-    if(d>=today) return '오늘';
-    if(d>=yesterday) return '어제';
-    if(d>=weekAgo) return '이전 7일';
-    if(d>=monthAgo) return '이전 30일';
-    return '더 오래전';
-  }
-
-  let lastGroup = '';
-  let html2 = '';
-  for(const n of list){
-    const group = getGroup(n.updatedAt);
-    if(group !== lastGroup){
-      html2 += '<div class="np-date-group">'+group+'</div>';
-      lastGroup = group;
-    }
-    const preview = (n.body||'').replace(/\n/g,' ').slice(0,60);
-    const timeStr = new Date(n.updatedAt).toLocaleString('ko-KR',{month:'numeric',day:'numeric',hour:'2-digit',minute:'2-digit'});
-    html2 += '<div class="np-item'+(n.id===_noteActive?' active':'')+'" onclick="selectNote(\''+n.id+'\')">'+
-      '<div class="np-item-title">'+(n.title||'제목 없음')+'</div>'+
-      '<div class="np-item-meta">'+timeStr+(preview?' · '+preview:'')+'</div>'+
-      '</div>';
-  }
-  el.innerHTML = html2;
-}
 
 </script></body></html>
 
