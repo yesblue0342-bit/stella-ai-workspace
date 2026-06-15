@@ -134,8 +134,8 @@ async function handleBoardSave(req, res) {
   const postId = safeId(body.postId || body.id || title, "post");
   if (!title && !content) return res.status(400).json({ ok: false, message: "제목 또는 내용을 입력하세요." });
   const data = { type: "boardPost", postId, title: title || "제목 없음", content, writer, userId, category, attachments: Array.isArray(body.attachments) ? body.attachments : [], createdAt: body.createdAt || new Date().toISOString(), updatedAt: new Date().toISOString() };
-  // 1) Google Drive에 원문 JSON 저장
-  const saved = await saveJsonToDrive({ folderPath: ["Board", category], fileName: `${postId}.json`, data });
+  // 1) Google Drive에 원문 JSON 저장 - userId별 구분
+  const saved = await saveJsonToDrive({ folderPath: ["boards", userId, category], fileName: `${postId}.json`, data });
   // 2) Azure SQL board_index에 인덱스 저장 (Drive 실패와 무관하게 보호)
   try {
     const pool = await getPool();
@@ -154,9 +154,11 @@ async function handleBoardSave(req, res) {
 }
 async function handleBoardList(req, res) {
   const category = clean(getInput(req, ["category"]) || "Board");
+  const userId = clean(getInput(req, ["userId", "email"]) || "");
   const limit = Math.min(Number(getInput(req, ["limit"]) || 50), 100);
-  const files = await listJsonFromDrive({ folderPath: ["Board", category], pageSize: Number.isFinite(limit) ? limit : 50 });
-  return res.status(200).json({ ok: true, type: "board-list", category, posts: files.map(mapDriveFile) });
+  if (!userId) return res.status(400).json({ ok: false, message: "userId가 필요합니다." });
+  const files = await listJsonFromDrive({ folderPath: ["boards", userId, category], pageSize: Number.isFinite(limit) ? limit : 50 });
+  return res.status(200).json({ ok: true, type: "board-list", category, userId, posts: files.map(mapDriveFile) });
 }
 async function handleChatSave(req, res) {
   if (req.method !== "POST") { res.setHeader("Allow", "POST"); return res.status(405).json({ ok: false, message: "Method Not Allowed" }); }
