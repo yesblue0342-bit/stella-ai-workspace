@@ -112,6 +112,44 @@ function wmoToKr(code) {
   return map[code] || "정보없음";
 }
 
+// 날씨 자연어 요약 생성
+function buildWeatherSummary(w) {
+  const parts = [];
+  // 기온 표현
+  const t = Number(w.temp);
+  let tempPhrase = "";
+  if (t >= 30) tempPhrase = "매우 더운 날씨";
+  else if (t >= 25) tempPhrase = "더운 편";
+  else if (t >= 20) tempPhrase = "따뜻한 날씨";
+  else if (t >= 15) tempPhrase = "선선한 날씨";
+  else if (t >= 10) tempPhrase = "쌀쌀한 날씨";
+  else if (t >= 5) tempPhrase = "추운 편";
+  else if (t >= 0) tempPhrase = "추운 날씨";
+  else tempPhrase = "매우 추운 날씨";
+
+  const feelGap = Math.abs(Number(w.feels) - t);
+  const feelNote = feelGap >= 3 ? `(체감은 ${Number(w.feels)>t?'더 높음':'더 낮음'})` : "";
+
+  parts.push(`현재 ${w.desc} 상태로 ${tempPhrase}입니다${feelNote?' '+feelNote:''}.`);
+
+  // 우산
+  if (Number(w.precip) >= 50) parts.push("☔ **우산을 꼭 챙기세요.**");
+  else if (Number(w.precip) >= 30) parts.push("☔ 우산을 챙기는 것을 권장합니다.");
+
+  // 바람
+  if (Number(w.wind) >= 10) parts.push("🌬 바람이 강하니 주의하세요.");
+
+  // UV
+  if (Number(w.uv) >= 8) parts.push("☀️ 자외선이 매우 강합니다. 선크림과 모자를 챙기세요.");
+  else if (Number(w.uv) >= 6) parts.push("☀️ 자외선이 강한 편입니다.");
+
+  // 습도
+  if (Number(w.humid) >= 80) parts.push("💧 습도가 높아 무더울 수 있습니다.");
+  else if (Number(w.humid) <= 30) parts.push("🏜 공기가 건조하니 수분 섭취에 유의하세요.");
+
+  return `> ${parts.join(' ')}`;
+}
+
 async function handleWeather(message) {
   // 위치명 추출
   const locMatch = message.match(/([가-힣]{2,10}(?:시|구|군|동|읍|면|도)?)/);
@@ -200,6 +238,8 @@ async function handleWeather(message) {
 
     return [
       `**${resolvedName} 현재 날씨** — ${isDay?"☀️":"🌙"} ${desc}`,
+      ``,
+      buildWeatherSummary({resolvedName,desc,temp,feels,humid,wind:windSpeed,precip,uv,umbrella,windDesc,uvDesc,humidDesc}),
       ``,
       `| 항목 | 값 | 비고 |`,
       `|---|---|---|`,
