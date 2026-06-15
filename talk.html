@@ -480,6 +480,7 @@ function getMyEmail(){ try{ const s=getSession(); return s?.user?.email||''; }ca
 function isLoggedIn(){ return !!getMyId(); }
 
 function renderRooms(){
+  updateAppBadge();
   const el=document.getElementById('roomList');
   if(!_rooms.length){el.innerHTML='<div class="empty">💬 채팅방이 없습니다.<br>＋ 채팅 버튼으로 새 방을 만드세요</div>';return;}
   // 나와의 채팅 맨 위 고정
@@ -701,6 +702,7 @@ function openRoom(id){
   // 방 열면 읽음 처리 (현재 시각으로 lastReadAt 갱신)
   const idx=_rooms.findIndex(r=>r.id===id);
   if(idx>=0){_rooms[idx].lastReadAt=Date.now();_cur=_rooms[idx];saveRooms();}
+  updateAppBadge(); // 방 입장 시 뱃지 갱신
   document.getElementById('noRoom').style.display='none';
   const cr=document.getElementById('chatRoom');cr.style.display='flex';
   document.getElementById('chatRoomName').textContent=(_cur.isMyChat?'💛 ':'')+_cur.name;
@@ -795,8 +797,13 @@ async function syncRoomFromServer(scrollAfter){
       if(serverMsgs.length>prevCount){
         const last=serverMsgs[serverMsgs.length-1];
         const myId=getMyId();
-        if(last && last.from!==myId && document.hidden){
-          notify(_cur.name, last.text||'📎 파일');
+        if(last && last.from!==myId){
+          // 앱이 백그라운드거나 화면이 꺼져있을 때 팝업 알림
+          if(document.hidden || document.visibilityState==='hidden'){
+            notify(_cur.name, last.text||'📎 파일');
+          }
+          // 앱 아이콘 뱃지 항상 업데이트
+          updateAppBadge();
         }
       }
     }
@@ -810,10 +817,64 @@ function reportRead(roomId){
       body:JSON.stringify({roomId:roomId,userId:myId})}).catch(function(){});
   }catch(e){}
 }
-function notify(title,body){
-  if(Notification.permission==='granted'){
-    try{new Notification('Stella Talk · '+title,{body:body,icon:'/icons/talk-192.png?v=3'});}catch(e){}
+function notify(title, body){
+  // 1) 브라우저/PWA 팝업 알림
+  if(Notification.permission === 'granted'){
+    try{
+      // SW 경유 알림 (PWA 백그라운드에서도 작동)
+      if(navigator.serviceWorker && navigator.serviceWorker.controller){
+        navigator.serviceWorker.ready.then(function(reg){
+          reg.showNotification('Stella Talk · ' + title, {
+            body: body,
+            icon: '/icons/talk-192.png?v=3',
+            badge: '/icons/talk-192.png?v=3',
+            vibrate: [200, 100, 200],
+            tag: 'stella-talk-msg',
+            renotify: true,
+            data: { url: '/talk' }
+          });
+        }).catch(function(){
+          // SW 실패시 일반 Notification
+          new Notification('Stella Talk · ' + title, {
+            body: body,
+            icon: '/icons/talk-192.png?v=3'
+          });
+        });
+      } else {
+        new Notification('Stella Talk · ' + title, {
+          body: body,
+          icon: '/icons/talk-192.png?v=3'
+        });
+      }
+    }catch(e){}
   }
+  // 2) 진동 (모바일)
+  try{ if(navigator.vibrate) navigator.vibrate([200, 100, 200]); }catch(e){}
+}
+
+// 앱 아이콘 뱃지 업데이트 (홈화면 숫자)
+function updateAppBadge(){
+  try{
+    const myId = getMyId();
+    let total = 0;
+    (_rooms||[]).forEach(function(r){
+      if(r.isMyChat) return;
+      const lastRead = r.lastReadAt || 0;
+      (r.messages||[]).forEach(function(m){
+        if(m.from !== myId && m.at > lastRead && !m.deleted) total++;
+      });
+    });
+    if('setAppBadge' in navigator){
+      if(total > 0) navigator.setAppBadge(total).catch(function(){});
+      else navigator.clearAppBadge().catch(function(){});
+    }
+    // 탭 타이틀에도 표시
+    if(total > 0){
+      document.title = '(' + (total > 99 ? '99+' : total) + ') Stella Talk';
+    } else {
+      document.title = 'Stella Talk';
+    }
+  }catch(e){}
 }
 function closeMobileRoom(){
   stopPolling();
