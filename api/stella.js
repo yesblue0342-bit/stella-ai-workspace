@@ -1,4 +1,4 @@
-import { saveJsonToDrive, listJsonFromDrive, searchDrive, listDriveDirectory } from "../lib/drive-utils.js";
+import { saveJsonToDrive, listJsonFromDrive, readJsonFromDrive, searchDrive, listDriveDirectory, ensurePath } from "../lib/drive-utils.js";
 import { getPlaceContext, getWeatherContext } from "../lib/place-weather-utils.js";
 import { getPool, sql } from "../lib/db.js";
 
@@ -153,12 +153,67 @@ async function handleBoardSave(req, res) {
   return res.status(200).json({ ok: true, message: "게시글 저장 완료", saved, post: data });
 }
 async function handleBoardList(req, res) {
-  const category = clean(getInput(req, ["category"]) || "Board");
   const userId = clean(getInput(req, ["userId", "email"]) || "");
-  const limit = Math.min(Number(getInput(req, ["limit"]) || 50), 100);
   if (!userId) return res.status(400).json({ ok: false, message: "userId가 필요합니다." });
-  const files = await listJsonFromDrive({ folderPath: ["boards", userId, category], pageSize: Number.isFinite(limit) ? limit : 50 });
-  return res.status(200).json({ ok: true, type: "board-list", category, userId, posts: files.map(mapDriveFile) });
+
+  const categoryParam = clean(getInput(req, ["category"]) || "");
+  const limit = Math.min(Number(getInput(req, ["limit"]) || 200), 500);
+
+  // category가 "all"이거나 없으면 모든 카테고리 조회
+  const allPosts = [];
+
+  if (!categoryParam || categoryParam === "all") {
+    // boards/{userId}/ 하위 폴더(카테고리) 전체 순회
+    try {
+      const { listDriveDirectory } = await import("../lib/drive-utils.js");
+      const boardRoot = await import("../lib/drive-utils.js").then(m => m.ensurePath(["boards", userId]));
+      const catList = await listDriveDirectory({ folderId: boardRoot.id, pageSize: 100 });
+      const categories = (catList.files || []).filter(f => f.isFolder).map(f => f.name);
+      // 카테고리가 없으면 기본 Board, 노트 시도
+      if (!categories.length) categories.push("Board", "노트", "게시글");
+
+      for (const cat of categories) {
+        try {
+          const files = await listJsonFromDrive({ folderPath: ["boards", userId, cat], pageSize: 100 });
+          for (const f of files) {
+            try {
+              const r = await readJsonFromDrive({ folderPath: ["boards", userId, cat], fileName: f.name.replace(/\.json$/, "") });
+              if (r?.data && !r.data.deleted) {
+                allPosts.push({ ...r.data, _category: cat });
+              }
+            } catch(e) {}
+          }
+        } catch(e) {}
+      }
+    } catch(e) {
+      // fallback: 기본 카테고리들 시도
+      for (const cat of ["Board", "노트", "게시글", "Note"]) {
+        try {
+          const files = await listJsonFromDrive({ folderPath: ["boards", userId, cat], pageSize: 100 });
+          for (const f of files) {
+            try {
+              const r = await readJsonFromDrive({ folderPath: ["boards", userId, cat], fileName: f.name.replace(/\.json$/, "") });
+              if (r?.data && !r.data.deleted) allPosts.push({ ...r.data, _category: cat });
+            } catch(e2) {}
+          }
+        } catch(e2) {}
+      }
+    }
+  } else {
+    // 특정 카테고리만 조회 (실제 내용 포함)
+    const files = await listJsonFromDrive({ folderPath: ["boards", userId, categoryParam], pageSize: limit });
+    for (const f of files) {
+      try {
+        const r = await readJsonFromDrive({ folderPath: ["boards", userId, categoryParam], fileName: f.name.replace(/\.json$/, "") });
+        if (r?.data && !r.data.deleted) allPosts.push({ ...r.data, _category: categoryParam });
+      } catch(e) {}
+    }
+  }
+
+  // 최신순 정렬
+  allPosts.sort((a, b) => new Date(b.updatedAt || b.createdAt || 0) - new Date(a.updatedAt || a.createdAt || 0));
+
+  return res.status(200).json({ ok: true, type: "board-list", userId, posts: allPosts, total: allPosts.length });
 }
 async function handleChatSave(req, res) {
   if (req.method !== "POST") { res.setHeader("Allow", "POST"); return res.status(405).json({ ok: false, message: "Method Not Allowed" }); }
