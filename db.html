@@ -495,39 +495,78 @@ async function uploadFiles(fileList){
   let ok=0;
   for(let i=0;i<fileList.length;i++){
     const file=fileList[i];
-    pr.textContent=(i+1)+'/'+fileList.length+' — '+file.name;
     try{
-      // base64는 ~33% 커지므로 실제 한도는 ~37MB
-      if(file.size>37*1024*1024){pr.textContent='⚠️ '+file.name+' (37MB 초과 - 스킵)';await sleep(1500);continue;}
-      const base64data=await new Promise(function(resolve,reject){
-        const fr=new FileReader();
-        fr.onload=function(e){const result=e.target.result;const b64=result.includes(',')?result.split(',')[1]:result;resolve(b64);};
-        fr.onerror=reject;fr.readAsDataURL(file);
-      });
-      const r=await fetch('/api/drive-manage?action=upload',{
-        method:'POST',headers:{'Content-Type':'application/json'},
-        body:JSON.stringify({parentId:_curId,fileName:file.name,mimeType:file.type||'application/octet-stream',base64data})
-      });
-      // JSON 파싱 안전 처리 (서버가 HTML/텍스트 에러 반환 시)
-      let d;
-      const txt=await r.text();
-      try{ d=JSON.parse(txt); }
-      catch(parseErr){
-        if(r.status===413||/too large|entity/i.test(txt)){
-          pr.textContent='❌ '+file.name+': 파일이 너무 큽니다 (서버 한도 초과)';
-        } else {
-          pr.textContent='❌ '+file.name+': 서버 오류('+r.status+')';
-        }
-        await sleep(1500);continue;
-      }
-      if(d.ok)ok++;
-      else{pr.textContent='❌ '+file.name+': '+(d.error||d.message);await sleep(1500);}
-    }catch(e){pr.textContent='❌ '+file.name+': '+e.message;await sleep(1500);}
+      await uploadOneResumable(file, i+1, fileList.length, pr);
+      ok++;
+    }catch(e){
+      pr.textContent='❌ '+file.name+': '+e.message;
+      await sleep(1500);
+    }
   }
   ov.classList.remove('on');
   document.getElementById('fileUploadIn').value='';
   status('⬆ 업로드 완료: '+ok+'/'+fileList.length+'개');
   refresh();
+}
+
+// ── Resumable Upload (대용량 - 브라우저가 Drive로 직접 청크 전송) ──
+async function uploadOneResumable(file, idx, total, pr){
+  const prefix=idx+'/'+total+' — '+file.name+' ';
+  pr.textContent=prefix+'준비 중...';
+
+  // 1) 서버에서 업로드 세션 URL 발급
+  const sessRes=await fetch('/api/drive-upload-url',{
+    method:'POST',headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({parentId:_curId,fileName:file.name,mimeType:file.type||'application/octet-stream',fileSize:file.size})
+  });
+  const sessTxt=await sessRes.text();
+  let sess;
+  try{ sess=JSON.parse(sessTxt); }
+  catch(e){ throw new Error('세션 발급 실패('+sessRes.status+')'); }
+  if(!sess.ok||!sess.uploadUrl) throw new Error(sess.message||'세션 URL 없음');
+
+  const uploadUrl=sess.uploadUrl;
+  const CHUNK=8*1024*1024; // 8MB 청크
+  const totalSize=file.size;
+
+  // 빈 파일 처리
+  if(totalSize===0){
+    const r=await fetch(uploadUrl,{method:'PUT',headers:{'Content-Range':'bytes */0'},body:new Blob([])});
+    if(!r.ok&&r.status!==200&&r.status!==201) throw new Error('빈 파일 업로드 실패');
+    pr.textContent=prefix+'✅ 완료';
+    return;
+  }
+
+  // 2) 청크 단위로 직접 전송
+  let offset=0;
+  while(offset<totalSize){
+    const end=Math.min(offset+CHUNK, totalSize);
+    const chunk=file.slice(offset, end);
+    const percent=Math.round((end/totalSize)*100);
+    pr.textContent=prefix+percent+'% ('+fmtSize(end)+'/'+fmtSize(totalSize)+')';
+
+    const r=await fetch(uploadUrl,{
+      method:'PUT',
+      headers:{ 'Content-Range':'bytes '+offset+'-'+(end-1)+'/'+totalSize },
+      body:chunk
+    });
+
+    if(r.status===308){
+      // 계속 진행 - Range 헤더로 다음 위치 확인
+      const range=r.headers.get('Range');
+      if(range){ const m=range.match(/bytes=0-(\d+)/); if(m) offset=parseInt(m[1])+1; else offset=end; }
+      else offset=end;
+    } else if(r.status===200||r.status===201){
+      // 완료
+      offset=totalSize;
+      pr.textContent=prefix+'✅ 완료';
+      return;
+    } else {
+      const errTxt=await r.text();
+      throw new Error('전송 오류('+r.status+')');
+    }
+  }
+  pr.textContent=prefix+'✅ 완료';
 }
 
 // ── PWA 설치 ──
