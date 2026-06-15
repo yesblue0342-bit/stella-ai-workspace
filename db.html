@@ -106,6 +106,9 @@ body{font-family:system-ui,'Noto Sans KR',sans-serif;background:var(--bg);color:
 <p>관리자 계정으로 로그인하세요</p>
 <input id="gId" placeholder="아이디 (admin / yesblue0342)" autocomplete="username" onkeydown="if(event.key==='Enter')dbLogin()">
 <input id="gPw" type="password" placeholder="비밀번호" autocomplete="current-password" onkeydown="if(event.key==='Enter')dbLogin()">
+<label style="display:flex;align-items:center;gap:7px;margin:6px 0 2px;font-size:.82rem;color:var(--text2);cursor:pointer">
+  <input type="checkbox" id="gRemember" checked style="accent-color:var(--primary);width:16px;height:16px"> 아이디 기억하기
+</label>
 <button class="gate-btn pri" onclick="dbLogin()">접속</button>
 <button class="gate-btn" onclick="location.href='/'">Stella GPT로 돌아가기</button>
 <div class="err" id="gErr"></div>
@@ -170,14 +173,30 @@ body{font-family:system-ui,'Noto Sans KR',sans-serif;background:var(--bg);color:
 </div>
 
 <script>
-const SK='stella_session_final_v82';
+const SK='stella_db_session_v1';
+const SK_REMEMBER='stella_db_remember_id';
+const SESSION_TTL=8*60*60*1000; // 8시간
 const ADMINS=['admin','admin@stella.local','yesblue0342','yesblue0342@naver.com','yesblue0342@gmail.com','김경훈','이후'];
 let _user=null,_stack=[],_files=[],_curId='',_sel=new Set(),_theme='dark';
 
 // ── 유틸 ──
 function isAdmin(u){if(!u)return false;const id=String(u.id||'').toLowerCase(),em=String(u.email||'').toLowerCase();return ADMINS.some(a=>a.toLowerCase()===id||a.toLowerCase()===em)||id==='admin'||String(u.role)==='admin';}
-function getSession(){try{const s=JSON.parse(localStorage.getItem(SK)||'null');if(s&&s.user)return s.user;}catch(e){}return null;}
-function saveSession(u){localStorage.setItem(SK,JSON.stringify({id:u.id,user:u,savedAt:-1}));}
+function getSession(){
+  try{
+    const s=JSON.parse(localStorage.getItem(SK)||'null');
+    if(!s||!s.user) return null;
+    // 세션 만료 체크 (savedAt가 -1이면 무제한, 아니면 TTL 체크)
+    if(s.savedAt!==-1 && s.savedAt>0){
+      if(Date.now()-s.savedAt>SESSION_TTL){
+        localStorage.removeItem(SK);
+        return null;
+      }
+    }
+    return s.user;
+  }catch(e){}
+  return null;
+}
+function saveSession(u){localStorage.setItem(SK,JSON.stringify({id:u.id,user:u,savedAt:Date.now()}));}
 function esc(s){return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');}
 function fmtDate(d){if(!d)return'';const dt=new Date(d);return dt.toLocaleDateString('ko-KR')+' '+dt.toLocaleTimeString('ko-KR',{hour:'2-digit',minute:'2-digit'});}
 function fmtSize(s){if(!s)return'';const n=Number(s);if(n<1024)return n+'B';if(n<1048576)return(n/1024).toFixed(1)+'KB';return(n/1048576).toFixed(1)+'MB';}
@@ -205,6 +224,12 @@ async function dbLogin(){
   const err=document.getElementById('gErr');
   if(!id||!pw){err.textContent='아이디와 비밀번호를 입력하세요.';return;}
   err.textContent='접속 중...';
+  // 아이디 기억하기
+  if(document.getElementById('gRemember').checked){
+    localStorage.setItem(SK_REMEMBER,id);
+  } else {
+    localStorage.removeItem(SK_REMEMBER);
+  }
   if(id==='admin'&&pw==='admin'){
     const u={id:'admin',name:'관리자',email:'admin@stella.local',role:'admin'};
     saveSession(u);enterApp(u);return;
@@ -836,6 +861,13 @@ async function pickerConfirm(){
 })();
 
 window.onload=function(){
+  // 기억된 아이디 자동 입력
+  const rememberedId=localStorage.getItem(SK_REMEMBER);
+  if(rememberedId){
+    const gId=document.getElementById('gId');
+    if(gId) gId.value=rememberedId;
+  }
+  // 세션 확인
   const u=getSession();
   if(u&&isAdmin(u)){enterApp(u);}
 };
