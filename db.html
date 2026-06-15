@@ -196,6 +196,21 @@ body{font-family:system-ui,'Noto Sans KR',sans-serif;background:var(--bg);color:
 </div>
 </div>
 
+<!-- ── 진단 모달 ── -->
+<div id="diagModal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.7);z-index:9000;align-items:center;justify-content:center;padding:16px">
+<div style="background:var(--bg2);border:1px solid var(--border);border-radius:16px;width:min(520px,100%);max-height:80vh;overflow-y:auto;padding:20px">
+<div style="display:flex;align-items:center;gap:8px;margin-bottom:14px">
+<span style="font-size:1.1rem;font-weight:900;color:var(--text)">🔍 Drive 연결 진단</span>
+<button onclick="document.getElementById('diagModal').style.display='none'" style="margin-left:auto;background:var(--bg3);border:1px solid var(--border);border-radius:8px;padding:4px 10px;cursor:pointer;color:var(--text);font-size:.8rem">닫기</button>
+</div>
+<div id="diagContent" style="font-size:.82rem;color:var(--text);line-height:2"></div>
+<div style="margin-top:14px;display:flex;gap:8px;flex-wrap:wrap">
+<button onclick="retryLoad()" style="flex:1;padding:9px;border-radius:10px;cursor:pointer;font-weight:800;background:#1f6feb;color:#fff;border:none;font-size:.85rem">↻ 다시 로드</button>
+<button onclick="document.getElementById('diagModal').style.display='none'" style="flex:1;padding:9px;border-radius:10px;cursor:pointer;font-weight:800;background:var(--bg3);color:var(--text);border:1px solid var(--border);font-size:.85rem">닫기</button>
+</div>
+</div>
+</div>
+
 <script>
 const SK='stella_db_session_v1';
 const SK_REMEMBER='stella_db_remember_id';
@@ -341,29 +356,70 @@ async function loadFolder(folderId,name){
 }
 
 // ── Drive 진단 ──
+function retryLoad(){
+  document.getElementById('diagModal').style.display='none';
+  _stack=[];
+  loadFolder('','내 드라이브');
+}
+
 async function runDiag(){
+  const modal=document.getElementById('diagModal');
+  const content=document.getElementById('diagContent');
+  if(!modal||!content)return;
+  modal.style.display='flex';
+  content.innerHTML='<div style="color:var(--text2)">진단 중...</div>';
   status('🔍 진단 중...');
   try{
-    const r=await fetch('/api/drive-diagnostics',{cache:'no-store'});
+    // 1) 환경변수 진단
+    const r=await fetchWithTimeout('/api/drive-diagnostics',{cache:'no-store'},8000);
     const d=await r.json();
     const diag=d.diagnostics||{};
     const checks=diag.checks||{};
-    const lines=[
-      'clientId: '+(diag.clientId?.configured?'✅ ('+diag.clientId.prefix+'…)':'❌ 미설정'),
-      'clientSecret: '+(diag.clientSecret?.configured?'✅':'❌ 미설정'),
-      'refreshToken: '+(diag.refreshToken?.configured?'✅ ('+diag.refreshToken.prefix+'…)':'❌ 미설정'),
-      'rootFolder: '+(diag.rootFolderId?.configured?'✅':'❌ 미설정'),
-      'clientId형식: '+(checks.clientIdLooksOAuth?'✅':'⚠️'),
-      'refreshToken형식: '+(checks.refreshTokenLooksGoogle?'✅':'⚠️ 형식 불일치'),
+    const rows=[
+      {label:'GOOGLE_CLIENT_ID',ok:diag.clientId?.configured,detail:diag.clientId?.configured?diag.clientId.prefix+'…':'미설정'},
+      {label:'GOOGLE_CLIENT_SECRET',ok:diag.clientSecret?.configured,detail:diag.clientSecret?.configured?'설정됨':'미설정'},
+      {label:'GOOGLE_REFRESH_TOKEN',ok:diag.refreshToken?.configured,detail:diag.refreshToken?.configured?diag.refreshToken.prefix+'…':'미설정'},
+      {label:'DRIVE_FOLDER_ID',ok:diag.rootFolderId?.configured,detail:diag.rootFolderId?.configured?'설정됨':'미설정'},
+      {label:'clientId 형식',ok:checks.clientIdLooksOAuth,detail:checks.clientIdLooksOAuth?'정상':'⚠️ googleapis.com 형식 아님'},
+      {label:'refreshToken 형식',ok:checks.refreshTokenLooksGoogle,detail:checks.refreshTokenLooksGoogle?'정상':'⚠️ 1// 로 시작해야 함'},
     ];
-    const msg=lines.join(' | ');
-    status('🔍 '+msg);
-    // 추가로 drive-list 직접 시도해서 실제 오류 확인
-    const r2=await fetch('/api/drive-list',{cache:'no-store'});
-    const d2=await r2.json();
-    if(!d2.ok) status('🔍 '+msg+' | drive-list 오류: '+( d2.error||d2.message||'알 수 없음'));
-    else status('🔍 '+msg+' | drive-list: ✅ 정상 ('+( d2.files?.length||0)+'개)');
-  }catch(e){status('🔍 진단 오류: '+e.message);}
+    let html=rows.map(function(row){
+      return '<div style="display:flex;gap:8px;align-items:center;padding:5px 0;border-bottom:1px solid var(--border)">'
+        +'<span style="width:20px;text-align:center">'+(row.ok?'✅':'❌')+'</span>'
+        +'<span style="flex:1;font-weight:700">'+row.label+'</span>'
+        +'<span style="color:var(--text2)">'+row.detail+'</span></div>';
+    }).join('');
+
+    // 2) drive-list 실제 호출
+    html+='<div style="margin-top:12px;font-weight:900;color:var(--text)">📡 Drive API 실제 호출 결과</div>';
+    try{
+      const r2=await fetchWithTimeout('/api/drive-list',{cache:'no-store'},12000);
+      const d2=await r2.json();
+      if(d2.ok){
+        html+='<div style="color:#22c55e;padding:6px 0">✅ 성공 — '+( d2.files?.length||0)+'개 항목</div>';
+        status('✅ Drive 연결 정상');
+        content.innerHTML=html;
+        // 성공이면 자동 로드
+        setTimeout(function(){
+          document.getElementById('diagModal').style.display='none';
+          _stack=[];loadFolder('','내 드라이브');
+        },1500);
+        return;
+      } else {
+        html+='<div style="color:#ef4444;padding:6px 0">❌ API 오류: '+(d2.error||d2.message||'알 수 없음')+'</div>';
+        status('❌ Drive API 오류: '+(d2.error||d2.message||''));
+      }
+    }catch(e2){
+      const msg=e2.name==='AbortError'?'응답 없음 (12초 타임아웃)':e2.message;
+      html+='<div style="color:#ef4444;padding:6px 0">❌ 네트워크 오류: '+msg+'</div>';
+      status('❌ Drive 연결 실패: '+msg);
+    }
+    content.innerHTML=html;
+  }catch(e){
+    const msg='진단 API 호출 실패: '+e.message;
+    content.innerHTML='<div style="color:#ef4444">❌ '+msg+'</div>';
+    status('❌ '+msg);
+  }
 }
 
 // ── 브레드크럼 + 경로복사 ──
