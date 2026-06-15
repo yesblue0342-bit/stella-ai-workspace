@@ -301,25 +301,27 @@ function enterApp(u){
 function dbLogout(){localStorage.removeItem(SK);location.reload();}
 
 // ── 폴더 탐색 ──
+async function fetchWithTimeout(url,options,ms){
+  ms=ms||12000;options=options||{};
+  const ctrl=new AbortController();
+  const tid=setTimeout(function(){ctrl.abort();},ms);
+  try{return await fetch(url,Object.assign({},options,{signal:ctrl.signal}));}finally{clearTimeout(tid);}
+}
+
 async function loadFolder(folderId,name){
-  try {
+  try{
   status('로딩 중...');
   document.getElementById('fileList').innerHTML='';
   clearSel();
   _curId=folderId||'';
-  // 재시도 로직 (최대 3회)
   let lastErr=null;
-  for(let attempt=1;attempt<=3;attempt++){
+  for(let attempt=1;attempt<=2;attempt++){
     try{
       const url='/api/drive-list'+(folderId?'?folderId='+encodeURIComponent(folderId):'');
-      if(attempt>1){status('재시도 중... ('+attempt+'/3)');await sleep(800*attempt);}
-      const r=await fetch(url,{cache:'no-store'});
+      if(attempt>1){status('재시도 중...');await sleep(1500);}
+      const r=await fetchWithTimeout(url,{cache:'no-store'},12000);
       const d=await r.json();
-      if(!d.ok){
-        lastErr=d.message||'로드 실패';
-        if(attempt<3)continue;
-        status('오류: '+lastErr);return;
-      }
+      if(!d.ok){lastErr=(d.error||d.message||'로드 실패');if(attempt<2)continue;break;}
       _files=Array.isArray(d.files)?d.files:[];
       const cid=folderId||'ROOT';
       if(!_stack.length||_stack[_stack.length-1].id!==cid){
@@ -329,12 +331,13 @@ async function loadFolder(folderId,name){
       status('📁 '+(_stack[_stack.length-1]?.name||'내 드라이브')+' — '+_files.length+'개 항목');
       return;
     }catch(e){
-      lastErr=e.message;
+      lastErr=(e.name==='AbortError'?'응답 시간 초과(12초)':e.message);
       console.warn('loadFolder 시도'+attempt+' 실패:',e);
-      if(attempt===3) status('❌ 폴더 로딩 실패 (3회 시도): '+lastErr);
     }
   }
-  } catch(err) { console.error('loadFolder 오류:', err); status('폴더 로딩 실패: '+err.message); }
+  status('❌ 로딩 실패: '+lastErr+' — 자동 진단 중...');
+  setTimeout(runDiag,500);
+  }catch(err){console.error('loadFolder 오류:',err);status('폴더 로딩 실패: '+err.message);}
 }
 
 // ── Drive 진단 ──
