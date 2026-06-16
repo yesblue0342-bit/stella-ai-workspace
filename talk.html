@@ -234,7 +234,7 @@ body.theme-dark .theme-btn.active{background:#1e3a5f}
         <div class="composer-inner">
           <button class="attach-btn" onclick="document.getElementById('fileInput').click()" title="파일 첨부">📎</button>
           <input type="file" id="fileInput" multiple hidden onchange="handleFileSelect(this.files)">
-          <textarea class="chat-input" id="chatInput" placeholder="메시지 입력" rows="1"
+          <textarea class="chat-input" id="chatInput" placeholder="메시지 입력 (Enter=전송)" rows="1"
             onkeydown="if(event.key==='Enter'&&!event.shiftKey){event.preventDefault();sendMsg()}"
             oninput="this.style.height='auto';this.style.height=Math.min(this.scrollHeight,120)+'px'"></textarea>
           <button class="send-btn" onclick="sendMsg()">↑</button>
@@ -838,7 +838,7 @@ function startPolling(){
   _pollTimer = setInterval(async function(){
     if(!_cur || _cur.isMyChat) return;
     try{ await syncRoomFromServer(false); }catch(e){}
-  }, 3000);
+  }, 2000);
 }
 function stopPolling(){
   if(_pollTimer){ clearInterval(_pollTimer); _pollTimer=null; }
@@ -1238,6 +1238,22 @@ function renderMessages(){
         tmWrap.appendChild(rd);
       }
     }
+    // ★ 전송 상태 표시 (전송중/실패+재시도)
+    if(isMe && m.sendState){
+      if(m.sendState==='sending'){
+        const st=document.createElement('div');
+        st.style.cssText='font-size:.7rem;color:var(--text2);opacity:.6';
+        st.textContent='⏳';
+        tmWrap.appendChild(st);
+      } else if(m.sendState==='failed'){
+        const st=document.createElement('div');
+        st.style.cssText='font-size:.72rem;color:#ef4444;cursor:pointer;font-weight:700';
+        st.textContent='⚠️ 재전송';
+        st.title='전송 실패 - 탭하여 재전송';
+        st.onclick=function(){ retryMsg(m.id); };
+        tmWrap.appendChild(st);
+      }
+    }
     col.appendChild(tmWrap);
     if(isMe){row.appendChild(col);row.appendChild(av);}
     else{row.appendChild(av);row.appendChild(col);}
@@ -1567,25 +1583,62 @@ async function sendMsg(){
       finalText = '┌ ' + q + '\n└ ' + text;
       _replyTo = null;
       const inp2=document.getElementById('chatInput');
-      if(inp2) inp2.placeholder='메시지 입력 (Enter=줄바꿈, ↑버튼=전송)';
+      if(inp2) inp2.placeholder='메시지 입력 (Enter=전송, Shift+Enter=줄바꿈)';
     }
-    // ★ 먼저 로컬에 즉시 추가 (화면에 바로 표시)
-    const tempMsg = {id:'m_'+Date.now()+'_'+Math.random().toString(36).slice(2,5), from:myId, fromName:myName, type:'text', text:finalText, at:Date.now()};
+    // ★ 먼저 로컬에 즉시 추가 (화면에 바로 표시) - 전송중 상태
+    const tempId = 'm_'+Date.now()+'_'+Math.random().toString(36).slice(2,5);
+    const tempMsg = {id:tempId, from:myId, fromName:myName, type:'text', text:finalText, at:Date.now(), sendState:'sending'};
     _rooms[idx].messages.push(tempMsg);
     _cur=_rooms[idx]; saveRooms();
     renderMessages(); scrollBottom();
-    // 서버에 비동기 전송 (실패해도 로컬 메시지는 유지)
-    fetch('/api/chat-room?action=send',{
-      method:'POST', headers:{'Content-Type':'application/json'},
-      body: JSON.stringify({
-        roomId:_cur.id, title:_cur.name,
-        userId:myId, sender:myName,
-        message:finalText, members:_cur.members||[myId]
-      })
-    }).catch(function(e){ console.warn('[Talk] 서버 전송 실패:', e.message); });
+    // 서버에 전송 + 상태 업데이트
+    sendTextToServer(_cur.id, _cur.name, myId, myName, finalText, _cur.members||[myId], tempId);
   }
   // ⑤ 서버 동기화는 1초 후 (서버 반영 시간 확보)
   setTimeout(function(){ syncRoomFromServer(false); }, 1000);
+}
+
+// ── 텍스트 서버 전송 (상태 추적 + 실패 시 재시도 버튼) ──
+function sendTextToServer(roomId, roomName, myId, myName, text, members, tempId){
+  fetch('/api/chat-room?action=send',{
+    method:'POST', headers:{'Content-Type':'application/json'},
+    body: JSON.stringify({ roomId, title:roomName, userId:myId, sender:myName, message:text, members })
+  }).then(function(r){
+    if(!r.ok) throw new Error('status '+r.status);
+    return r.json();
+  }).then(function(d){
+    if(!d.ok) throw new Error(d.message||'전송 실패');
+    // 성공 → 전송중 상태 제거
+    updateMsgState(roomId, tempId, 'sent');
+  }).catch(function(e){
+    console.warn('[Talk] 전송 실패:', e.message);
+    // 실패 → 실패 상태로 표시 (재시도 가능)
+    updateMsgState(roomId, tempId, 'failed');
+  });
+}
+
+// 메시지 전송 상태 업데이트
+function updateMsgState(roomId, msgId, state){
+  const idx=_rooms.findIndex(r=>r.id===roomId);
+  if(idx<0)return;
+  const m=(_rooms[idx].messages||[]).find(x=>x.id===msgId);
+  if(!m)return;
+  m.sendState=state;
+  saveRooms();
+  if(_cur&&_cur.id===roomId) renderMessages();
+}
+
+// 실패한 메시지 재전송
+function retryMsg(msgId){
+  if(!_cur)return;
+  const idx=_rooms.findIndex(r=>r.id===_cur.id);
+  if(idx<0)return;
+  const m=(_rooms[idx].messages||[]).find(x=>x.id===msgId);
+  if(!m)return;
+  m.sendState='sending';
+  saveRooms(); renderMessages();
+  const myId=getMyId(), myName=getMyName();
+  sendTextToServer(_cur.id, _cur.name, myId, myName, m.text, _cur.members||[myId], msgId);
 }
 
 function scrollBottom(){setTimeout(function(){const el=document.getElementById('chatMessages');el.scrollTop=el.scrollHeight;},50);}
