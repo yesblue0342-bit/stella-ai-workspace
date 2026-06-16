@@ -190,6 +190,9 @@ body.theme-dark .theme-btn.active{background:#1e3a5f}
 
 @keyframes ctxFade{from{opacity:0;transform:scale(0.95)}to{opacity:1;transform:scale(1)}}
 @keyframes toastFade{0%{opacity:0;transform:translateX(-50%) translateY(10px)}15%{opacity:1;transform:translateX(-50%) translateY(0)}85%{opacity:1}100%{opacity:0}}
+.sound-opt{background:var(--bg2);border:2px solid transparent;border-radius:12px;padding:10px 14px;font-size:.9rem;cursor:pointer;color:var(--text);text-align:left;transition:all .15s;font-family:inherit}
+.sound-opt:hover,.sound-opt:active{background:var(--accent);color:#fff;border-color:var(--accent)}
+.sound-opt.active{border-color:var(--accent);background:rgba(124,58,237,.15);font-weight:700}
 </style>
 </head>
 <body class="theme-kakao">
@@ -346,8 +349,31 @@ body.theme-dark .theme-btn.active{background:#1e3a5f}
     <div class="sp-section">알림</div>
     <div class="sp-row">
       <label>브라우저 알림</label>
-      <button class="hbtn" onclick="requestNotification()">권한 요청</button>
+      <button class="hbtn" onclick="requestNotification()">알림 권한</button>
+    <button class="hbtn" onclick="openSoundSettings()">🔔 알림음</button>
     </div>
+  </div>
+</div>
+
+<!-- ── 알림음 설정 모달 ── -->
+<div class="modal-overlay" id="soundSettingsModal" onclick="if(event.target===this)closeModal('soundSettingsModal')" style="display:none">
+  <div class="modal" style="max-width:340px">
+    <h3>🔔 알림음 설정</h3>
+    <p style="font-size:.82rem;color:var(--text2);margin-bottom:14px">버튼을 눌러 미리 들어보세요</p>
+    <div style="display:flex;flex-direction:column;gap:8px;margin-bottom:18px">
+      <button class="sound-opt" onclick="previewSound('stella1')" data-key="stella1">⭐ 스텔라~ <span style="font-size:.75rem;color:var(--text2)">(기본)</span></button>
+      <button class="sound-opt" onclick="previewSound('stella2')" data-key="stella2">✨ 스텔라~~톡</button>
+      <button class="sound-opt" onclick="previewSound('byeolha')" data-key="byeolha">👸 별하공주님~~</button>
+      <button class="sound-opt" onclick="previewSound('byeolping')" data-key="byeolping">💫 우리별핑~~</button>
+      <button class="sound-opt" onclick="previewSound('byeoldong')" data-key="byeoldong">🌟 김별똥~~</button>
+      <button class="sound-opt" onclick="previewSound('lucy')" data-key="lucy">🐣 꼬마~~루시</button>
+      <button class="sound-opt" onclick="previewSound('hachoo')" data-key="hachoo">🌈 하츄핑~~</button>
+    </div>
+    <div style="display:flex;align-items:center;gap:10px;margin-bottom:18px;padding:12px;background:var(--bg3);border-radius:10px">
+      <span style="font-size:.88rem">🔕 소리 끄기</span>
+      <input type="checkbox" id="soundOffCheck" onchange="setSoundOff(this.checked)" style="width:20px;height:20px;margin-left:auto;accent-color:var(--accent)">
+    </div>
+    <button class="btn-primary" onclick="closeModal('soundSettingsModal');toast('알림음이 저장되었습니다')">확인</button>
   </div>
 </div>
 
@@ -366,6 +392,14 @@ function loadSettings(){
   try{return JSON.parse(localStorage.getItem(ST)||'{}');}catch{return {};}
 }
 function saveSetting(k,v){const s=loadSettings();s[k]=v;localStorage.setItem(ST,JSON.stringify(s));}
+function setSoundOff(off){saveSetting('soundOff',off);}
+function openSoundSettings(){
+  const key=localStorage.getItem('stella_talk_sound')||'stella1';
+  document.querySelectorAll('.sound-opt').forEach(function(b){b.classList.toggle('active',b.dataset.key===key);});
+  const chk=document.getElementById('soundOffCheck');
+  if(chk) chk.checked=!!(loadSettings().soundOff);
+  openModal('soundSettingsModal');
+}
 
 // ── 테마 ──
 function setTheme(t){
@@ -850,6 +884,58 @@ function notify(title, body){
   }
   // 2) 진동 (모바일)
   try{ if(navigator.vibrate) navigator.vibrate([200, 100, 200]); }catch(e){}
+  // 3) 알림음 재생
+  playNotifySound();
+}
+
+// ── 알림음 (Web Audio API) ──
+// 설정: 스텔라~/스텔라~~톡/별하공주님~~/우리별핑~~/김별똥~~/꼬마루시/하츄핑
+var _notifySoundKey = localStorage.getItem('stella_talk_sound') || 'stella1';
+
+function playNotifySound(){
+  try{
+    const s = loadSettings();
+    if(s.soundOff) return; // 소리 끔
+    const key = _notifySoundKey;
+    const ctx = new (window.AudioContext || window.webkitAudioContext)();
+    const sounds = {
+      // 스텔라~ (기본) - 맑고 귀여운 2음
+      'stella1': [[523,0.15],[659,0.35],[784,0.6],[659,0.9],[784,1.1]],
+      // 스텔라~~톡 - 경쾌한 3음
+      'stella2': [[784,0.0],[880,0.18],[1047,0.36],[880,0.55],[1047,0.75],[880,1.0]],
+      // 별하공주님~~ - 동화같은 멜로디
+      'byeolha': [[523,0.0],[659,0.2],[784,0.4],[1047,0.6],[784,0.85],[880,1.1]],
+      // 우리별핑~~ - 통통 튀는 느낌
+      'byeolping': [[880,0.0],[1047,0.15],[880,0.3],[1047,0.5],[1319,0.7],[1047,0.95]],
+      // 김별똥~~ - 귀여운 별
+      'byeoldong': [[659,0.0],[784,0.2],[659,0.4],[523,0.6],[659,0.8],[784,1.05]],
+      // 꼬마루시 - 아기자기
+      'lucy': [[523,0.0],[587,0.18],[659,0.36],[698,0.54],[784,0.72],[698,0.95]],
+      // 하츄핑 - 발랄한 3단
+      'hachoo': [[784,0.0],[1047,0.2],[784,0.4],[880,0.6],[1047,0.85],[1319,1.1]]
+    };
+    const notes = sounds[key] || sounds['stella1'];
+    notes.forEach(function([freq, time]){
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.connect(gain);
+      gain.connect(ctx.destination);
+      osc.type = 'sine';
+      osc.frequency.setValueAtTime(freq, ctx.currentTime + time);
+      gain.gain.setValueAtTime(0.3, ctx.currentTime + time);
+      gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + time + 0.25);
+      osc.start(ctx.currentTime + time);
+      osc.stop(ctx.currentTime + time + 0.3);
+    });
+    setTimeout(function(){ try{ctx.close();}catch(e){} }, 2000);
+  }catch(e){}
+}
+
+// 알림음 미리 듣기
+function previewSound(key){
+  _notifySoundKey = key;
+  localStorage.setItem('stella_talk_sound', key);
+  playNotifySound();
 }
 
 // 앱 아이콘 뱃지 업데이트 (홈화면 숫자)
