@@ -1584,7 +1584,7 @@ function initTalk(){
   loadRooms();ensureMyChat();renderRooms();
   setTimeout(requestNotification,2000);
   setTimeout(syncRoomListFromServer,500);
-  setInterval(syncRoomListFromServer, 10000);
+  setInterval(syncRoomListFromServer, 5000);
 }
 
 // ── Stella Talk 자체 로그인 ──
@@ -1640,16 +1640,28 @@ async function syncRoomListFromServer(){
     const d=await r.json();
     if(!d.ok||!Array.isArray(d.rooms))return;
     let changed=false;
+    let hasNewMessage=false;
     for(const sr of d.rooms){
       if(sr.deleted)continue;
       const exists=_rooms.find(x=>x.id===sr.roomId);
       if(!exists){
-        // 서버에만 있는 방 → 로컬에 추가
-        _rooms.push({id:sr.roomId,name:sr.title||'채팅방',members:sr.members||[],messages:[],createdAt:Date.now()});
+        _rooms.push({id:sr.roomId,name:sr.title||'채팅방',members:sr.members||[],messages:[],createdAt:Date.now(),_srvCount:sr.messageCount||0});
         changed=true;
+      } else {
+        const srvCount = sr.messageCount || 0;
+        const prevCount = exists._srvCount || 0;
+        if(srvCount > prevCount && prevCount > 0){
+          if(!_cur || _cur.id !== sr.roomId) hasNewMessage=true;
+        }
+        exists._srvCount = srvCount;
       }
     }
-    if(changed){saveRooms();renderRooms();}
+    if(hasNewMessage){
+      playNotifySound();
+      try{ if(navigator.vibrate) navigator.vibrate([100,50,100]); }catch(e){}
+      changed=true;
+    }
+    if(changed){saveRooms();renderRooms();updateAppBadge();}
   }catch(e){}
 }
 
