@@ -735,7 +735,15 @@ function openRoom(id){
   // 방 열면 읽음 처리 (현재 시각으로 lastReadAt 갱신)
   const idx=_rooms.findIndex(r=>r.id===id);
   if(idx>=0){_rooms[idx].lastReadAt=Date.now();_cur=_rooms[idx];saveRooms();}
-  updateAppBadge(); // 방 입장 시 뱃지 갱신
+  updateAppBadge();
+  // ★ 서버에 읽음 시각 전송 (상대방의 "1" 표시 제거용)
+  const myId = getMyId();
+  if(myId && !_cur.isMyChat){
+    fetch('/api/chat-room?action=read',{
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({ roomId: _cur.id, userId: myId })
+    }).catch(function(){});
+  }
   document.getElementById('noRoom').style.display='none';
   const cr=document.getElementById('chatRoom');cr.style.display='flex';
   document.getElementById('chatRoomName').textContent=(_cur.isMyChat?'💛 ':'')+_cur.name;
@@ -812,8 +820,11 @@ async function syncRoomFromServer(scrollAfter){
     const idx=_rooms.findIndex(x=>x.id===_cur.id);
     if(idx<0)return;
     const prevCount=(_rooms[idx].messages||[]).length;
-    // 서버 메시지로 교체 (서버가 진실의 원천, 중복 제거됨)
-    _rooms[idx].messages=dedupedMsgs;
+    // 서버 메시지와 로컬 메시지 병합 (로컬에만 있는 임시 메시지 보존)
+    const localOnly = (_rooms[idx].messages||[]).filter(function(lm){
+      return lm.id && lm.id.startsWith('m_') && !seen.has(lm.id);
+    });
+    _rooms[idx].messages = dedupedMsgs.concat(localOnly);
     if(d.room&&d.room.members) _rooms[idx].members=d.room.members;
     // 상대방 읽음 정보 저장 (카톡 "1" 표시용)
     if(d.reads) _rooms[idx].reads=d.reads;
@@ -1403,9 +1414,8 @@ async function sendMsg(){
   }
   _attachFiles=[]; renderAttachPreview();
 
-  // ④ 텍스트 전송
+  // ④ 텍스트 전송 - 낙관적 업데이트 (로컬 즉시 표시 → 서버 전송)
   if(text){
-    // 답장 인용 추가
     let finalText = text;
     if(_replyTo){
       const q = (_replyTo.text || (_replyTo.type==='image'?'사진':'파일')).slice(0,40);
@@ -1414,23 +1424,23 @@ async function sendMsg(){
       const inp2=document.getElementById('chatInput');
       if(inp2) inp2.placeholder='메시지 입력 (Enter=줄바꿈, ↑버튼=전송)';
     }
-    try{
-      await fetch('/api/chat-room?action=send',{
-        method:'POST', headers:{'Content-Type':'application/json'},
-        body: JSON.stringify({
-          roomId:_cur.id, title:_cur.name,
-          userId:myId, sender:myName,
-          message:finalText, members:_cur.members||[myId]
-        })
-      });
-    } catch(e){
-      // 실패 시 로컬에 추가
-      _rooms[idx].messages.push({id:'m_'+Date.now(), from:myId, fromName:myName, type:'text', text, at:Date.now()});
-      _cur=_rooms[idx]; saveRooms();
-    }
+    // ★ 먼저 로컬에 즉시 추가 (화면에 바로 표시)
+    const tempMsg = {id:'m_'+Date.now()+'_'+Math.random().toString(36).slice(2,5), from:myId, fromName:myName, type:'text', text:finalText, at:Date.now()};
+    _rooms[idx].messages.push(tempMsg);
+    _cur=_rooms[idx]; saveRooms();
+    renderMessages(); scrollBottom();
+    // 서버에 비동기 전송 (실패해도 로컬 메시지는 유지)
+    fetch('/api/chat-room?action=send',{
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({
+        roomId:_cur.id, title:_cur.name,
+        userId:myId, sender:myName,
+        message:finalText, members:_cur.members||[myId]
+      })
+    }).catch(function(e){ console.warn('[Talk] 서버 전송 실패:', e.message); });
   }
-  // ⑤ 서버에서 즉시 동기화
-  await syncRoomFromServer(true);
+  // ⑤ 서버 동기화는 1초 후 (서버 반영 시간 확보)
+  setTimeout(function(){ syncRoomFromServer(false); }, 1000);
 }
 
 function scrollBottom(){setTimeout(function(){const el=document.getElementById('chatMessages');el.scrollTop=el.scrollHeight;},50);}
