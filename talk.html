@@ -1014,6 +1014,8 @@ document.addEventListener('click', unlockAudio, {once:false, passive:true});
 (function setupAudioUnlock(){
   function once(){
     unlockAudio();
+    // 알림 권한도 첫 상호작용 시 요청 (사용자 제스처 필요)
+    try{ if(window.Notification && Notification.permission==='default'){ Notification.requestPermission(); } }catch(e){}
     document.removeEventListener('touchstart', once);
     document.removeEventListener('click', once);
     document.removeEventListener('keydown', once);
@@ -1850,25 +1852,33 @@ async function syncRoomListFromServer(){
     const d=await r.json();
     if(!d.ok||!Array.isArray(d.rooms))return;
     let changed=false;
-    let hasNewMessage=false;
+    let newMsgRoom=null;
     for(const sr of d.rooms){
       if(sr.deleted)continue;
       const exists=_rooms.find(x=>x.id===sr.roomId);
       if(!exists){
+        // 새 방 - 메시지가 이미 있으면 알림 (상대가 먼저 말 검)
         _rooms.push({id:sr.roomId,name:sr.title||'채팅방',members:sr.members||[],messages:[],createdAt:Date.now(),_srvCount:sr.messageCount||0});
+        if((sr.messageCount||0) > 0){ newMsgRoom=sr; }
         changed=true;
       } else {
         const srvCount = sr.messageCount || 0;
         const prevCount = exists._srvCount || 0;
-        if(srvCount > prevCount && prevCount > 0){
-          if(!_cur || _cur.id !== sr.roomId) hasNewMessage=true;
+        // ★ prevCount>0 조건 제거 - 첫 메시지도 알림
+        if(srvCount > prevCount){
+          if(!_cur || _cur.id !== sr.roomId){ newMsgRoom=sr; }
         }
         exists._srvCount = srvCount;
       }
     }
-    if(hasNewMessage){
+    if(newMsgRoom){
+      // 소리 + 진동
       playNotifySound();
-      try{ if(navigator.vibrate) navigator.vibrate([100,50,100]); }catch(e){}
+      try{ if(navigator.vibrate) navigator.vibrate([200,100,200]); }catch(e){}
+      // ★ 브라우저 알림 (백그라운드에서도 뜸)
+      try{
+        notify(newMsgRoom.title||'새 메시지', newMsgRoom.lastMessage||'새 메시지가 도착했습니다');
+      }catch(e){}
       changed=true;
     }
     if(changed){saveRooms();renderRooms();updateAppBadge();}
