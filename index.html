@@ -139,6 +139,10 @@ body.dark section{background:#0d1117!important}
 body.dark .panel{background:#161b22!important;color:#e6edf3!important}
 body.dark .panel-head{background:#161b22!important;border-color:#30363d!important}
 body.dark #noteTitleInput,body.dark #noteBodyInput,body.dark #noteSearch{background:#0d1117!important;color:#e6edf3!important}
+body.dark #notePreview{color:#e6edf3!important}
+body.dark #notePreview table{border-color:#30363d}
+body.dark #notePreview th{background:#161b22;color:#e6edf3}
+body.dark #notePreview td{border-color:#30363d}
 body.dark #noteTitleInput::placeholder,body.dark #noteBodyInput::placeholder,body.dark #noteSearch::placeholder{color:#484f58!important}
 body.dark .note-list-item:hover{background:#21262d!important}
 body.dark .note-list-item div{color:#c9d1d9!important}
@@ -214,7 +218,12 @@ body.dark .user-box *{color:#e6edf3!important}
       <button onclick="deleteCurrentNote()" style="background:none;border:1px solid #f87171;color:#f87171;border-radius:10px;padding:7px 10px;cursor:pointer;font-size:.82rem">삭제</button>
     </div>
     <div style="padding:8px 14px;font-size:.75rem;color:#9ca3af" id="noteMeta"></div>
+    <div style="display:flex;gap:6px;padding:4px 14px;border-bottom:1px solid var(--line,#e5e7eb)">
+      <button id="noteTabEdit" onclick="noteSetMode('edit')" style="padding:5px 14px;border-radius:8px;border:1px solid var(--line,#d1d5db);background:var(--ink,#111827);color:#fff;cursor:pointer;font-size:.82rem;font-weight:700">✏️ 편집</button>
+      <button id="noteTabPreview" onclick="noteSetMode('preview')" style="padding:5px 14px;border-radius:8px;border:1px solid var(--line,#d1d5db);background:transparent;color:var(--ink,#111827);cursor:pointer;font-size:.82rem">👁 미리보기</button>
+    </div>
     <textarea id="noteBodyInput" placeholder="내용을 입력하세요..." style="flex:1;border:none;outline:none;resize:none;padding:12px 14px;font-size:.9rem;line-height:1.75;background:transparent;color:var(--ink,#111827);font-family:inherit"></textarea>
+    <div id="notePreview" style="display:none;flex:1;padding:12px 14px;overflow-y:auto;font-size:.9rem;line-height:1.75;color:var(--ink,#111827)"></div>
   </div>
 </div>
 </section>
@@ -640,6 +649,77 @@ function initNoteBodyPaste(){
     }
     // 일반 텍스트는 그대로 붙여넣기
   });
+}
+
+// ── 노트 미리보기 모드 ──
+function noteSetMode(mode){
+  var ta = document.getElementById('noteBodyInput');
+  var pv = document.getElementById('notePreview');
+  var btnEdit = document.getElementById('noteTabEdit');
+  var btnPrev = document.getElementById('noteTabPreview');
+  if(!ta||!pv) return;
+  if(mode==='preview'){
+    ta.style.display='none'; pv.style.display='block';
+    btnEdit.style.background='transparent'; btnEdit.style.color='var(--ink,#111827)';
+    btnPrev.style.background='var(--ink,#111827)'; btnPrev.style.color='#fff';
+    pv.innerHTML = renderNoteMarkdown(ta.value);
+  } else {
+    ta.style.display=''; pv.style.display='none';
+    btnEdit.style.background='var(--ink,#111827)'; btnEdit.style.color='#fff';
+    btnPrev.style.background='transparent'; btnPrev.style.color='var(--ink,#111827)';
+    ta.focus();
+  }
+}
+
+function renderNoteMarkdown(text){
+  if(!text) return '<p style="color:#9ca3af">내용이 없습니다.</p>';
+  var lines = text.split('\n');
+  var html = '';
+  var inTable = false;
+  var tableRows = [];
+
+  for(var i=0; i<lines.length; i++){
+    var line = lines[i].trim();
+    // Markdown 표 행 감지
+    if(line.startsWith('|') && line.endsWith('|')){
+      if(!inTable){ inTable=true; tableRows=[]; }
+      // 구분선(|---|---|) 건너뛰기
+      if(/^\|[\s\-:|]+\|$/.test(line)) continue;
+      tableRows.push(line);
+    } else {
+      // 표 종료 → HTML 표 생성
+      if(inTable){
+        html += buildHtmlTable(tableRows);
+        inTable=false; tableRows=[];
+      }
+      // 일반 텍스트
+      if(!line){ html+='<br>'; }
+      else if(line.startsWith('# ')){ html+='<h2 style="margin:12px 0 6px;font-size:1.1rem">'+esc(line.slice(2))+'</h2>'; }
+      else if(line.startsWith('## ')){ html+='<h3 style="margin:10px 0 4px;font-size:1rem">'+esc(line.slice(3))+'</h3>'; }
+      else if(line.startsWith('**') && line.endsWith('**')){ html+='<p style="margin:4px 0"><strong>'+esc(line.slice(2,-2))+'</strong></p>'; }
+      else if(line.startsWith('*') && line.endsWith('*')){ html+='<p style="margin:4px 0"><em>'+esc(line.slice(1,-1))+'</em></p>'; }
+      else { html+='<p style="margin:4px 0">'+esc(line)+'</p>'; }
+    }
+  }
+  if(inTable) html += buildHtmlTable(tableRows);
+  return html;
+}
+
+function buildHtmlTable(rows){
+  if(!rows.length) return '';
+  var s = '<div style="overflow-x:auto;margin:8px 0"><table style="border-collapse:collapse;width:100%;font-size:.85rem">';
+  rows.forEach(function(row, ri){
+    var cells = row.split('|').filter(function(c,ci,arr){ return ci>0 && ci<arr.length-1; });
+    var tag = ri===0 ? 'th' : 'td';
+    var bgColor = ri===0 ? 'background:#1e293b;color:#f1f5f9;font-weight:700' : (ri%2===0?'background:rgba(30,41,59,.3)':'');
+    s += '<tr>';
+    cells.forEach(function(cell){
+      s += '<'+tag+' style="border:1px solid #334155;padding:6px 10px;white-space:nowrap;'+bgColor+'">'+esc(cell.trim())+'</'+tag+'>';
+    });
+    s += '</tr>';
+  });
+  s += '</table></div>';
+  return s;
 }
 
 function openNoteNew(){
