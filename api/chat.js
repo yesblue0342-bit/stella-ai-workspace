@@ -670,7 +670,7 @@ async function callOpenAI({ model, system, history, message, images = [] }) {
         ...history.slice(-12).map(m => ({ role: m.role === "assistant" ? "assistant" : "user", content: String(m.content || "") })),
         { role: "user", content: images.length > 0
           ? [{ type:"text", text:"[표+요약 형식으로 답변] "+String(message||"") },
-             ...images.map(u=>({ type:"image_url", image_url:{ url:u, detail:"auto" } }))]
+             ...images.filter(u=>u&&u.startsWith("data:")).map(u=>({ type:"image_url", image_url:{ url:u, detail:"auto" } }))]
           : "[표+요약 형식으로 답변] "+String(message||"") }
       ]
     })
@@ -694,7 +694,7 @@ async function callClaude({ model, system, history, message, images = [] }) {
       messages: [
         ...history.slice(-12).map(m => ({ role: m.role === "assistant" ? "assistant" : "user", content: String(m.content || "") })),
         { role: "user", content: images.length > 0
-          ? [...images.map(u=>{ const mx=u.match(/^data:([^;]+);base64,(.+)$/); return mx?{ type:"image", source:{ type:"base64", media_type:mx[1], data:mx[2] } }:null; }).filter(Boolean), { type:"text", text:String(message||"") }]
+          ? [...images.map(u=>{ const mx=u.match(/^data:([^;]+);base64,(.+)$/); if(!mx) return null; return { type:"image", source:{ type:"base64", media_type:mx[1], data:mx[2] } }; }).filter(Boolean), { type:"text", text:String(message||"") }]
           : String(message||"") }
       ]
     })
