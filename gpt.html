@@ -153,21 +153,35 @@ async function loadChatsFromServer(){
       else{chats=chats.filter(x=>x.id!=='loading');active=chats[0].id;render();}
       return;
     }
-    // 서버 목록과 로컬 병합 (삭제 안 된 것만)
+    // 서버 목록 = 진실의 원천 (모든 기기에서 동일하게)
     const localChats=read(K.chats,[]).filter(x=>x.userId===user.id&&x.id!=='loading');
     const serverIds=new Set(d.items.map(x=>x.room_id));
-    // 서버에 있는 채팅을 로컬에서 찾아 메시지 유지, 없으면 서버 메타로 추가
+    // 서버 채팅 목록 기준으로 병합 (로컬 메시지 우선, 없으면 서버 메타)
     const merged=d.items.map(function(item){
       const local=localChats.find(x=>x.id===item.room_id);
-      if(local)return local;
-      return {id:item.room_id,userId:user.id,title:item.title||'채팅',messages:[{role:'ai',text:'☁️ 이전 대화를 불러오려면 클릭하세요.'}],driveFileId:item.drive_file_id,driveLink:item.drive_link};
+      if(local&&(local.messages||[]).length>1) return local; // 로컬에 메시지 있으면 유지
+      // 로컬에 없거나 메시지가 1개 이하 → 서버에서 Drive 로드 대기
+      return {
+        id:item.room_id,
+        userId:user.id,
+        title:item.title||'채팅',
+        messages:[{role:'ai',text:'☁️ 클릭하면 이전 대화를 불러옵니다.'}],
+        driveFileId:item.drive_file_id,
+        driveLink:item.drive_link,
+        messageCount:item.message_count||0
+      };
     });
-    // 로컬에만 있는 채팅 (아직 서버 미저장) 도 유지
-    const localOnly=localChats.filter(x=>!serverIds.has(x.id));
+    // 로컬에만 있는 채팅 (서버 미저장 - 오프라인 작성 등) 도 유지
+    const localOnly=localChats.filter(x=>!serverIds.has(x.id)&&(x.messages||[]).length>1);
     chats=[...merged,...localOnly];
     if(!chats.length){newChat();return;}
     active=chats[0].id;
     saveLocal();render();
+    // 첫 번째 채팅이 미로드 상태면 자동으로 로드
+    const firstChat=chats[0];
+    if(firstChat&&firstChat.driveFileId&&(firstChat.messages||[]).length<=1){
+      setTimeout(function(){switchToChat(firstChat.id);},500);
+    }
   }catch(e){
     // 실패 시 로컬 유지
     chats=chats.filter(x=>x.id!=='loading');
@@ -176,7 +190,20 @@ async function loadChatsFromServer(){
   }
 }
 // 더미 닫기 (원래 }는 openApp 닫는 것)
-function logout(){localStorage.removeItem(K.session);location.reload()}function newChat(){const c={id:'r_'+Date.now(),userId:user.id,title:'새 채팅',messages:[{role:'ai',text:'안녕하세요. Stella입니다. 무엇이든 물어보세요.'}]};chats.unshift(c);active=c.id;saveLocal();render()}function saveLocal(){write(K.chats,[...read(K.chats,[]).filter(x=>x.userId!==user.id),...chats])}function cur(){return chats.find(x=>x.id===active)}function render(){renderSide();const c=cur();$('title').textContent=c?.title||'새 채팅';$('msgs').innerHTML=(c?.messages||[]).map((m,mi)=>{
+function logout(){localStorage.removeItem(K.session);location.reload()}function newChat(){const c={id:'r_'+Date.now(),userId:user.id,title:'새 채팅',messages:[{role:'ai',text:'안녕하세요. Stella입니다. 무엇이든 물어보세요.'}]};chats.unshift(c);active=c.id;saveLocal();render()}function saveLocal(){
+  write(K.chats,[...read(K.chats,[]).filter(x=>x.userId!==user.id),...chats]);
+}
+// 현재 채팅을 서버에 저장 (디바운스)
+var _saveTimer=null;
+function saveToServer(c){
+  if(!c||!c.id||!user) return;
+  clearTimeout(_saveTimer);
+  _saveTimer=setTimeout(async function(){
+    try{
+      await api('/api/hybrid-chat-save',{userId:user.id,roomId:c.id,title:c.title,messages:c.messages});
+    }catch(e){}
+  },2000);
+}function cur(){return chats.find(x=>x.id===active)}function render(){renderSide();const c=cur();$('title').textContent=c?.title||'새 채팅';$('msgs').innerHTML=(c?.messages||[]).map((m,mi)=>{
   let inner='';
   if(m.images&&m.images.length){
     inner+='<div class="msg-images">'+m.images.map(function(src){
@@ -440,7 +467,7 @@ async function send(){
     const d=await api('/api/chat',{model:$('model').value,userId:user.id,message:_fullText,images:_imgs,history:c.messages.slice(-10).map(m=>({role:m.role==='ai'?'assistant':'user',content:m.text||(m.images&&m.images.length?'[이미지 첨부]':'')||(m.files&&m.files.length?'[파일: '+m.files.join(', ')+']':'')||' '})).filter(m=>m.content&&m.content.trim())});
     c.messages.push({role:'ai',text:d.text||d.answer||d.message||'응답 없음'});
     try{await api('/api/hybrid-chat-save',{userId:user.id,roomId:c.id,title:c.title,messages:c.messages})}catch{}
-    saveLocal();render();
+    saveLocal();saveToServer(c);render();
   }catch(e){
     c.messages.push({role:'ai',text:'API 연결 오류: '+e.message});
     saveLocal();render();
