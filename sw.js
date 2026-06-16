@@ -1,11 +1,10 @@
-// Stella Talk Service Worker - 푸시 알림 + 캐시 관리
-const CACHE = 'stella-v5';
+const CACHE = 'stella-v6';
 
 self.addEventListener('install', e => self.skipWaiting());
 self.addEventListener('activate', e => {
   e.waitUntil(
     caches.keys().then(keys =>
-      Promise.all(keys.filter(k => k !== 'stella-v5').map(k => caches.delete(k)))
+      Promise.all(keys.filter(k => k !== CACHE).map(k => caches.delete(k)))
     ).then(() => self.clients.claim())
   );
 });
@@ -26,10 +25,10 @@ self.addEventListener('push', e => {
   let data = { title: 'Stella Talk', body: '새 메시지가 있습니다.' };
   try { if (e.data) data = e.data.json(); } catch(err) {}
   e.waitUntil(
-    self.registration.showNotification('Stella Talk · ' + (data.title || ''), {
+    self.registration.showNotification('Stella Talk', {
       body: data.body || '새 메시지',
-      icon: '/icons/talk-192.png?v=3',
-      badge: '/icons/talk-192.png?v=3',
+      icon: '/icons/talk-192.png',
+      badge: '/icons/talk-192.png',
       vibrate: [200, 100, 200],
       tag: 'stella-talk-msg',
       renotify: true,
