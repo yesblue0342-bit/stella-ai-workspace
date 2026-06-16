@@ -116,6 +116,7 @@ body.theme-dark .chat-area::before{opacity:0.06}
 .attach-btn{background:none;border:none;font-size:1.3rem;cursor:pointer;color:var(--text2);padding:6px;border-radius:9px;flex-shrink:0}
 .attach-btn:hover{background:var(--bg3)}
 .chat-input{flex:1;background:var(--input-bg);border:1px solid var(--border);border-radius:22px;padding:9px 14px;color:var(--text);font-size:.9rem;resize:none;min-height:40px;max-height:120px;overflow-y:auto;outline:none;font-family:inherit}
+.chat-input::placeholder{font-size:.82rem;color:var(--text2);opacity:.7}
 .chat-input::placeholder{color:var(--text2)}
 .send-btn{width:40px;height:40px;border-radius:50%;background:var(--send);color:var(--send-text);border:none;cursor:pointer;font-size:1rem;display:grid;place-items:center;flex-shrink:0;font-weight:900}
 /* 첨부 미리보기 바 */
@@ -236,7 +237,7 @@ body.theme-dark .theme-btn.active{background:#1e3a5f}
         <div class="composer-inner">
           <button class="attach-btn" onclick="document.getElementById('fileInput').click()" title="파일 첨부">📎</button>
           <input type="file" id="fileInput" multiple hidden onchange="handleFileSelect(this.files)">
-          <textarea class="chat-input" id="chatInput" placeholder="메시지 입력 (Enter=전송)" rows="1"
+          <textarea class="chat-input" id="chatInput" placeholder="메시지 입력" rows="1"
             onkeydown="if(event.key==='Enter'&&!event.shiftKey){event.preventDefault();sendMsg()}"
             oninput="this.style.height='auto';this.style.height=Math.min(this.scrollHeight,120)+'px';notifyTyping()"></textarea>
           <button class="send-btn" onclick="sendMsg()">↑</button>
@@ -1167,7 +1168,7 @@ function renderMessages(){
   const notLoggedIn = !isLoggedIn();
   const chatInp=document.getElementById('chatInput');
   const sendBtnEl=document.getElementById('sendBtn');
-  if(chatInp){ chatInp.disabled=notLoggedIn; chatInp.placeholder=notLoggedIn?'로그인 후 메시지를 입력할 수 있습니다':'메시지 입력 (Enter=줄바꿈, ↑버튼=전송)'; }
+  if(chatInp){ chatInp.disabled=notLoggedIn; chatInp.placeholder=notLoggedIn?'로그인 후 메시지를 입력할 수 있습니다':'메시지 입력'; }
   if(sendBtnEl&&notLoggedIn){ sendBtnEl.disabled=true; }
   const msgs=_cur.messages||[];
   if(!msgs.length){
@@ -1599,7 +1600,7 @@ async function sendMsg(){
       finalText = '┌ ' + q + '\n└ ' + text;
       _replyTo = null;
       const inp2=document.getElementById('chatInput');
-      if(inp2) inp2.placeholder='메시지 입력 (Enter=전송, Shift+Enter=줄바꿈)';
+      if(inp2) inp2.placeholder='메시지 입력';
     }
     // ★ 먼저 로컬에 즉시 추가 (화면에 바로 표시) - 전송중 상태
     const tempId = 'm_'+Date.now()+'_'+Math.random().toString(36).slice(2,5);
