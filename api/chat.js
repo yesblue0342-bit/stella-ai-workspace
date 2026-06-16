@@ -328,7 +328,9 @@ export default async function handler(req, res) {
     const needsSearch  = /구글|검색|최신|뉴스|오늘|지금|현재|실시간/.test(msg);
     const needsWeather = /날씨|기온|우산|비|눈|더위|추위|forecast|weather/.test(msg);
     const needsDrive   = /내 드라이브|my drive|#폴더|드라이브|drive/.test(msg)
-                      || /내 드라이브/.test(message); // 원문 대소문자 유지
+                      || /내 드라이브/.test(message) // 원문 대소문자 유지
+                      || /^#/.test(String(message).trim()) // ★ #으로 시작하면 드라이브 읽기
+                      || String(message).split(/\r?\n/).some(l => l.trim().startsWith("#"));
     const needsSapSearch = /sap|qa32|qm|pp|abap|inspection|bom|migo|mb51|검사|품질|공정|자재|트랜잭션/.test(msg);
 
     // 웹/날씨 검색 (조건부)
