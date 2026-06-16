@@ -254,14 +254,27 @@ function showApp(){
   $('#app').style.display='grid';
   $('#userName').textContent=user.name;
   $('#userEmail').textContent=user.email||user.id;
-  if(!rooms.length)createRoom('새 채팅',false);
-  if(!activeRoomId)activeRoomId=rooms[0]?.id;
+  // 주의: 서버 복원 전에 createRoom 하면 서버 데이터를 덮어씀
+  // → 복원 완료 후에만 새 채팅 생성
+  if(!activeRoomId&&rooms.length)activeRoomId=rooms[0]?.id;
   renderAll();
-  // 1순위: 서버(Azure SQL workspace_state)에서 완전 동기화 (모든 기기 동일하게)
-  setTimeout(syncFromServer, 300);
-  // 2순위: Drive에서 추가 복원 (서버에 없는 항목 보완)
-  setTimeout(loadChatHistoryFromDrive, 1500);
-  setTimeout(loadNotesFromDrive, 2200);
+  // 서버/Drive에서 순차 복원 (완료 후 새 채팅 생성)
+  restoreAllData();
+}
+
+async function restoreAllData(){
+  // 1단계: Azure SQL workspace_state 복원
+  await syncFromServer();
+  // 2단계: Drive 채팅 이력 복원
+  await loadChatHistoryFromDrive();
+  // 3단계: Drive 노트 복원
+  await loadNotesFromDrive();
+  // 4단계: 모두 복원 후에도 채팅방이 없으면 새 채팅 생성
+  if(!rooms.length){
+    createRoom('새 채팅', false);
+  }
+  if(!activeRoomId&&rooms.length) activeRoomId=rooms[0]?.id;
+  renderAll();
 }
 
 // ── 서버 우선 전체 동기화 (모바일/PC 공통) ──
@@ -287,13 +300,13 @@ async function syncFromServer(){
       if(changed){ saveProjects(); }
     }
 
-    // ② 채팅방 - 서버 데이터를 기준으로 병합 (rooms_json)
+    // ② 채팅방 - 서버 데이터 우선 복원
     if(Array.isArray(d.rooms) && d.rooms.length){
       const localIds = new Set((rooms||[]).map(r=>r.id));
+      const localMeaningful = rooms.filter(r=>r.name!=='새 채팅'||(r.messages||[]).length>1);
       d.rooms.forEach(function(sr){
         if(!sr.id) return;
         if(localIds.has(sr.id)){
-          // 서버에 메시지가 더 많으면 서버 우선
           const local = rooms.find(r=>r.id===sr.id);
           if(local && Array.isArray(sr.messages) && sr.messages.length > (local.messages||[]).length){
             Object.assign(local, {messages: sr.messages, name: sr.name||local.name});
@@ -307,7 +320,11 @@ async function syncFromServer(){
           changed = true;
         }
       });
-      if(changed){ saveRooms(); }
+      // 로컬에 의미없는 빈 채팅(새 채팅)이 있으면 서버 복원 후 제거
+      if(changed){
+        rooms = rooms.filter(r=>r.name!=='새 채팅'||(r.messages||[]).length>1||d.rooms.some(sr=>sr.id===r.id));
+        saveRooms();
+      }
     }
 
     if(changed){ renderAll(); console.log('[Sync] 서버에서 동기화 완료'); }
@@ -317,6 +334,12 @@ async function syncFromServer(){
 // ── 서버에 현재 상태 저장 (모든 기기에서 로그아웃/재로그인 시 복원) ──
 async function syncToServer(){
   if(!user||!user.id) return;
+  // 안전장치: 채팅방이 1개(새 채팅)뿐이고 메시지가 없으면 서버 덮어쓰기 금지
+  const meaningfulRooms = rooms.filter(r=>r.name!=='새 채팅'||(r.messages||[]).length>1);
+  if(rooms.length<=1 && meaningfulRooms.length===0){
+    console.log('[Sync] 빈 상태 - 서버 저장 건너뜀');
+    return;
+  }
   try{
     await fetch('/api/workspace',{
       method:'POST',
