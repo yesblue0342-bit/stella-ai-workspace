@@ -57,6 +57,50 @@ const K = {
 };
 
 function uid(){ return Date.now().toString(36) + Math.random().toString(36).slice(2,6); }
+
+// ── 복원 데이터를 서버에 저장 ──
+async function saveToServer(rooms, posts, projects){
+  const owner = getOwner();
+  if(!owner){ log('restoreLog','⚠️ 세션 없음 - 서버 저장 건너뜀','warn'); return; }
+  try{
+    const r = await fetch('/api/workspace',{
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({
+        owner,
+        rooms: (rooms||[]).map(r=>({id:r.id,name:r.name||r.title,messages:r.messages||[],projectId:r.projectId||'',createdAt:r.createdAt})),
+        projects: (projects||[]).map(p=>({id:p.id,name:p.name,createdAt:p.createdAt})),
+        posts: (posts||[]).map(p=>({id:p.id,title:p.title,body:p.body,category:p.category,createdAt:p.createdAt,updatedAt:p.updatedAt}))
+      })
+    });
+    const d = await r.json();
+    if(d.ok){
+      log('restoreLog', '✅ 서버(workspace_state) 저장 완료 - 재로그인해도 유지됩니다', 'ok');
+    } else {
+      log('restoreLog', '⚠️ 서버 저장 응답 오류: '+(d.message||''), 'warn');
+    }
+  }catch(e){
+    log('restoreLog', '❌ 서버 저장 실패: '+e.message, 'err');
+  }
+}
+
+// ── 노트를 Drive에도 저장 ──
+async function saveNotesToDrive(posts){
+  const userId = getId();
+  let saved = 0;
+  for(const p of posts){
+    if(!p.id || !p.title) continue;
+    try{
+      await fetch('/api/note?action=save',{
+        method:'POST',
+        headers:{'Content-Type':'application/json'},
+        body: JSON.stringify({ id:p.id, userId, title:p.title, body:p.body||'' })
+      });
+      saved++;
+    }catch(e){}
+  }
+  if(saved > 0) log('restoreLog', '✅ Drive에 노트 '+saved+'개 저장 완료 - 영구 보존됩니다', 'ok');
+}
 function getId(){ return document.getElementById('userId').value.trim(); }
 function getSessionUserId(){
   // localStorage 세션에서 실제 로그인된 user.id 확인
@@ -214,6 +258,11 @@ async function restoreAll(){
     localStorage.setItem(K.posts, JSON.stringify(posts));
     log('restoreLog', `✅ 노트 ${posts.length}개 복원 완료`, 'ok');
     posts.slice(0,5).forEach(p => log('restoreLog', `   📝 ${p.title}`, 'info'));
+    // ★ Drive에 노트 저장 (영구 보존)
+    if(posts.length > 0){
+      log('restoreLog', '💾 Drive에 노트 저장 중...', 'warn');
+      await saveNotesToDrive(posts);
+    }
   }catch(e){ log('restoreLog', '❌ 노트 복원 실패: '+e.message, 'err'); }
 
   // ── 프로젝트 복원 ──
@@ -235,9 +284,17 @@ async function restoreAll(){
     log('restoreLog', `✅ 프로젝트 ${projects.length}개 복원 완료`, 'ok');
   }catch(e){ log('restoreLog', '❌ 프로젝트 복원 실패: '+e.message, 'err'); }
 
+  // ★ 전체 복원 완료 후 서버(workspace_state)에 저장 - 재로그인해도 유지됨
   log('restoreLog', '─────────────────', 'info');
   if(totalRestored > 0){
     log('restoreLog', `🎉 총 ${totalRestored}개 항목 복원 완료!`, 'ok');
+    log('restoreLog', '💾 서버에 저장 중... (재로그인해도 유지되도록)', 'warn');
+    // localStorage에서 전체 데이터 가져와서 서버에 저장
+    let allRooms=[],allPosts=[],allProjects=[];
+    try{ allRooms=JSON.parse(localStorage.getItem(K.rooms)||'[]'); }catch(e){}
+    try{ allPosts=JSON.parse(localStorage.getItem(K.posts)||'[]'); }catch(e){}
+    try{ allProjects=JSON.parse(localStorage.getItem(K.projects)||'[]'); }catch(e){}
+    await saveToServer(allRooms, allPosts, allProjects);
     log('restoreLog', '▶ 3단계: 메인 페이지로 이동하세요', 'warn');
   } else {
     log('restoreLog', '⚠️ 복원할 데이터가 없습니다', 'warn');
