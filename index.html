@@ -244,7 +244,11 @@ function saveProjects(){
   write(K.projects,[...read(K.projects,[]).filter(x=>x.owner!==user.id),...projects]);
   clearTimeout(saveProjects._t);
   saveProjects._t=setTimeout(syncToServer,3000);
-}function savePosts(){write(K.posts,[...read(K.posts,[]).filter(x=>x.owner!==user.id),...posts])}
+}function savePosts(){
+  write(K.posts,[...read(K.posts,[]).filter(x=>x.owner!==user.id),...posts]);
+  clearTimeout(savePosts._t);
+  savePosts._t = setTimeout(syncToServer, 3000);
+}
 function exp(){return new Set(read(K.exp,['all','none']))}function saveExp(s){write(K.exp,[...s])}function bexp(){return new Set(read(K.bexp,['기본']))}function saveBexp(s){write(K.bexp,[...s])}
 function setAuthMode(m){authMode=m;$$('.signup-only').forEach(e=>e.classList.toggle('hidden',m!=='signup'));$('#loginTab').classList.toggle('active',m==='login');$('#signupTab').classList.toggle('active',m==='signup');$('#authSubmit').textContent=m==='login'?'로그인':'회원가입';$('#authMsg').textContent=''}
 function initAuth(){bootstrapAdmin();users=allUsers();const f=loadSessionUser();if(f){user=f;saveSessionUser(user);showApp();return}$('#authModal').classList.add('active');$('#app').style.display='none'}
@@ -267,7 +271,7 @@ async function restoreAllData(){
   await syncFromServer();
   // 2단계: Drive 채팅 이력 복원
   await loadChatHistoryFromDrive();
-  // 3단계: Drive 노트 복원
+  // 3단계: Drive 노트 복원 (note.js - Board/boards/users/notes 모두 탐색)
   await loadNotesFromDrive();
   // 4단계: 모두 복원 후에도 채팅방이 없으면 새 채팅 생성
   if(!rooms.length){
@@ -275,6 +279,10 @@ async function restoreAllData(){
   }
   if(!activeRoomId&&rooms.length) activeRoomId=rooms[0]?.id;
   renderAll();
+  // 노트 목록도 갱신
+  if(typeof renderNoteList === 'function') renderNoteList();
+  if(typeof renderBoardTree === 'function') renderBoardTree();
+  console.log('[Restore] 전체 복원 완료 - 채팅:', rooms.length, '노트:', posts.length, '프로젝트:', projects.length);
 }
 
 // ── 서버 우선 전체 동기화 (모바일/PC 공통) ──
@@ -327,7 +335,30 @@ async function syncFromServer(){
       }
     }
 
-    if(changed){ renderAll(); console.log('[Sync] 서버에서 동기화 완료'); }
+    // ③ 노트/게시글 - workspace_state의 posts_json에서 복원
+    if(Array.isArray(d.posts) && d.posts.length){
+      const localIds = new Set((posts||[]).map(p=>p.id||p.postId));
+      d.posts.forEach(function(sp){
+        const id = sp.id||sp.postId;
+        if(!id || sp.deleted) return;
+        if(!localIds.has(id)){
+          posts.unshift({
+            id: id,
+            owner: user.id,
+            title: sp.title||'(제목없음)',
+            body: sp.body||sp.content||'',
+            category: sp.category||'노트',
+            createdAt: sp.createdAt||new Date().toISOString(),
+            updatedAt: sp.updatedAt||sp.createdAt||new Date().toISOString()
+          });
+          changed = true;
+          localIds.add(id);
+        }
+      });
+      if(changed){ savePosts(); }
+    }
+
+    if(changed){ renderAll(); console.log('[Sync] 서버에서 동기화 완료 (채팅+프로젝트+노트)'); }
   }catch(e){ console.warn('[Sync] 서버 동기화 실패:', e.message); }
 }
 
