@@ -1,4 +1,9 @@
 {
+  "functions": {
+    "api/chat.js": { "maxDuration": 60 },
+    "api/claude.js": { "maxDuration": 60 },
+    "api/stella.js": { "maxDuration": 60 }
+  },
   "rewrites": [
     { "source": "/", "destination": "/index.html" },
     { "source": "/gpt", "destination": "/gpt.html" },
