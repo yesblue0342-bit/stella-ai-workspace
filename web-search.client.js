@@ -2,7 +2,7 @@
  * Stella Workspace
  * Web Search Client
  *
- * 지원 예정
+ * 지원 검색 엔진
  * - Google Search
  * - Naver Search
  * - News Search
@@ -48,6 +48,19 @@ export async function searchNews(query) {
   return await response.json();
 }
 
+export async function searchCustom(query) {
+
+  const response = await fetch(
+    `/api/search/custom?q=${encodeURIComponent(query)}`
+  );
+
+  if (!response.ok) {
+    throw new Error("Custom Search Error");
+  }
+
+  return await response.json();
+}
+
 export async function searchWeb(
   provider,
   query
@@ -64,6 +77,9 @@ export async function searchWeb(
     case "news":
       return await searchNews(query);
 
+    case "custom":
+      return await searchCustom(query);
+
     default:
       throw new Error(
         "지원하지 않는 검색 엔진"
@@ -75,5 +91,6 @@ export default {
   searchGoogle,
   searchNaver,
   searchNews,
+  searchCustom,
   searchWeb
 };
