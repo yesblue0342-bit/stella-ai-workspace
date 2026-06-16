@@ -233,7 +233,22 @@ function saveSessionUser(u){write(K.session,{id:u.id,user:u,savedAt:nowMs()})}
 function loadSessionUser(){const ss=read(K.session,null);if(!ss||!ss.id)return null;const list=allUsers();return list.find(u=>u.id===ss.id)||ss.user||null}
 /* /persistent-login-fix */
 function bootstrapAdmin(){users=allUsers();let changed=false;ADMIN_EMAILS.forEach((mail,idx)=>{if(!users.some(u=>String(u.email||'').toLowerCase()===mail)){users.push({id:idx?'yesblue0342_gmail':'admin',name:idx?'김경훈':'관리자',email:mail,birth:'1982-04-30',passwordHash:hash('admin1234'),role:'admin',createdAt:new Date().toISOString()});changed=true}});if(changed)saveUsers()}
-function allUsers(){return read(K.users,[])}function saveUsers(){write(K.users,users)}function loadData(){users=allUsers();rooms=read(K.rooms,[]).filter(x=>x.owner===user.id);projects=read(K.projects,[]).filter(x=>x.owner===user.id);posts=read(K.posts,[]).filter(x=>x.owner===user.id)}
+function allUsers(){return read(K.users,[])}function saveUsers(){write(K.users,users)}function ownerMatch(x){
+  if(!x || !x.owner) return true;
+  const o = String(x.owner).toLowerCase();
+  const id = String(user.id||'').toLowerCase();
+  const em = String(user.email||'').toLowerCase();
+  return o===id || o===em || (em && o===em.split('@')[0]) || (id.includes('@') && o===id.split('@')[0]);
+}
+function loadData(){
+  users=allUsers();
+  rooms=read(K.rooms,[]).filter(ownerMatch);
+  projects=read(K.projects,[]).filter(ownerMatch);
+  posts=read(K.posts,[]).filter(ownerMatch);
+  rooms.forEach(r=>{r.owner=user.id;});
+  projects.forEach(p=>{p.owner=user.id;});
+  posts.forEach(p=>{p.owner=user.id;});
+}
 function saveRooms(){
   write(K.rooms,[...read(K.rooms,[]).filter(x=>x.owner!==user.id),...rooms]);
   // 변경 시 서버에도 저장 (디바운스: 3초 후)
@@ -267,6 +282,7 @@ function showApp(){
 }
 
 async function restoreAllData(){
+  _restoreCompleted = false; // 복원 중에는 저장 차단
   // 1단계: Azure SQL workspace_state 복원
   await syncFromServer();
   // 2단계: Drive 채팅 이력 복원
@@ -282,17 +298,37 @@ async function restoreAllData(){
   // 노트 목록도 갱신
   if(typeof renderNoteList === 'function') renderNoteList();
   if(typeof renderBoardTree === 'function') renderBoardTree();
-  console.log('[Restore] 전체 복원 완료 - 채팅:', rooms.length, '노트:', posts.length, '프로젝트:', projects.length);
+  // ★ 복원 완료 - 이제부터 서버 저장 허용
+  _restoreCompleted = true;
+  console.log('[Restore] 전체 복원 완료 - 채팅:', rooms.length, '노트:', posts.length, '프로젝트:', projects.length, '| 이제 서버저장 활성화');
 }
 
 // ── 서버 우선 전체 동기화 (모바일/PC 공통) ──
 async function syncFromServer(){
   if(!user||!user.id) return;
   try{
-    const r = await fetch('/api/workspace?owner='+encodeURIComponent(user.id), {cache:'no-store'});
-    if(!r.ok) return;
-    const d = await r.json();
-    if(!d.ok) return;
+    // owner 후보: user.id, email, email앞부분 모두 시도 (저장 시 owner 불일치 대응)
+    const candidates = [user.id];
+    if(user.email){ candidates.push(user.email); candidates.push(user.email.split('@')[0]); }
+    if(String(user.id).includes('@')) candidates.push(String(user.id).split('@')[0]);
+    let d = null;
+    for(const owner of candidates){
+      const r = await fetch('/api/workspace?owner='+encodeURIComponent(owner), {cache:'no-store'});
+      if(!r.ok) continue;
+      const tmp = await r.json();
+      if(tmp.ok && ((tmp.rooms&&tmp.rooms.length)||(tmp.posts&&tmp.posts.length)||(tmp.projects&&tmp.projects.length))){
+        d = tmp; break;
+      }
+      if(tmp.ok && !d) d = tmp; // 빈 결과라도 일단 보관
+    }
+    if(!d || !d.ok) return;
+
+    // 서버 데이터 개수 스냅샷 기록 (덮어쓰기 보호용)
+    _serverSnapshot = {
+      rooms: (d.rooms||[]).filter(r=>r.name!=='새 채팅'||(r.messages||[]).length>1).length,
+      projects: (d.projects||[]).length,
+      posts: (d.posts||[]).length
+    };
 
     let changed = false;
 
@@ -363,12 +399,25 @@ async function syncFromServer(){
 }
 
 // ── 서버에 현재 상태 저장 (모든 기기에서 로그아웃/재로그인 시 복원) ──
+var _serverSnapshot = { rooms: 0, projects: 0, posts: 0 }; // 서버 데이터 개수 기억
+var _restoreCompleted = false; // 복원 완료 전에는 절대 저장 안 함
+
 async function syncToServer(){
   if(!user||!user.id) return;
-  // 안전장치: 채팅방이 1개(새 채팅)뿐이고 메시지가 없으면 서버 덮어쓰기 금지
+  // ★ 안전장치 1: 복원이 완료되기 전에는 절대 서버 저장 금지
+  if(!_restoreCompleted){
+    console.log('[Sync] 복원 미완료 - 서버 저장 차단');
+    return;
+  }
+  // ★ 안전장치 2: 의미있는 채팅 계산 (새 채팅 + 빈 메시지 제외)
   const meaningfulRooms = rooms.filter(r=>r.name!=='새 채팅'||(r.messages||[]).length>1);
-  if(rooms.length<=1 && meaningfulRooms.length===0){
-    console.log('[Sync] 빈 상태 - 서버 저장 건너뜀');
+  // ★ 안전장치 3: 로컬이 서버보다 데이터가 적으면 (소실 의심) 저장 차단
+  if(meaningfulRooms.length < _serverSnapshot.rooms && _serverSnapshot.rooms > 0){
+    console.warn('[Sync] 로컬 채팅('+meaningfulRooms.length+')이 서버('+_serverSnapshot.rooms+')보다 적음 - 저장 차단(데이터 보호)');
+    return;
+  }
+  if(posts.length < _serverSnapshot.posts && _serverSnapshot.posts > 0){
+    console.warn('[Sync] 로컬 노트('+posts.length+')가 서버('+_serverSnapshot.posts+')보다 적음 - 저장 차단(데이터 보호)');
     return;
   }
   try{
@@ -382,6 +431,9 @@ async function syncToServer(){
         posts: posts.map(p=>({id:p.id,title:p.title,body:p.body,category:p.category,createdAt:p.createdAt,updatedAt:p.updatedAt}))
       })
     });
+    // 저장 성공 시 스냅샷 갱신
+    _serverSnapshot = { rooms: meaningfulRooms.length, projects: projects.length, posts: posts.length };
+    console.log('[Sync] 서버 저장 완료 - 채팅:'+meaningfulRooms.length+' 노트:'+posts.length+' 프로젝트:'+projects.length);
   }catch(e){ console.warn('[Sync] 서버 저장 실패:', e.message); }
 }
 async function handleAuth(e){e.preventDefault();users=allUsers();$('#authMsg').textContent='';const id=$('#authId').value.trim();const pw=$('#authPassword').value;if(!id||!pw){$('#authMsg').textContent='아이디 또는 이메일과 비밀번호를 입력해 주세요.';return}try{let res,data,loginEmail=id;if(authMode==='signup'){const name=$('#authName').value.trim();const email=$('#authEmail').value.trim().toLowerCase();const birth=$('#authBirth').value.trim();loginEmail=email||id;if(!name||!loginEmail){$('#authMsg').textContent='이름과 이메일을 입력해 주세요.';return}res=await fetch('/api/signup',{method:'POST',headers:{'Content-Type':'application/json','Cache-Control':'no-store'},body:JSON.stringify({id,email:loginEmail,password:pw,name,birth})});}else{res=await fetch('/api/login',{method:'POST',headers:{'Content-Type':'application/json','Cache-Control':'no-store'},body:JSON.stringify({id,email:id,password:pw})});}const raw=await res.text();try{data=JSON.parse(raw)}catch{data={message:raw}}if(!res.ok||data.ok===false){$('#authMsg').textContent=data.message||data.error||'로그인/회원가입 처리 실패';return}const apiUser=data.user||{};const email=String(apiUser.email||loginEmail||id).toLowerCase();const localUser={id:String(apiUser.id||id),name:apiUser.name||email||id,email,birth:apiUser.birth||$('#authBirth').value.trim()||'',passwordHash:'',role:(ADMIN_EMAILS.includes(email)||ADMIN_EMAILS.includes(String(apiUser.id||id))||ADMIN_EMAILS.includes(String(apiUser.name||'')))?'admin':'user',createdAt:apiUser.created_at||new Date().toISOString()};users=allUsers().filter(u=>u.id!==localUser.id&&String(u.email||'').toLowerCase()!==email);users.push(localUser);saveUsers();user=localUser;saveSessionUser(user);showApp();}catch(err){$('#authMsg').textContent='회원 API 연결 오류: '+(err.message||err)}}
