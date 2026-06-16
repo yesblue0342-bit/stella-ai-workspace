@@ -58,6 +58,17 @@ const K = {
 
 function uid(){ return Date.now().toString(36) + Math.random().toString(36).slice(2,6); }
 function getId(){ return document.getElementById('userId').value.trim(); }
+function getSessionUserId(){
+  // localStorage 세션에서 실제 로그인된 user.id 확인
+  try{
+    const s = JSON.parse(localStorage.getItem('stella_session_final_v82')||'{}');
+    return s.id || (s.user && s.user.id) || null;
+  }catch(e){ return null; }
+}
+function getOwner(){
+  // 세션의 user.id가 있으면 그걸 owner로 사용 (loadData 필터와 일치시키기)
+  return getSessionUserId() || getId();
+}
 
 function log(logId, msg, cls='info'){
   const el = document.getElementById(logId);
@@ -73,6 +84,8 @@ async function scanAll(){
   const userId = getId(); if(!userId) return;
   const el = document.getElementById('scanLog');
   el.innerHTML = ''; el.style.display = 'block';
+  const sessionUid = getSessionUserId();
+  log('scanLog', '👤 세션 user.id: ' + (sessionUid||'없음(미로그인)') + ' | 입력 userId: ' + userId, 'info');
   log('scanLog', '🔍 Azure SQL 확인 중...', 'warn');
 
   // 1. workspace_state
@@ -140,7 +153,7 @@ async function restoreAll(){
     wsRooms.forEach(sr => {
       if(!sr.id || existIds.has(sr.id)) return;
       rooms.push({
-        id: sr.id, owner: userId,
+        id: sr.id, owner: getOwner(),
         name: sr.name||'복원된 채팅',
         messages: Array.isArray(sr.messages) ? sr.messages : [],
         projectId: sr.projectId||'',
@@ -155,7 +168,7 @@ async function restoreAll(){
       const id = item.room_id || item.id;
       if(!id || existIds.has(id)) return;
       rooms.push({
-        id, owner: userId,
+        id, owner: getOwner(),
         name: item.title||'복원된 채팅',
         messages: [],
         driveFileId: item.drive_file_id||'',
@@ -184,7 +197,7 @@ async function restoreAll(){
     wsPosts.forEach(p => {
       const id = p.id||p.postId;
       if(!id || existIds.has(id) || p.deleted) return;
-      posts.unshift({ id, owner: userId, title: p.title||'(제목없음)', body: p.body||p.content||'', category: p.category||'노트', createdAt: p.createdAt, updatedAt: p.updatedAt });
+      posts.unshift({ id, owner: getOwner(), title: p.title||'(제목없음)', body: p.body||p.content||'', category: p.category||'노트', createdAt: p.createdAt, updatedAt: p.updatedAt });
       existIds.add(id); totalRestored++;
     });
 
@@ -194,7 +207,7 @@ async function restoreAll(){
     (nd.notes||[]).forEach(n => {
       const id = n.id||n.postId;
       if(!id || existIds.has(id) || n.deleted) return;
-      posts.unshift({ id, owner: userId, title: n.title||'(제목없음)', body: n.body||n.content||'', category: n.category||'노트', createdAt: n.createdAt, updatedAt: n.updatedAt });
+      posts.unshift({ id, owner: getOwner(), title: n.title||'(제목없음)', body: n.body||n.content||'', category: n.category||'노트', createdAt: n.createdAt, updatedAt: n.updatedAt });
       existIds.add(id); totalRestored++;
     });
 
@@ -215,7 +228,7 @@ async function restoreAll(){
     const existIds = new Set(projects.map(p=>p.id));
     wsProj.forEach(p => {
       if(!p.id || existIds.has(p.id)) return;
-      projects.push({ id: p.id, owner: userId, name: p.name||p.id, createdAt: p.createdAt||new Date().toISOString() });
+      projects.push({ id: p.id, owner: getOwner(), name: p.name||p.id, createdAt: p.createdAt||new Date().toISOString() });
       existIds.add(p.id); totalRestored++;
     });
     localStorage.setItem(K.projects, JSON.stringify(projects));
