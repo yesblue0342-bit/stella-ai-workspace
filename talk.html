@@ -367,6 +367,11 @@ body.theme-dark .theme-btn.active{background:#1e3a5f}
       <button class="hbtn" onclick="requestNotification()">알림 권한</button>
     <button class="hbtn" onclick="openSoundSettings()">🔔 알림음</button>
     </div>
+    <div class="sp-section">앱</div>
+    <div class="sp-row">
+      <label>최신 버전 받기</label>
+      <button class="hbtn" onclick="forceUpdate()" style="background:var(--accent);color:#fff;font-weight:700">🔄 강제 업데이트</button>
+    </div>
   </div>
 </div>
 
@@ -1741,6 +1746,37 @@ function fmtTime(ts){if(!ts)return'';return new Date(ts).toLocaleTimeString('ko-
 function fmtSize(b){if(!b)return'';const n=Number(b);if(n<1024)return n+'B';if(n<1048576)return(n/1024).toFixed(1)+'KB';return(n/1048576).toFixed(1)+'MB';}
 
 // ── 알림 ──
+// ── 강제 업데이트 (캐시 삭제 + 새로고침) ──
+function forceUpdate(){
+  if(!confirm('최신 버전을 받기 위해 앱을 새로고침합니다.\n계속할까요?')) return;
+  try{
+    // Service Worker에 캐시 삭제 요청
+    if(navigator.serviceWorker && navigator.serviceWorker.controller){
+      navigator.serviceWorker.controller.postMessage('clearCache');
+    }
+    // 모든 캐시 직접 삭제
+    if(window.caches){
+      caches.keys().then(function(keys){
+        return Promise.all(keys.map(function(k){ return caches.delete(k); }));
+      }).then(function(){
+        // SW 등록 해제 후 강력 새로고침
+        if(navigator.serviceWorker){
+          navigator.serviceWorker.getRegistrations().then(function(regs){
+            regs.forEach(function(r){ r.unregister(); });
+            location.reload(true);
+          });
+        } else {
+          location.reload(true);
+        }
+      });
+    } else {
+      location.reload(true);
+    }
+  }catch(e){
+    location.reload(true);
+  }
+}
+
 function requestNotification(){if(Notification.permission==='default')Notification.requestPermission().then(function(p){if(p==='granted')new Notification('Stella Talk',{body:'알림이 설정되었습니다.',icon:'/icons/talk-192.png'});});}
 
 // ── PWA ──
