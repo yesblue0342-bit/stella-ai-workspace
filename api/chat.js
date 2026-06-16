@@ -346,11 +346,20 @@ export default async function handler(req, res) {
         actualDriveContext = await buildDriveContextForChat(message);
         if (actualDriveContext?.prompt) {
           aiMessage = message + actualDriveContext.prompt;
+          const readNames = (actualDriveContext.files||[]).filter(f=>f.read).map(f=>f.name);
+          const unreadNames = (actualDriveContext.files||[]).filter(f=>!f.read).map(f=>f.name);
           driveContext = [
             `선택 경로: ${actualDriveContext.path}`,
-            `실제로 읽은 파일: ${(actualDriveContext.files||[]).filter(f=>f.read).map(f=>f.name).join(", ")||"없음"}`,
-            `읽지 못한 파일: ${(actualDriveContext.files||[]).filter(f=>!f.read).map(f=>f.name).join(", ")||"없음"}`
+            `실제로 읽은 파일(${readNames.length}개): ${readNames.join(", ")||"없음"}`,
+            `읽지 못한 파일: ${unreadNames.join(", ")||"없음"}`
           ].join("\n");
+          // 파일을 하나도 못 읽었으면 명시
+          if(readNames.length === 0){
+            driveContext += "\n\n⚠️ 읽은 파일이 0개입니다. 절대 내용을 지어내지 말고 파일을 읽지 못했다고 답하세요.";
+          }
+        } else {
+          // buildDriveContextForChat가 null 반환 = 경로 인식 실패
+          driveContext = `⚠️ Drive 경로를 인식하지 못했습니다 (입력: "${String(message).slice(0,50)}"). 내용을 지어내지 말고, 정확한 폴더명으로 다시 시도하라고 안내하세요.`;
         }
       } catch(driveErr) {
         aiMessage = message + `\n\n[STELLA_GOOGLE_DRIVE_READ_ERROR]\n${driveErr.message}\n[/STELLA_GOOGLE_DRIVE_READ_ERROR]\n\nDrive 파일 내용을 읽지 못했습니다.`;
@@ -616,7 +625,12 @@ function buildSystemPrompt(system, searchContext, driveContext) {
     prompt += `\n\n[실시간 컨텍스트]\n${searchContext.context}`;
   }
   if (driveContext) {
-    prompt += `\n\n[Google Drive StellaGPT 관련 파일]\n${driveContext}`;
+    prompt += `\n\n[Google Drive 실제 파일 내용]\n${driveContext}`;
+    prompt += `\n\n[★ 절대 규칙 - Google Drive 응답]\n`
+      + `1. 위 "실제로 읽은 파일" 목록에 있는 파일만 근거로 답하세요.\n`
+      + `2. 파일을 하나도 읽지 못했거나 "읽기 오류"가 있으면, 절대 내용을 지어내지 말고 다음과 같이 답하세요: "해당 경로에서 파일을 읽지 못했습니다. 폴더명이 정확한지, Stella DB에 파일이 있는지 확인해 주세요."\n`
+      + `3. 파일명(예: 개발_계획.docx, 기능_명세서.xlsx 같은 가상의 파일)을 추측해서 만들어내면 절대 안 됩니다.\n`
+      + `4. 예시 표나 가상의 데이터를 만들지 마세요. 실제 읽은 내용이 없으면 없다고 하세요.`;
   }
   return prompt;
 }
