@@ -250,6 +250,11 @@ body.theme-dark .theme-btn.active{background:#1e3a5f}
   <div class="modal">
     <h3>💬 새 채팅방 만들기</h3>
     <input id="newRoomName" placeholder="채팅방 이름" onkeydown="if(event.key==='Enter')createRoom()">
+    <input id="newRoomCode" placeholder="방 코드 (상대방과 동일하게 입력 - 선택)" onkeydown="if(event.key==='Enter')createRoom()" style="margin-top:8px">
+    <div style="font-size:.78rem;color:var(--accent);margin-bottom:10px;line-height:1.5">
+      💡 <b>두 사람이 같은 방 코드</b>를 입력하면 서로 메시지를 주고받을 수 있습니다.<br>
+      예: 둘 다 <b>"우리방123"</b> 입력
+    </div>
     <div style="font-size:.8rem;color:var(--text2);margin-bottom:8px">초대할 멤버 (이름 입력 후 Enter)</div>
     <div style="display:flex;gap:6px;margin-bottom:8px">
       <div class="search-wrap" style="flex:1;position:relative">
@@ -645,9 +650,18 @@ function createRoom(){
   if(!name)return;
   const myId=getMyId();
   const allMembers=[myId,..._members];
-  // 멤버 조합으로 일관된 방 ID 생성 (양쪽이 같은 방 공유)
-  const sortedMembers=[...new Set(allMembers)].sort();
-  const roomId='room_'+sortedMembers.join('_').replace(/[^a-zA-Z0-9가-힣]/g,'_').slice(0,70);
+  // ★ 방 코드 직접 입력 우선 (두 사람이 같은 코드 입력 → 같은 방)
+  const codeInput=document.getElementById('newRoomCode');
+  const roomCode=codeInput?codeInput.value.trim():'';
+  let roomId;
+  if(roomCode){
+    // 방 코드가 있으면 코드 기반 ID (양쪽이 같은 코드 = 같은 방)
+    roomId='room_code_'+roomCode.replace(/[^a-zA-Z0-9가-힣]/g,'_').slice(0,70);
+  } else {
+    // 없으면 기존 멤버 조합 방식
+    const sortedMembers=[...new Set(allMembers)].sort();
+    roomId='room_'+sortedMembers.join('_').replace(/[^a-zA-Z0-9가-힣]/g,'_').slice(0,70);
+  }
   const room={id:roomId,name,messages:[],members:allMembers,createdAt:Date.now()};
   // 중복 방 체크
   if(_rooms.find(r=>r.id===roomId)){
@@ -931,6 +945,19 @@ function unlockAudio(){
 // 모든 터치/클릭에서 unlock 시도
 document.addEventListener('touchstart', unlockAudio, {once:false, passive:true});
 document.addEventListener('click', unlockAudio, {once:false, passive:true});
+
+// ★ 첫 사용자 상호작용 시 오디오 unlock (모바일 자동재생 정책)
+(function setupAudioUnlock(){
+  function once(){
+    unlockAudio();
+    document.removeEventListener('touchstart', once);
+    document.removeEventListener('click', once);
+    document.removeEventListener('keydown', once);
+  }
+  document.addEventListener('touchstart', once, {passive:true});
+  document.addEventListener('click', once);
+  document.addEventListener('keydown', once);
+})();
 
 function playNotifySound(){
   try{
