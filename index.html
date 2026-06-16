@@ -462,6 +462,92 @@ function renderNoteList(){
   });
 }
 
+// ── 노트 붙여넣기: HTML 표 → Markdown 표 변환 ──
+function htmlTableToMarkdown(html){
+  const parser = new DOMParser();
+  const doc = parser.parseFromString(html, 'text/html');
+  const tables = doc.querySelectorAll('table');
+  if(!tables.length) return null;
+
+  let result = '';
+  tables.forEach(function(table){
+    const rows = Array.from(table.querySelectorAll('tr'));
+    if(!rows.length) return;
+
+    const mdRows = rows.map(function(tr){
+      const cells = Array.from(tr.querySelectorAll('th,td'));
+      return '| ' + cells.map(function(td){
+        // 셀 내 텍스트 정리: 줄바꿈 → 공백, | → ∣
+        return (td.innerText||td.textContent||'').replace(/
+/g,' ').replace(/\|/g,'∣').trim();
+      }).join(' | ') + ' |';
+    });
+
+    // 헤더 구분선 추가 (첫 번째 행 다음)
+    if(mdRows.length > 1){
+      const firstRow = table.querySelectorAll('tr')[0];
+      const colCount = firstRow.querySelectorAll('th,td').length;
+      const separator = '| ' + Array(colCount).fill('---').join(' | ') + ' |';
+      // th가 있으면 헤더 구분선, 없으면 기본 구분선
+      const hasHeader = firstRow.querySelector('th');
+      mdRows.splice(1, 0, separator);
+      if(!hasHeader){
+        // 헤더 없는 표는 구분선 제거 후 그냥 붙이기
+        mdRows.splice(1, 1);
+      }
+    }
+
+    result += mdRows.join('
+') + '
+
+';
+  });
+  return result.trim();
+}
+
+// noteBodyInput paste 이벤트 등록 (노트 열릴 때마다)
+function initNoteBodyPaste(){
+  const ta = document.getElementById('noteBodyInput');
+  if(!ta || ta._pasteInit) return;
+  ta._pasteInit = true;
+  ta.addEventListener('paste', function(e){
+    const cd = e.clipboardData || window.clipboardData;
+    if(!cd) return;
+
+    // HTML 데이터 확인 (Excel/Word 표 복사 시 text/html로 옴)
+    const htmlData = cd.getData('text/html');
+    if(htmlData && htmlData.includes('<table')){
+      e.preventDefault();
+      const markdown = htmlTableToMarkdown(htmlData);
+      if(markdown){
+        // 현재 커서 위치에 마크다운 표 삽입
+        const start = ta.selectionStart;
+        const end = ta.selectionEnd;
+        const before = ta.value.substring(0, start);
+        const after = ta.value.substring(end);
+        // 앞에 빈 줄 확보
+        const prefix = (before && !before.endsWith('
+
+')) ?
+          (before.endsWith('
+') ? '
+' : '
+
+') : '';
+        ta.value = before + prefix + markdown + '
+
+' + after;
+        // 커서를 표 끝으로
+        const newPos = start + prefix.length + markdown.length + 2;
+        ta.selectionStart = ta.selectionEnd = newPos;
+        ta.dispatchEvent(new Event('input'));
+        return;
+      }
+    }
+    // 일반 텍스트는 그대로 붙여넣기
+  });
+}
+
 function openNoteNew(){
   const today = new Date();
   const title = today.getFullYear()+'-'+String(today.getMonth()+1).padStart(2,'0')+'-'+String(today.getDate()).padStart(2,'0');
@@ -469,6 +555,7 @@ function openNoteNew(){
   document.getElementById('noteTitleInput').value = title;
   document.getElementById('noteBodyInput').value = '';
   document.getElementById('noteMeta').textContent = '새 노트';
+  initNoteBodyPaste();
   document.getElementById('noteListView').style.display = 'none';
   document.getElementById('noteEditorView').style.display = 'flex';
   document.getElementById('noteBodyInput').focus();
@@ -480,6 +567,7 @@ function openNoteEdit(id, title){
   _curNoteId = id;
   document.getElementById('noteTitleInput').value = p.title||'';
   document.getElementById('noteBodyInput').value = p.body||'';
+  initNoteBodyPaste();
   const d = p.createdAt ? new Date(p.createdAt).toLocaleString('ko-KR') : '';
   document.getElementById('noteMeta').textContent = d ? '작성: '+d : '';
   document.getElementById('noteListView').style.display = 'none';
