@@ -1,0 +1,140 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Stella 데이터 복원</title>
+<style>
+body{font-family:system-ui,sans-serif;background:#0f172a;color:#f1f5f9;padding:20px;max-width:600px;margin:0 auto}
+h2{color:#a78bfa;margin-bottom:4px}
+p{color:#94a3b8;margin:4px 0 16px}
+button{background:#7c3aed;color:#fff;border:none;border-radius:10px;padding:12px 20px;font-size:1rem;cursor:pointer;width:100%;margin-bottom:10px}
+button:hover{background:#6d28d9}
+button.sec{background:#1e293b;border:1px solid #334155}
+.result{background:#1e293b;border-radius:12px;padding:16px;margin-top:16px;white-space:pre-wrap;font-size:.85rem;color:#94a3b8;max-height:400px;overflow-y:auto}
+.ok{color:#34d399}.err{color:#f87171}.warn{color:#fbbf24}
+input{width:100%;background:#1e293b;border:1px solid #334155;border-radius:10px;padding:12px;font-size:.95rem;color:#f1f5f9;box-sizing:border-box;margin-bottom:10px}
+</style>
+</head>
+<body>
+<h2>🔄 Stella 데이터 복원</h2>
+<p>Drive에서 노트·채팅을 강제 복원합니다</p>
+
+<input id="userId" placeholder="아이디 입력 (예: yesblue0342)" value="">
+<button onclick="scanNotes()">📋 1단계: Drive 노트 파일 확인</button>
+<button onclick="restoreNotes()">✅ 2단계: 노트 복원 실행</button>
+<button onclick="restoreChats()">💬 3단계: 채팅 복원 실행</button>
+<button class="sec" onclick="document.getElementById('out').textContent=''">초기화</button>
+
+<div class="result" id="out">결과가 여기 표시됩니다...</div>
+
+<script>
+function log(msg, cls=''){
+  const el = document.getElementById('out');
+  const line = document.createElement('div');
+  line.className = cls;
+  line.textContent = msg;
+  el.appendChild(line);
+  el.scrollTop = el.scrollHeight;
+}
+
+function getUserId(){
+  const id = document.getElementById('userId').value.trim();
+  if(!id){ alert('아이디를 입력하세요'); return null; }
+  return id;
+}
+
+async function scanNotes(){
+  const userId = getUserId(); if(!userId) return;
+  document.getElementById('out').innerHTML = '';
+  log('🔍 Drive 노트 파일 스캔 중...', 'warn');
+  try{
+    const r = await fetch(`/api/note-scan?userId=${encodeURIComponent(userId)}`);
+    const d = await r.json();
+    if(d.ok){
+      log(`✅ 스캔 완료 - 총 ${d.totalFound}개 노트 발견`, 'ok');
+      (d.paths||[]).forEach(p => log(`  📁 ${p.path}: ${p.count||0}개 ${p.error?'(오류:'+p.error+')':''}`, p.error?'err':''));
+      (d.found||[]).forEach(n => log(`  📝 [${n.path}] ${n.title||'(제목없음)'}`, 'ok'));
+      if(d.totalFound === 0) log('⚠️ Drive에 노트가 없습니다. 저장이 안 됐을 수 있습니다.', 'err');
+    } else {
+      log('❌ 스캔 실패: ' + (d.message||'알 수 없는 오류'), 'err');
+    }
+  }catch(e){ log('❌ 오류: '+e.message, 'err'); }
+}
+
+async function restoreNotes(){
+  const userId = getUserId(); if(!userId) return;
+  log('📥 노트 복원 중...', 'warn');
+  try{
+    const r = await fetch(`/api/note?action=list&userId=${encodeURIComponent(userId)}`);
+    const d = await r.json();
+    if(d.ok && d.notes && d.notes.length){
+      log(`✅ Drive에서 노트 ${d.notes.length}개 발견`, 'ok');
+      // localStorage에 저장
+      const K = 'stella_posts_final_v82';
+      let existing = [];
+      try{ existing = JSON.parse(localStorage.getItem(K)||'[]'); }catch(e){}
+      const existIds = new Set(existing.map(p=>p.id||p.postId));
+      let added = 0;
+      d.notes.forEach(n => {
+        if(!n.id || existIds.has(n.id)) return;
+        existing.unshift({
+          id: n.id, owner: userId,
+          title: n.title||'(제목없음)',
+          body: n.body||n.content||'',
+          category: n.category||'노트',
+          createdAt: n.createdAt, updatedAt: n.updatedAt
+        });
+        added++;
+        existIds.add(n.id);
+      });
+      localStorage.setItem(K, JSON.stringify(existing));
+      log(`✅ localStorage에 ${added}개 노트 복원 완료`, 'ok');
+      log('→ 메인 페이지(/)로 이동해서 노트 확인하세요', 'warn');
+      d.notes.slice(0,10).forEach(n => log(`  📝 ${n.title}`, 'ok'));
+    } else {
+      log('⚠️ Drive에 노트가 없습니다: ' + (d.message||''), 'warn');
+    }
+  }catch(e){ log('❌ 오류: '+e.message, 'err'); }
+}
+
+async function restoreChats(){
+  const userId = getUserId(); if(!userId) return;
+  log('💬 채팅 복원 중...', 'warn');
+  try{
+    const r = await fetch(`/api/hybrid-chat-list?userId=${encodeURIComponent(userId)}`);
+    const d = await r.json();
+    const items = d.rooms || d.items || [];
+    if(d.ok && items.length){
+      log(`✅ 서버에서 채팅방 ${items.length}개 발견`, 'ok');
+      const K = 'stella_rooms_final_v82';
+      let existing = [];
+      try{ existing = JSON.parse(localStorage.getItem(K)||'[]'); }catch(e){}
+      const existIds = new Set(existing.map(r=>r.id));
+      let added = 0;
+      items.forEach(item => {
+        const id = item.room_id || item.id;
+        if(!id || existIds.has(id)) return;
+        existing.push({
+          id, owner: userId,
+          name: item.title||'복원된 채팅',
+          messages: item.messages||[],
+          projectId: item.project_id||'',
+          driveFileId: item.drive_file_id||'',
+          createdAt: item.created_at||new Date().toISOString()
+        });
+        added++;
+        existIds.add(id);
+      });
+      localStorage.setItem(K, JSON.stringify(existing));
+      log(`✅ localStorage에 ${added}개 채팅방 복원 완료`, 'ok');
+      log('→ 메인 페이지(/)로 이동해서 확인하세요', 'warn');
+      items.slice(0,10).forEach(i => log(`  💬 ${i.title||'채팅'}`, 'ok'));
+    } else {
+      log('⚠️ 서버에 채팅 없음: ' + (d.message||''), 'warn');
+    }
+  }catch(e){ log('❌ 오류: '+e.message, 'err'); }
+}
+</script>
+</body>
+</html>
