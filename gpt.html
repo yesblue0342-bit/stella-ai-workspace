@@ -128,7 +128,9 @@ body.dark .np-content textarea{background:#0d1117;color:#e6edf3}
 <input type="file" id="attachInput" multiple accept="image/*,.pdf,.txt,.md,.csv,.xlsx,.docx" style="display:none" onchange="handleAttach(this.files)">
 <textarea id="input" placeholder="메시지 입력 (Enter 줄바꿈)" rows="1"></textarea>
 <button class="primary" type="button" onclick="send()">↑</button>
-</div></div></main></div><script>const K={session:'stella_session_final_v82',remember:'stella_remember_id_v1',chats:'stella_chats_server_v2'};let mode='login',user=null,chats=[],active=null;const $=id=>document.getElementById(id);const read=(k,d)=>{try{return JSON.parse(localStorage.getItem(k)||JSON.stringify(d))}catch{return d}};const write=(k,v)=>localStorage.setItem(k,JSON.stringify(v));function setMode(m){mode=m;$('loginTab').classList.toggle('active',m==='login');$('signupTab').classList.toggle('active',m==='signup');document.querySelectorAll('.signupOnly').forEach(x=>x.classList.toggle('hidden',m!=='signup'));document.querySelectorAll('.loginOnly').forEach(x=>x.classList.toggle('hidden',m!=='login'));$('submitBtn').textContent=m==='login'?'로그인':'회원가입';$('authMsg').style.color='#b91c1c';$('authMsg').textContent='';$('pw').value='';if(m==='signup'){$('loginId').value='';$('email').value='';$('name').value='';$('birth').value='';}else loadRemember()}function loadRemember(){const v=localStorage.getItem(K.remember)||'';$('loginId').value=v;$('rememberId').checked=!!v}async function api(url,body){const r=await fetch(url,{method:'POST',headers:{'Content-Type':'application/json','Cache-Control':'no-store'},body:JSON.stringify(body)});const t=await r.text();let d;try{d=JSON.parse(t)}catch{d={message:t}};if(!r.ok||d.ok===false){const m=(d.message||'API 오류')+(d.error?(' ('+d.error+')'):'');throw new Error(m)}return d}async function auth(e){if(e&&e.preventDefault)e.preventDefault();const id=$('loginId').value.trim(),code=$('pw').value;if(!id||!code){$('authMsg').textContent='아이디와 비밀번호를 입력하세요.';return}$('authMsg').textContent='처리 중...';try{let d;if(mode==='signup'){d=await api('/api/signup',{id,email:$('email').value.trim()||id,name:$('name').value.trim(),birth:$('birth').value.trim(),password:code})}else{d=await api('/api/auth/login',{id,password:code})}user=d.user;if(mode==='login'&&$('rememberId').checked)localStorage.setItem(K.remember,id);else if(mode==='login')localStorage.removeItem(K.remember);write(K.session,{id:user.id,user,savedAt:-1});if(mode==='signup'){$('authMsg').style.color='#16a34a';$('authMsg').textContent='회원가입 성공! 로그인합니다...';setTimeout(openApp,800);}else{openApp();}}catch(err){$('authMsg').style.color='#b91c1c';$('authMsg').textContent=err.message||'처리 실패'}}function boot(){$('loginTab').onclick=()=>setMode('login');$('signupTab').onclick=()=>setMode('signup');$('authForm').onsubmit=auth;applyTheme();syncModelBtn();const ip=$('input');if(ip){ip.addEventListener('input',()=>{ip.style.height='auto';ip.style.height=Math.min(ip.scrollHeight,160)+'px'});}if($('model'))$('model').addEventListener('change',()=>{syncModelBtn();});$('forgotBtn').onclick=()=>{const id=$('loginId').value.trim();if(!id){alert('아이디 또는 이메일을 먼저 입력하세요.');return;}$('authMsg').textContent='비밀번호 초기화 이메일을 발송했습니다.(준비중)';};loadRemember();const s=read(K.session,null);if(s&&s.user&&(s.savedAt===-1||s.savedAt>Date.now()-30*24*60*60*1000)){user=s.user;openApp()}else $('auth').classList.remove('hidden')}function openApp(){$('auth').classList.add('hidden');$('app').classList.remove('hidden');var _ini=(user.name||user.id||'?').charAt(0).toUpperCase();
+</div></div></main></div><script>const K={session:'stella_session_final_v82',remember:'stella_remember_id_v1',chats:'stella_chats_server_v2'};let mode='login',user=null,chats=[],active=null;const $=id=>document.getElementById(id);const read=(k,d)=>{try{return JSON.parse(localStorage.getItem(k)||JSON.stringify(d))}catch{return d}};const write=(k,v)=>localStorage.setItem(k,JSON.stringify(v));function setMode(m){mode=m;$('loginTab').classList.toggle('active',m==='login');$('signupTab').classList.toggle('active',m==='signup');document.querySelectorAll('.signupOnly').forEach(x=>x.classList.toggle('hidden',m!=='signup'));document.querySelectorAll('.loginOnly').forEach(x=>x.classList.toggle('hidden',m!=='login'));$('submitBtn').textContent=m==='login'?'로그인':'회원가입';$('authMsg').style.color='#b91c1c';$('authMsg').textContent='';$('pw').value='';if(m==='signup'){$('loginId').value='';$('email').value='';$('name').value='';$('birth').value='';}else loadRemember()}function loadRemember(){const v=localStorage.getItem(K.remember)||'';$('loginId').value=v;$('rememberId').checked=!!v}async function api(url,body){const r=await fetch(url,{method:'POST',headers:{'Content-Type':'application/json','Cache-Control':'no-store'},body:JSON.stringify(body)});const t=await r.text();let d;try{d=JSON.parse(t)}catch{d={message:t}};if(!r.ok||d.ok===false){const m=(d.message||'API 오류')+(d.error?(' ('+d.error+')'):'');throw new Error(m)}return d}async function auth(e){if(e&&e.preventDefault)e.preventDefault();const id=$('loginId').value.trim(),code=$('pw').value;if(!id||!code){$('authMsg').textContent='아이디와 비밀번호를 입력하세요.';return}$('authMsg').textContent='처리 중...';try{let d;if(mode==='signup'){d=await api('/api/signup',{id,email:$('email').value.trim()||id,name:$('name').value.trim(),birth:$('birth').value.trim(),password:code})}else{d=await api('/api/auth/login',{id,password:code})}user=d.user;if(mode==='login'&&$('rememberId').checked)localStorage.setItem(K.remember,id);else if(mode==='login')localStorage.removeItem(K.remember);write(K.session,{id:user.id,user,savedAt:-1});if(mode==='signup'){$('authMsg').style.color='#16a34a';$('authMsg').textContent='회원가입 성공! 로그인합니다...';setTimeout(openApp,800);}else{openApp();}}catch(err){$('authMsg').style.color='#b91c1c';$('authMsg').textContent=err.message||'처리 실패'}}function boot(){$('loginTab').onclick=()=>setMode('login');$('signupTab').onclick=()=>setMode('signup');$('authForm').onsubmit=auth;applyTheme();syncModelBtn();const ip=$('input');if(ip){ip.addEventListener('input',()=>{ip.style.height='auto';ip.style.height=Math.min(ip.scrollHeight,160)+'px';});
+ip.addEventListener('keydown',function(e){if(e.key==='Enter'&&!e.shiftKey&&!e.isComposing){e.preventDefault();send();}});
+ip.addEventListener('paste',function(e){handlePaste(e);});}if($('model'))$('model').addEventListener('change',()=>{syncModelBtn();});$('forgotBtn').onclick=()=>{const id=$('loginId').value.trim();if(!id){alert('아이디 또는 이메일을 먼저 입력하세요.');return;}$('authMsg').textContent='비밀번호 초기화 이메일을 발송했습니다.(준비중)';};loadRemember();const s=read(K.session,null);if(s&&s.user&&(s.savedAt===-1||s.savedAt>Date.now()-30*24*60*60*1000)){user=s.user;openApp()}else $('auth').classList.remove('hidden')}function openApp(){$('auth').classList.add('hidden');$('app').classList.remove('hidden');var _ini=(user.name||user.id||'?').charAt(0).toUpperCase();
 var _isDark=document.body.classList.contains('dark');
 var _avatarBg=_isDark?'#e6edf3':'#1f2937';
 var _avatarColor=_isDark?'#0d1117':'#fff';
@@ -223,7 +225,42 @@ function openImgViewer(src){
   im.src=src;im.style.cssText='max-width:95vw;max-height:90vh;object-fit:contain;border-radius:8px';
   ov.appendChild(im);
   document.body.appendChild(ov);
-}function renderSide(){const q=($('q')?.value||'').toLowerCase();$('chatList').innerHTML=chats.filter(c=>(c.title+' '+c.messages.map(m=>m.text).join(' ')).toLowerCase().includes(q)).map(c=>'<div style="display:flex;align-items:center;gap:4px"><button class="tree '+(c.id===active?'active':'')+'" style="flex:1" onclick="active=\''+c.id+'\';render();closeSideMobile()">▱ '+esc(c.title)+'<br><span class="muted">'+c.messages.length+'개 메시지</span></button><button onclick="deleteChat(\''+c.id+'\')" style="border:0;background:none;color:#9ca3af;cursor:pointer;padding:6px;font-size:12px;border-radius:8px" title="삭제">✕</button></div>').join('')||'<div class="muted">결과 없음</div>'}
+}function renderSide(){const q=($('q')?.value||'').toLowerCase();$('chatList').innerHTML=chats.filter(c=>(c.title+' '+c.messages.map(m=>m.text).join(' ')).toLowerCase().includes(q)).map(c=>'<div style="display:flex;align-items:center;gap:4px"><button class="tree '+(c.id===active?'active':'')+'" style="flex:1" onclick="switchToChat(\''+c.id+'\')">▱ '+esc(c.title)+'<br><span class="muted">'+c.messages.length+'개 메시지</span></button><button onclick="deleteChat(\''+c.id+'\')" style="border:0;background:none;color:#9ca3af;cursor:pointer;padding:6px;font-size:12px;border-radius:8px" title="삭제">✕</button></div>').join('')||'<div class="muted">결과 없음</div>'}
+
+// 채팅방 전환 - Drive에서 메시지 로드
+async function switchToChat(id){
+  active=id;
+  closeSideMobile();
+  render();
+  const c=cur();
+  if(!c)return;
+  // "불러오려면 클릭" 메시지만 있을 때 Drive에서 실제 로드
+  const needsLoad=c.messages.length===1&&c.messages[0]&&c.messages[0].text&&c.messages[0].text.includes('불러오려면 클릭');
+  if(needsLoad&&c.driveFileId){
+    c.messages=[{role:'ai',text:'⏳ 불러오는 중...'}];
+    render();
+    try{
+      const r=await fetch('/api/hybrid-chat-save?action=get&fileId='+encodeURIComponent(c.driveFileId),{cache:'no-store'});
+      const d=await r.json();
+      if(d.ok&&Array.isArray(d.messages)&&d.messages.length){
+        c.messages=d.messages;
+        saveLocal();render();
+      } else {
+        // Drive에서 채팅 내용 직접 읽기
+        const r2=await fetch('/api/drive-read?fileId='+encodeURIComponent(c.driveFileId));
+        const d2=await r2.json();
+        if(d2.ok&&d2.text){
+          try{const parsed=JSON.parse(d2.text);if(Array.isArray(parsed.messages)){c.messages=parsed.messages;saveLocal();render();return;}}catch(e){}
+        }
+        c.messages=[{role:'ai',text:'☁️ 이전 대화 내용을 불러오지 못했습니다.'}];
+        render();
+      }
+    }catch(e){
+      c.messages=[{role:'ai',text:'⚠️ 불러오기 실패: '+e.message}];
+      render();
+    }
+  }
+}
 function deleteChat(id){if(!confirm('이 채팅을 삭제하시겠습니까?'))return;chats=chats.filter(x=>x.id!==id);saveLocal();if(active===id){if(chats.length)active=chats[0].id;else newChat();}render();}function keepSide(){/* 검색창 포커스 시 사이드바 유지 - 닫지 않음 */}function toggleSide(){$('side').classList.toggle('open')}function closeSideMobile(){if(innerWidth<=900)$('side').classList.remove('open')}// ── 파일 첨부 ──
 let _attachedImages=[], _attachedFiles=[];
 function handleAttach(files){
@@ -379,7 +416,24 @@ async function send(){
 
   // 일반 AI 응답
   try{
-    const _imgs=_attachedImages.map(x=>x.data);
+    // 이미지 용량 체크 - 4MB 초과 시 압축
+    const _imgs=await Promise.all(_attachedImages.map(async function(x){
+      if(!x.data||x.data.length<4*1024*1024) return x.data;
+      // canvas로 리사이즈 (최대 1024px)
+      return await new Promise(function(resolve){
+        const img=new Image();
+        img.onload=function(){
+          const maxW=1024,maxH=1024;
+          let w=img.width,h=img.height;
+          if(w>maxW){h=Math.round(h*maxW/w);w=maxW;}
+          if(h>maxH){w=Math.round(w*maxH/h);h=maxH;}
+          const cv=document.createElement('canvas');cv.width=w;cv.height=h;
+          cv.getContext('2d').drawImage(img,0,0,w,h);
+          resolve(cv.toDataURL('image/jpeg',0.7));
+        };
+        img.src=x.data;
+      });
+    }));
     const _fnames=_attachedFiles.map(x=>x.name).join(', ');
     const _fullText=text+(_fnames?' [첨부파일: '+_fnames+']':'');
     _attachedImages=[];_attachedFiles=[];renderAttachPreview();
