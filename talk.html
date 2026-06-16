@@ -850,13 +850,17 @@ async function syncRoomFromServer(scrollAfter){
         const last=serverMsgs[serverMsgs.length-1];
         const myId=getMyId();
         if(last && last.from!==myId){
-          // ★ 앱 활성/비활성 모두 알림음 재생
+          // ★ 알림음 재생 (앱 활성/비활성 모두)
           playNotifySound();
-          // 백그라운드일 때는 팝업 알림도
+          // ★ 진동 (모바일)
+          try{ if(navigator.vibrate) navigator.vibrate([100,50,100]); }catch(e){}
+          // 백그라운드면 푸시 알림
           if(document.hidden || document.visibilityState==='hidden'){
             notify(_cur.name, last.text||'📎 파일');
           }
+          // 탭/파비콘 뱃지 즉시 갱신
           updateAppBadge();
+          renderRooms();
         }
       }
     }
@@ -910,13 +914,31 @@ function notify(title, body){
 // ── 알림음 (Web Audio API) ──
 // 설정: 스텔라~/스텔라~~톡/별하공주님~~/우리별핑~~/김별똥~~/꼬마루시/하츄핑
 var _notifySoundKey = localStorage.getItem('stella_talk_sound') || 'stella1';
+var _audioCtx = null; // 전역 AudioContext - 첫 터치 시 생성
+
+// ★ 첫 터치 시 AudioContext 초기화 (모바일 자동재생 정책 우회)
+function unlockAudio(){
+  if(_audioCtx) return;
+  try{
+    _audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    // 무음 재생으로 unlock
+    const buf = _audioCtx.createBuffer(1,1,22050);
+    const src = _audioCtx.createBufferSource();
+    src.buffer = buf; src.connect(_audioCtx.destination); src.start(0);
+    console.log('[Audio] AudioContext 초기화 완료');
+  }catch(e){}
+}
+// 모든 터치/클릭에서 unlock 시도
+document.addEventListener('touchstart', unlockAudio, {once:false, passive:true});
+document.addEventListener('click', unlockAudio, {once:false, passive:true});
 
 function playNotifySound(){
   try{
     const s = loadSettings();
-    if(s.soundOff) return; // 소리 끔
+    if(s.soundOff) return;
     const key = _notifySoundKey;
-    const ctx = new (window.AudioContext || window.webkitAudioContext)();
+    // 전역 ctx 재사용 (이미 unlock됨)
+    const ctx = _audioCtx || new (window.AudioContext || window.webkitAudioContext)();
     const sounds = {
       // 스텔라~ (기본) - 맑고 귀여운 2음
       'stella1': [[523,0.15],[659,0.35],[784,0.6],[659,0.9],[784,1.1]],
@@ -966,7 +988,7 @@ function updateAppBadge(){
       if(r.isMyChat) return;
       const lastRead = r.lastReadAt || 0;
       (r.messages||[]).forEach(function(m){
-        if(m.from !== myId && m.at > lastRead && !m.deleted) total++;
+        if(m.from !== myId && (m.at||0) > lastRead && !m.deleted) total++;
       });
     });
     if('setAppBadge' in navigator){
@@ -979,6 +1001,32 @@ function updateAppBadge(){
     } else {
       document.title = 'Stella Talk';
     }
+    // 파비콘 뱃지 (빨간 원)
+    updateFaviconBadge(total);
+  }catch(e){}
+}
+
+function updateFaviconBadge(count){
+  try{
+    const canvas = document.createElement('canvas');
+    canvas.width = 32; canvas.height = 32;
+    const ctx2d = canvas.getContext('2d');
+    ctx2d.fillStyle = '#7c3aed';
+    ctx2d.beginPath(); ctx2d.arc(16,16,15,0,Math.PI*2); ctx2d.fill();
+    ctx2d.fillStyle = '#fff';
+    ctx2d.font = '18px serif';
+    ctx2d.textAlign = 'center'; ctx2d.textBaseline = 'middle';
+    ctx2d.fillText('✦', 16, 16);
+    if(count > 0){
+      ctx2d.fillStyle = '#ef4444';
+      ctx2d.beginPath(); ctx2d.arc(24,8,9,0,Math.PI*2); ctx2d.fill();
+      ctx2d.fillStyle = '#fff';
+      ctx2d.font = 'bold 10px sans-serif';
+      ctx2d.fillText(count > 9 ? '9+' : String(count), 24, 8);
+    }
+    let link = document.querySelector("link[rel~='icon']");
+    if(!link){ link = document.createElement('link'); link.rel = 'icon'; document.head.appendChild(link); }
+    link.href = canvas.toDataURL('image/png');
   }catch(e){}
 }
 function closeMobileRoom(){
