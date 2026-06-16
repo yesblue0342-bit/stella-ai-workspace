@@ -228,6 +228,8 @@ body.theme-dark .theme-btn.active{background:#1e3a5f}
       <div class="chat-messages" id="chatMessages">
         <div class="chat-bg-layer" id="chatBgLayer"></div>
       </div>
+      <!-- 타이핑 표시 -->
+      <div id="typingIndicator" style="display:none;padding:4px 16px;font-size:.8rem;color:var(--text2);font-style:italic"></div>
       <!-- 첨부 미리보기 -->
       <div class="attach-preview" id="attachPreview"></div>
       <div class="chat-composer">
@@ -236,7 +238,7 @@ body.theme-dark .theme-btn.active{background:#1e3a5f}
           <input type="file" id="fileInput" multiple hidden onchange="handleFileSelect(this.files)">
           <textarea class="chat-input" id="chatInput" placeholder="메시지 입력 (Enter=전송)" rows="1"
             onkeydown="if(event.key==='Enter'&&!event.shiftKey){event.preventDefault();sendMsg()}"
-            oninput="this.style.height='auto';this.style.height=Math.min(this.scrollHeight,120)+'px'"></textarea>
+            oninput="this.style.height='auto';this.style.height=Math.min(this.scrollHeight,120)+'px';notifyTyping()"></textarea>
           <button class="send-btn" onclick="sendMsg()">↑</button>
         </div>
       </div>
@@ -818,6 +820,9 @@ function openRoom(id){
   // 방 코드 버튼: 코드 기반 방이고 나와의 채팅이 아닐 때만 표시
   var rcBtn=document.getElementById('roomCodeBtn');
   if(rcBtn) rcBtn.style.display=(_cur.id.startsWith('room_code_')&&!_cur.isMyChat)?'inline-flex':'none';
+  // 방 전환 시 타이핑 표시 초기화
+  var ti=document.getElementById('typingIndicator');
+  if(ti) ti.style.display='none';
   if(window.innerWidth<=700){
     document.getElementById('sidebar').classList.add('hidden-mobile');
     document.getElementById('mobileBack').style.display='';
@@ -907,6 +912,8 @@ async function syncRoomFromServer(scrollAfter){
     if(d.room&&d.room.members) _rooms[idx].members=d.room.members;
     // 상대방 읽음 정보 저장 (카톡 "1" 표시용)
     if(d.reads) _rooms[idx].reads=d.reads;
+    // 상대방 타이핑 상태 표시
+    showTypingIndicator(d.typing);
     // 현재 방을 보고 있으므로 읽음 처리
     _rooms[idx].lastReadAt=Date.now();
     _cur=_rooms[idx];
@@ -1589,6 +1596,9 @@ async function sendMsg(){
     const tempId = 'm_'+Date.now()+'_'+Math.random().toString(36).slice(2,5);
     const tempMsg = {id:tempId, from:myId, fromName:myName, type:'text', text:finalText, at:Date.now(), sendState:'sending'};
     _rooms[idx].messages.push(tempMsg);
+    // 메시지 보냈으니 타이핑 중단
+    if(_typingTimer)clearTimeout(_typingTimer);
+    stopTyping();
     _cur=_rooms[idx]; saveRooms();
     renderMessages(); scrollBottom();
     // 서버에 전송 + 상태 업데이트
@@ -1596,6 +1606,56 @@ async function sendMsg(){
   }
   // ⑤ 서버 동기화는 1초 후 (서버 반영 시간 확보)
   setTimeout(function(){ syncRoomFromServer(false); }, 1000);
+}
+
+// ── 타이핑 표시 ──
+var _typingTimer=null, _lastTypingSent=0, _typingPollTimer=null;
+
+// 내가 입력 중임을 서버에 알림 (throttle 2초)
+function notifyTyping(){
+  if(!_cur||_cur.isMyChat)return;
+  const myId=getMyId();
+  if(!myId||myId==='나')return;
+  const now=Date.now();
+  // 2초에 한 번만 전송 (서버 부하 방지)
+  if(now-_lastTypingSent>2000){
+    _lastTypingSent=now;
+    fetch('/api/chat-room?action=typing',{method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({roomId:_cur.id,userId:myId,typing:true})}).catch(function(){});
+  }
+  // 입력 멈추면 3초 후 typing:false
+  if(_typingTimer)clearTimeout(_typingTimer);
+  _typingTimer=setTimeout(function(){ stopTyping(); }, 3000);
+}
+
+// 입력 중단 알림
+function stopTyping(){
+  if(!_cur||_cur.isMyChat)return;
+  const myId=getMyId();
+  if(!myId||myId==='나')return;
+  _lastTypingSent=0;
+  fetch('/api/chat-room?action=typing',{method:'POST',headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({roomId:_cur.id,userId:myId,typing:false})}).catch(function(){});
+}
+
+// 상대방 타이핑 상태 표시 (syncRoomFromServer에서 받은 typing 데이터 사용)
+function showTypingIndicator(typingData){
+  const el=document.getElementById('typingIndicator');
+  if(!el)return;
+  if(!typingData||_cur&&_cur.isMyChat){ el.style.display='none'; return; }
+  const myId=getMyId();
+  const now=Date.now();
+  // 나 제외, 5초 이내 타이핑한 사람만
+  const others=Object.keys(typingData).filter(function(uid){
+    return uid!==myId && (now-typingData[uid])<5000;
+  });
+  if(others.length>0){
+    const name=others.length===1?others[0]:others.length+'명';
+    el.textContent='✍️ '+name+'님이 입력 중...';
+    el.style.display='block';
+  } else {
+    el.style.display='none';
+  }
 }
 
 // ── 텍스트 서버 전송 (상태 추적 + 실패 시 재시도 버튼) ──
