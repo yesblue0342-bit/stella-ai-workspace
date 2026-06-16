@@ -820,11 +820,19 @@ async function syncRoomFromServer(scrollAfter){
     const idx=_rooms.findIndex(x=>x.id===_cur.id);
     if(idx<0)return;
     const prevCount=(_rooms[idx].messages||[]).length;
-    // 서버 메시지와 로컬 메시지 병합 (로컬에만 있는 임시 메시지 보존)
+    // 서버 메시지와 로컬 임시 메시지 병합 (중복 방지: 같은 텍스트+발신자면 서버 것 우선)
     const localOnly = (_rooms[idx].messages||[]).filter(function(lm){
-      return lm.id && lm.id.startsWith('m_') && !seen.has(lm.id);
+      if(!lm.id || !lm.id.startsWith('m_')) return false;
+      if(seen.has(lm.id)) return false;
+      // 서버에 같은 텍스트+발신자 메시지가 있으면 로컬 중복 제거
+      var isDup = dedupedMsgs.some(function(sm){
+        return sm.from === lm.from && sm.text === lm.text && Math.abs((sm.at||0) - (lm.at||0)) < 10000;
+      });
+      return !isDup;
     });
     _rooms[idx].messages = dedupedMsgs.concat(localOnly);
+    // 시간순 정렬
+    _rooms[idx].messages.sort(function(a,b){ return (a.at||0) - (b.at||0); });
     if(d.room&&d.room.members) _rooms[idx].members=d.room.members;
     // 상대방 읽음 정보 저장 (카톡 "1" 표시용)
     if(d.reads) _rooms[idx].reads=d.reads;
@@ -842,11 +850,12 @@ async function syncRoomFromServer(scrollAfter){
         const last=serverMsgs[serverMsgs.length-1];
         const myId=getMyId();
         if(last && last.from!==myId){
-          // 앱이 백그라운드거나 화면이 꺼져있을 때 팝업 알림
+          // ★ 앱 활성/비활성 모두 알림음 재생
+          playNotifySound();
+          // 백그라운드일 때는 팝업 알림도
           if(document.hidden || document.visibilityState==='hidden'){
             notify(_cur.name, last.text||'📎 파일');
           }
-          // 앱 아이콘 뱃지 항상 업데이트
           updateAppBadge();
         }
       }
@@ -1002,6 +1011,10 @@ function renderMessages(){
   // 기존 메시지만 지우고 bg layer는 유지
   Array.from(el.children).forEach(function(c){if(c!==bgLayer)c.remove();});
   if(!_cur){return;}
+  // ★ 메시지 시간순 정렬
+  if(_cur.messages && _cur.messages.length > 1){
+    _cur.messages.sort(function(a,b){ return (a.at||0) - (b.at||0); });
+  }
   // 로그인 체크 - 입력창 비활성화
   const notLoggedIn = !isLoggedIn();
   const chatInp=document.getElementById('chatInput');
