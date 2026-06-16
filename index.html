@@ -309,7 +309,14 @@ async function restoreAllData(){
   if(typeof renderBoardTree === 'function') renderBoardTree();
   // ★ 복원 완료 - 이제부터 서버 저장 허용
   _restoreCompleted = true;
-  console.log('[Restore] 전체 복원 완료 - 채팅:', rooms.length, '노트:', posts.length, '프로젝트:', projects.length, '| 이제 서버저장 활성화');
+  console.log('[Restore] 전체 복원 완료 - 채팅:', rooms.length, '노트:', posts.length, '프로젝트:', projects.length);
+  // ★ 복원된 데이터를 즉시 서버에 저장 (재로그인해도 유지되도록)
+  if(rooms.length > 0 || posts.length > 0 || projects.length > 0){
+    console.log('[Restore] 서버에 저장 중...');
+    syncToServer().then(function(){
+      console.log('[Restore] 서버 저장 완료 - 재로그인해도 유지됨');
+    });
+  }
 }
 
 // ── 서버 우선 전체 동기화 (모바일/PC 공통) ──
