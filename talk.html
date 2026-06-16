@@ -1030,6 +1030,8 @@ function playNotifySound(){
     const key = _notifySoundKey;
     // 전역 ctx 재사용 (이미 unlock됨)
     const ctx = _audioCtx || new (window.AudioContext || window.webkitAudioContext)();
+    // suspended 상태면 재개 (모바일에서 자주 발생)
+    if(ctx.state==='suspended'){ try{ctx.resume();}catch(e){} }
     const sounds = {
       // 스텔라~ (기본) - 맑고 귀여운 2음
       'stella1': [[523,0.15],[659,0.35],[784,0.6],[659,0.9],[784,1.1]],
@@ -1067,6 +1069,11 @@ function playNotifySound(){
 function previewSound(key){
   _notifySoundKey = key;
   localStorage.setItem('stella_talk_sound', key);
+  // 선택된 버튼 하이라이트
+  document.querySelectorAll('.sound-opt').forEach(function(b){b.classList.toggle('active',b.dataset.key===key);});
+  // 오디오 확실히 unlock 후 재생
+  unlockAudio();
+  if(_audioCtx && _audioCtx.state==='suspended'){ _audioCtx.resume(); }
   playNotifySound();
 }
 
@@ -1708,9 +1715,15 @@ function openSettings(){document.getElementById('settingsPanel').classList.add('
 function closeSettings(){document.getElementById('settingsPanel').classList.remove('on');document.getElementById('settingsOverlay').classList.remove('on');}
 
 // ── 모달 ──
-function openModal(id){document.getElementById(id).classList.add('on');}
+function openModal(id){
+  const el=document.getElementById(id);
+  if(!el)return;
+  el.classList.add('on');
+  el.style.display='flex';
+}
 function closeModal(id){
-  document.getElementById(id).classList.remove('on');
+  const _el=document.getElementById(id);
+  if(_el){ _el.classList.remove('on'); if(_el.classList.contains('modal-overlay')) _el.style.display='none'; }
   // 모달 닫히면 입력창 포커스 복원
   setTimeout(function(){
     var ci=document.getElementById('chatInput');
