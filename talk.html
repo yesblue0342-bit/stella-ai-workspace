@@ -221,6 +221,7 @@ body.theme-dark .theme-btn.active{background:#1e3a5f}
       <div class="chat-header">
         <button class="icon-btn" onclick="closeMobileRoom()" style="display:none" id="mobileBack">←</button>
         <h2 id="chatRoomName">채팅방</h2>
+        <button class="icon-btn" onclick="copyRoomCode()" title="방 코드 복사" id="roomCodeBtn" style="display:none">🔑</button>
         <button class="icon-btn" onclick="openInvite()" title="친구 초대">👥</button>
         <button class="icon-btn" onclick="openRoomSettings()" title="방 설정">⋯</button>
       </div>
@@ -254,6 +255,13 @@ body.theme-dark .theme-btn.active{background:#1e3a5f}
     <div style="font-size:.78rem;color:var(--accent);margin-bottom:10px;line-height:1.5">
       💡 <b>두 사람이 같은 방 코드</b>를 입력하면 서로 메시지를 주고받을 수 있습니다.<br>
       예: 둘 다 <b>"우리방123"</b> 입력
+    </div>
+    <div style="border-top:1px dashed var(--border,#ccc);margin:14px 0 12px;padding-top:12px">
+      <div style="font-size:.82rem;font-weight:700;margin-bottom:6px">⚡ 빠른 입장 (코드만으로)</div>
+      <div style="display:flex;gap:6px">
+        <input id="joinRoomCode" placeholder="방 코드 입력" onkeydown="if(event.key==='Enter')joinByCode()" style="margin:0;flex:1">
+        <button class="btn-primary" onclick="joinByCode()" style="margin:0;white-space:nowrap;padding:0 16px">입장</button>
+      </div>
     </div>
     <div style="font-size:.8rem;color:var(--text2);margin-bottom:8px">초대할 멤버 (이름 입력 후 Enter)</div>
     <div style="display:flex;gap:6px;margin-bottom:8px">
@@ -678,6 +686,52 @@ function createRoom(){
   renderRooms();
 }
 
+// ── 코드로 입장 (방 이름 없이 코드만으로 즉시 참여) ──
+function joinByCode(){
+  const codeInput=document.getElementById('joinRoomCode');
+  const code=codeInput?codeInput.value.trim():'';
+  if(!code){ alert('방 코드를 입력하세요.'); return; }
+  const myId=getMyId();
+  if(!myId||myId==='나'){ alert('로그인 후 이용해 주세요.'); return; }
+  const roomId='room_code_'+code.replace(/[^a-zA-Z0-9가-힣]/g,'_').slice(0,70);
+  // 이미 있으면 그 방 열기
+  const existing=_rooms.find(r=>r.id===roomId);
+  if(existing){ closeModal('newRoomModal'); openRoom(roomId); renderRooms(); return; }
+  // 새로 추가
+  const room={id:roomId,name:'방['+code+']',messages:[],members:[myId],createdAt:Date.now()};
+  _rooms.push(room); saveRooms();
+  closeModal('newRoomModal');
+  // 서버에 입장 알림
+  try{
+    fetch('/api/chat-room?action=send',{method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({roomId,title:'방['+code+']',userId:myId,sender:myId,message:myId+'님이 입장했습니다',members:[myId]})}).catch(function(){});
+  }catch(e){}
+  openRoom(roomId); renderRooms();
+  // 입장 후 즉시 서버 동기화
+  setTimeout(function(){ syncRoomFromServer(true); }, 800);
+}
+
+// ── 방 코드 복사 ──
+function copyRoomCode(){
+  if(!_cur)return;
+  // room_code_XXX 형태에서 코드 추출
+  var code='';
+  if(_cur.id.startsWith('room_code_')){
+    code=_cur.id.replace('room_code_','');
+  } else {
+    code=_cur.id;
+  }
+  var shareText='Stella Talk 방 코드: '+code+'\n같은 코드로 입장하면 대화할 수 있어요!';
+  if(navigator.clipboard&&navigator.clipboard.writeText){
+    navigator.clipboard.writeText(code).then(function(){
+      toast('방 코드 복사됨: '+code);
+    }).catch(function(){ prompt('방 코드 (복사하세요):', code); });
+  } else {
+    prompt('방 코드 (복사하세요):', code);
+  }
+}
+
+// ── 친구 초대 ──
 // ── 친구 초대 ──
 function openInvite(){
   if(!_cur)return;
@@ -761,6 +815,9 @@ function openRoom(id){
   document.getElementById('noRoom').style.display='none';
   const cr=document.getElementById('chatRoom');cr.style.display='flex';
   document.getElementById('chatRoomName').textContent=(_cur.isMyChat?'💛 ':'')+_cur.name;
+  // 방 코드 버튼: 코드 기반 방이고 나와의 채팅이 아닐 때만 표시
+  var rcBtn=document.getElementById('roomCodeBtn');
+  if(rcBtn) rcBtn.style.display=(_cur.id.startsWith('room_code_')&&!_cur.isMyChat)?'inline-flex':'none';
   if(window.innerWidth<=700){
     document.getElementById('sidebar').classList.add('hidden-mobile');
     document.getElementById('mobileBack').style.display='';
