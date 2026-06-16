@@ -478,8 +478,7 @@ function htmlTableToMarkdown(html){
       const cells = Array.from(tr.querySelectorAll('th,td'));
       return '| ' + cells.map(function(td){
         // 셀 내 텍스트 정리: 줄바꿈 → 공백, | → ∣
-        return (td.innerText||td.textContent||'').replace(/
-/g,' ').replace(/\|/g,'∣').trim();
+        return (td.innerText||td.textContent||'').replace(/\n/g,' ').replace(/\|/g,'∣').trim();
       }).join(' | ') + ' |';
     });
 
@@ -497,10 +496,7 @@ function htmlTableToMarkdown(html){
       }
     }
 
-    result += mdRows.join('
-') + '
-
-';
+    result += mdRows.join('\n') + '\n\n';
   });
   return result.trim();
 }
@@ -526,17 +522,9 @@ function initNoteBodyPaste(){
         const before = ta.value.substring(0, start);
         const after = ta.value.substring(end);
         // 앞에 빈 줄 확보
-        const prefix = (before && !before.endsWith('
-
-')) ?
-          (before.endsWith('
-') ? '
-' : '
-
-') : '';
-        ta.value = before + prefix + markdown + '
-
-' + after;
+        const prefix = (before && !before.endsWith('\n\n')) ?
+          (before.endsWith('\n') ? '\n' : '\n\n') : '';
+        ta.value = before + prefix + markdown + '\n\n' + after;
         // 커서를 표 끝으로
         const newPos = start + prefix.length + markdown.length + 2;
         ta.selectionStart = ta.selectionEnd = newPos;
