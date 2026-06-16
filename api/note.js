@@ -1,6 +1,6 @@
 import { saveJsonToDrive, listJsonFromDrive, readJsonFromDrive, listDriveDirectory, ensurePath } from "../lib/drive-utils.js";
 
-export const config = { maxDuration: 30 };
+export const config = { maxDuration: 60 };
 
 // 노트가 저장될 수 있는 모든 레거시 루트 폴더명
 // "Board"(대문자, 구버전 board-save), "boards"(소문자) 모두 탐색
@@ -42,14 +42,22 @@ async function readNotesFromRoot(rootName, userId, noteMap) {
 async function collectNotes(folderPath, noteMap, filterUserId = null) {
   try {
     const files = await listJsonFromDrive({ folderPath, pageSize: 100 });
-    for (const f of files) {
-      try {
-        const fileName = f.name.replace(/\.json$/, "");
-        const r = await readJsonFromDrive({ folderPath, fileName });
-        if (!r?.data || r.data.deleted) continue;
-        // userId 필터가 있으면 해당 사용자 것만
+    // 병렬 처리 (최대 10개씩 배치) - 타임아웃 방지
+    const BATCH = 10;
+    for (let i = 0; i < files.length; i += BATCH) {
+      const batch = files.slice(i, i + BATCH);
+      const results = await Promise.all(batch.map(async function(f) {
+        try {
+          const fileName = f.name.replace(/\.json$/, "");
+          const r = await readJsonFromDrive({ folderPath, fileName });
+          return { r, fileName };
+        } catch(e) { return null; }
+      }));
+      for (const item of results) {
+        if (!item || !item.r?.data || item.r.data.deleted) continue;
+        const r = item.r;
         if (filterUserId && r.data.userId && r.data.userId !== filterUserId) continue;
-        const id = r.data.id || r.data.postId || fileName;
+        const id = r.data.id || r.data.postId || item.fileName;
         if (!noteMap.has(id)) {
           noteMap.set(id, {
             id,
@@ -61,7 +69,7 @@ async function collectNotes(folderPath, noteMap, filterUserId = null) {
             deleted: false
           });
         }
-      } catch(e) {}
+      }
     }
   } catch(e) {}
 }
