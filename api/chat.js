@@ -684,8 +684,14 @@ async function callClaude({ model, system, history, message, images = [] }) {
   const apiKey = process.env.ANTHROPIC_API_KEY;
   if (!apiKey) throw new Error("ANTHROPIC_API_KEY not configured");
   const selectedModel = resolveClaudeModel(model);
-  const response = await fetch("https://api.anthropic.com/v1/messages", {
+  // 55초 타임아웃 가드 (Vercel 60초 제한 직전 우아하게 처리)
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), 55000);
+  let response;
+  try {
+  response = await fetch("https://api.anthropic.com/v1/messages", {
     method: "POST",
+    signal: controller.signal,
     headers: { "Content-Type": "application/json", "x-api-key": apiKey, "anthropic-version": "2023-06-01" },
     body: JSON.stringify({
       model: selectedModel,
@@ -702,6 +708,12 @@ async function callClaude({ model, system, history, message, images = [] }) {
   const data = await response.json();
   if (!response.ok) throw new Error(data.error?.message || "Claude API error");
   return data.content?.map(c => c.text || "").join("\n") || "응답 없음";
+  } catch(e) {
+    if (e.name === "AbortError") throw new Error("응답 시간이 너무 깁니다. 질문을 더 짧게 해주세요.");
+    throw e;
+  } finally {
+    clearTimeout(timeoutId);
+  }
 }
 
 
