@@ -3,6 +3,21 @@ import { saveJsonToDrive, readJsonFromDrive, listJsonFromDrive } from "../lib/dr
 const clean = (v) => String(v || "").trim();
 const makeRoomId = (v) => (clean(v) || "default-room").replace(/[^a-zA-Z0-9가-힣_-]/g, "_").slice(0, 80);
 
+// ── reads/typing 전용 meta 파일 (메시지 파일과 분리해 동시쓰기 클로버링 방지) ──
+const metaName = (roomId) => roomId + "__meta";
+async function readMeta(roomId) {
+  const m = await readJsonFromDrive({ folderPath: ["MemberChat"], fileName: metaName(roomId) }).catch(() => null);
+  return m?.data || null;
+}
+async function saveMeta(roomId, meta) {
+  await saveJsonToDrive({ folderPath: ["MemberChat"], fileName: metaName(roomId), data: { type: "memberChatMeta", roomId, reads: meta.reads || {}, typing: meta.typing || {}, updatedAt: new Date().toISOString() } });
+}
+// meta 파일이 아직 없으면 레거시(메시지 파일 내부 reads/typing)에서 1회 이관
+async function seedMeta(roomId) {
+  const f = await readJsonFromDrive({ folderPath: ["MemberChat"], fileName: roomId }).catch(() => null);
+  return { reads: (f?.data?.reads) || {}, typing: (f?.data?.typing) || {} };
+}
+
 export const config = { maxDuration: 30 };
 
 export default async function handler(req, res) {
@@ -14,38 +29,42 @@ export default async function handler(req, res) {
       const roomId = makeRoomId(req.query.roomId || req.query.room);
       if (!roomId) return res.status(400).json({ ok: false, message: "roomId 필요" });
       const f = await readJsonFromDrive({ folderPath: ["MemberChat"], fileName: roomId });
-      if (!f?.data) return res.status(200).json({ ok: true, room: null, messages: [], reads: {} });
-      return res.status(200).json({ ok: true, room: f.data, messages: f.data.messages || [], reads: f.data.reads || {}, typing: f.data.typing || {} });
+      if (!f?.data) return res.status(200).json({ ok: true, room: null, messages: [], reads: {}, typing: {} });
+      // reads/typing은 별도 meta 파일에 보관(메시지 파일을 건드리지 않아 동시쓰기로 메시지가 사라지는 레이스 방지).
+      // meta가 없으면 레거시(메시지 파일 내부 reads/typing)로 폴백.
+      const meta = await readMeta(roomId);
+      return res.status(200).json({
+        ok: true,
+        room: f.data,
+        messages: f.data.messages || [],
+        reads: (meta && meta.reads) || f.data.reads || {},
+        typing: (meta && meta.typing) || f.data.typing || {}
+      });
     }
 
-    // ── 읽음 처리 (사용자가 방을 읽은 시각 기록) ──
+    // ── 읽음 처리 (사용자가 방을 읽은 시각 기록) — meta 파일에만 기록 ──
     if (action === "read") {
       const roomId = makeRoomId(req.body?.roomId || req.query.roomId);
       const userId = clean(req.body?.userId || req.query.userId);
       if (!roomId || !userId) return res.status(400).json({ ok: false, message: "roomId, userId 필요" });
-      const existing = await readJsonFromDrive({ folderPath: ["MemberChat"], fileName: roomId }).catch(() => null);
-      if (!existing?.data) return res.status(200).json({ ok: true });
-      const reads = existing.data.reads || {};
-      reads[userId] = Date.now();
-      await saveJsonToDrive({ folderPath: ["MemberChat"], fileName: roomId, data: { ...existing.data, reads } });
-      return res.status(200).json({ ok: true, reads });
+      const meta = (await readMeta(roomId)) || (await seedMeta(roomId));
+      meta.reads = meta.reads || {};
+      meta.reads[userId] = Date.now();
+      await saveMeta(roomId, meta);
+      return res.status(200).json({ ok: true, reads: meta.reads });
     }
 
-    // ── 타이핑 상태 기록 (입력 중 표시용) ──
+    // ── 타이핑 상태 기록 (입력 중 표시용) — meta 파일에만 기록 ──
     if (action === "typing") {
       const roomId = makeRoomId(req.body?.roomId || req.query.roomId);
       const userId = clean(req.body?.userId || req.query.userId);
       const isTyping = (req.body?.typing ?? req.query.typing) === true || (req.body?.typing ?? req.query.typing) === "true";
       if (!roomId || !userId) return res.status(400).json({ ok: false, message: "roomId, userId 필요" });
-      const existing = await readJsonFromDrive({ folderPath: ["MemberChat"], fileName: roomId }).catch(() => null);
-      if (!existing?.data) return res.status(200).json({ ok: true });
-      const typing = existing.data.typing || {};
-      if (isTyping) {
-        typing[userId] = Date.now();
-      } else {
-        delete typing[userId];
-      }
-      await saveJsonToDrive({ folderPath: ["MemberChat"], fileName: roomId, data: { ...existing.data, typing } });
+      const meta = (await readMeta(roomId)) || (await seedMeta(roomId));
+      meta.typing = meta.typing || {};
+      if (isTyping) { meta.typing[userId] = Date.now(); }
+      else { delete meta.typing[userId]; }
+      await saveMeta(roomId, meta);
       return res.status(200).json({ ok: true });
     }
 
@@ -71,6 +90,7 @@ export default async function handler(req, res) {
 
       const messageItem = {
         id: `msg_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
+        clientId: clean(body.clientId || ""),   // 클라 임시 id 에코 → 프런트가 id 기준으로 정확히 dedup
         sender, userId, message,
         fileName: fileName || null,
         fileUrl: fileUrl || null,
@@ -79,6 +99,7 @@ export default async function handler(req, res) {
       };
 
       const data = {
+        ...(existing?.data || {}),   // reads/typing 등 기존 필드 보존 (메시지 전송이 메타를 지우지 않게)
         type: "memberChat",
         roomId, title,
         members: allMembers,
