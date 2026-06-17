@@ -137,6 +137,11 @@ body.theme-dark .chat-area::before{opacity:0.06}
 /* ── 모달 공통 ── */
 .modal-bg{display:none;position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:500;align-items:center;justify-content:center}
 .modal-bg.on{display:flex}
+/* 알림 설정 모달(.modal-overlay)도 동일한 오버레이로 동작 (CSS 누락분 보강) */
+.modal-overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:560;align-items:center;justify-content:center}
+.modal-overlay.on{display:flex}
+.btn-primary{width:100%;padding:11px;border:none;border-radius:12px;background:var(--accent,#7c3aed);color:#fff;font-weight:800;font-size:.9rem;cursor:pointer;font-family:inherit}
+.btn-primary:hover{filter:brightness(1.05)}
 .modal{background:var(--bg);border:1px solid var(--border);border-radius:18px;padding:24px;width:min(420px,94vw);max-height:90vh;overflow-y:auto}
 .modal h3{font-size:1rem;font-weight:800;margin-bottom:16px;color:var(--text)}
 .modal input,.modal textarea{width:100%;background:var(--input-bg);border:1px solid var(--border);border-radius:10px;padding:10px 13px;color:var(--text);font-size:.88rem;margin-bottom:10px;outline:none;font-family:inherit}
@@ -940,8 +945,10 @@ async function syncRoomFromServer(scrollAfter){
     saveRooms();
     // 서버에 내가 읽었다고 보고
     reportRead(_cur.id);
+    // 키 기반 증분 렌더는 깜빡임이 없으므로 폴링마다 안전하게 호출 가능
+    // (변경 없으면 노드 전부 재사용 → 사실상 no-op, 삭제/수정/읽음표시도 반영)
+    renderMessages();renderRooms();
     if(serverMsgs.length!==prevCount){
-      renderMessages();renderRooms();
       if(scrollAfter||serverMsgs.length>prevCount) scrollBottom();
       // 새 메시지 알림 (내가 보낸 게 아닐 때)
       if(serverMsgs.length>prevCount){
@@ -956,7 +963,6 @@ async function syncRoomFromServer(scrollAfter){
           }
           // 탭/파비콘 뱃지 즉시 갱신
           updateAppBadge();
-          renderRooms();
         }
       }
     }
@@ -1242,128 +1248,167 @@ function countUnreadByOthers(m){
   return unread;
 }
 
+// ── 메시지 행 1개 생성 (키 기반 증분 렌더용) ──
+// m: 메시지, myId: 내 식별자 → 완성된 행 DOM 노드 반환
+function buildMsgRow(m, myId){
+  const isMe=m.from===myId;
+  const row=document.createElement('div');row.className='msg-row'+(isMe?' me':'');
+  // 아바타
+  const av=document.createElement('div');av.className='msg-avatar';av.textContent=isMe?'나':'👤';
+  // 컬럼
+  const col=document.createElement('div');col.className='msg-col';
+  if(!isMe){const nm=document.createElement('div');nm.className='msg-name';nm.textContent=esc(m.from||'');col.appendChild(nm);}
+  // 삭제된 메시지 (카톡 방식)
+  if(m.deleted){
+    const del=document.createElement('div');del.className='msg-bubble';
+    del.style.cssText='font-style:italic;color:var(--muted,#9ca3af);background:transparent;border:1px dashed var(--border)';
+    del.textContent='삭제된 메시지입니다.';
+    col.appendChild(del);
+    const tmW=document.createElement('div');tmW.style.cssText='display:flex;align-items:flex-end;gap:3px;flex-direction:'+(isMe?'row-reverse':'row');
+    const tmm=document.createElement('div');tmm.className='msg-time';tmm.textContent=fmtTime(m.at);tmW.appendChild(tmm);
+    col.appendChild(tmW);
+    if(isMe){row.appendChild(col);row.appendChild(av);}else{row.appendChild(av);row.appendChild(col);}
+    return row;
+  }
+  // 길게 누르기(롱프레스) → 메시지 메뉴
+  attachLongPress(row, m, isMe);
+  // 내용
+  if(m.type==='image'){
+    const imgSrc = m.data || m.fileUrl || '';
+    const wrap=document.createElement('div');wrap.className='msg-img-wrap';
+    const img=document.createElement('img');img.className='msg-img';img.alt=m.fileName||'이미지';
+    img.style.cssText='max-width:220px;max-height:280px;border-radius:12px;display:block;cursor:pointer;object-fit:cover';
+    // lh3 URL은 직접 src로 쓰면 CORS 없이 표시됨
+    img.src = imgSrc;
+    img.onerror=function(){
+      // 이미지 로드 실패 시 링크로 대체
+      const lnk=document.createElement('a');lnk.href=imgSrc;lnk.target='_blank';lnk.rel='noopener';
+      lnk.style.cssText='display:inline-flex;align-items:center;gap:6px;padding:8px 12px;background:var(--bg3);border-radius:10px;color:var(--text);font-size:.85rem;text-decoration:none';
+      lnk.textContent='🖼 '+esc(m.fileName||'이미지 열기');
+      wrap.innerHTML='';wrap.appendChild(lnk);
+    };
+    img.onclick=function(){
+      // 라이트박스 or 새 탭
+      const lb=document.getElementById('lightbox');
+      const lbImg=document.getElementById('lightboxImg');
+      if(lb&&lbImg){lbImg.src=imgSrc;lb.classList.add('on');}
+      else{window.open(imgSrc,'_blank');}
+    };
+    wrap.appendChild(img);
+    col.appendChild(wrap);
+  } else if(m.type==='file'){
+    const a=document.createElement('a');a.className='msg-file';a.href=m.data;a.download=m.fileName||'file';
+    a.innerHTML='<div class="msg-file-icon">📄</div><div class="msg-file-info"><div class="msg-file-name">'+esc(m.fileName||'파일')+'</div><div class="msg-file-size">'+fmtSize(m.fileSize)+'</div></div>';
+    col.appendChild(a);
+  } else {
+    const bub=document.createElement('div');bub.className='msg-bubble';bub.textContent=m.text||'';col.appendChild(bub);
+  }
+  // 시간 + 읽음표시(카톡식 "1")
+  const tmWrap=document.createElement('div');tmWrap.style.cssText='display:flex;align-items:flex-end;gap:3px;flex-direction:'+(isMe?'row-reverse':'row');
+  const tm=document.createElement('div');tm.className='msg-time';tm.textContent=fmtTime(m.at);
+  tmWrap.appendChild(tm);
+  // 내 메시지이고, 상대가 아직 안 읽었으면 "1" 표시
+  if(isMe&&_cur&&!_cur.isMyChat){
+    const unreadCount=countUnreadByOthers(m);
+    if(unreadCount>0){
+      const rd=document.createElement('div');rd.className='msg-read';rd.textContent=unreadCount>1?String(unreadCount):'1';
+      tmWrap.appendChild(rd);
+    }
+  }
+  // ★ 전송 상태 표시 (전송중/실패+재시도)
+  if(isMe && m.sendState){
+    if(m.sendState==='sending'){
+      const st=document.createElement('div');
+      st.style.cssText='font-size:.7rem;color:var(--text2);opacity:.6';
+      st.textContent='⏳';
+      tmWrap.appendChild(st);
+    } else if(m.sendState==='failed'){
+      const st=document.createElement('div');
+      st.style.cssText='font-size:.72rem;color:#ef4444;cursor:pointer;font-weight:700';
+      st.textContent='⚠️ 재전송';
+      st.title='전송 실패 - 탭하여 재전송';
+      st.onclick=function(){ retryMsg(m.id); };
+      tmWrap.appendChild(st);
+    }
+  }
+  col.appendChild(tmWrap);
+  if(isMe){row.appendChild(col);row.appendChild(av);}
+  else{row.appendChild(av);row.appendChild(col);}
+  return row;
+}
+
+// 한 메시지의 표시 상태 서명(변경 감지용) — 동일하면 DOM 재사용(깜빡임/이미지 재로딩 방지)
+function msgSig(m, myId){
+  const isMe=m.from===myId;
+  const unread=(isMe&&_cur&&!_cur.isMyChat)?countUnreadByOthers(m):0;
+  return [m.deleted?1:0, m.type||'text', m.text||'', m.data||m.fileUrl||'',
+          m.fileName||'', m.fileSize||'', m.from||'', m.at||0,
+          unread, m.sendState||''].join('␟');
+}
+
+// ── 키 기반 증분 렌더 (innerHTML 전면 교체 폐기) ──
+// 같은 키+서명의 노드는 재사용하고, 바뀐 것만 갱신/추가/삭제 → 폴링 중 깜빡임 제거
 function renderMessages(){
   const el=document.getElementById('chatMessages');
+  if(!el) return;
   const bgLayer=document.getElementById('chatBgLayer');
-  // 기존 메시지만 지우고 bg layer는 유지
-  Array.from(el.children).forEach(function(c){if(c!==bgLayer)c.remove();});
-  if(!_cur){return;}
-  // ★ 메시지 시간순 정렬
-  if(_cur.messages && _cur.messages.length > 1){
-    _cur.messages.sort(function(a,b){ return (a.at||0) - (b.at||0); });
-  }
   // 로그인 체크 - 입력창 비활성화
   const notLoggedIn = !isLoggedIn();
   const chatInp=document.getElementById('chatInput');
   const sendBtnEl=document.getElementById('sendBtn');
   if(chatInp){ chatInp.disabled=notLoggedIn; chatInp.placeholder=notLoggedIn?'로그인 후 메시지를 입력할 수 있습니다':'메시지 입력'; }
   if(sendBtnEl&&notLoggedIn){ sendBtnEl.disabled=true; }
+
+  // 방이 없으면 메시지 노드만 정리(배경 레이어는 유지)
+  if(!_cur){
+    Array.from(el.children).forEach(function(c){ if(c!==bgLayer) c.remove(); });
+    return;
+  }
+  // ★ 메시지 시간순 정렬
+  if(_cur.messages && _cur.messages.length > 1){
+    _cur.messages.sort(function(a,b){ return (a.at||0) - (b.at||0); });
+  }
   const msgs=_cur.messages||[];
   if(!msgs.length){
-    const e=document.createElement('div');e.className='empty';e.textContent='메시지가 없습니다.';
+    Array.from(el.children).forEach(function(c){ if(c!==bgLayer) c.remove(); });
+    const e=document.createElement('div');e.className='empty';e.setAttribute('data-key','__empty');e.textContent='메시지가 없습니다.';
     el.appendChild(e);return;
   }
   const myId=getMyId();
+  // 표시할 단위(날짜 구분선 + 메시지) 목록을 키/서명과 함께 구성
+  const units=[];
   let lastDate='';
   msgs.forEach(function(m){
-    // 날짜 구분선
     const dateStr=new Date(m.at).toLocaleDateString('ko-KR',{year:'numeric',month:'long',day:'numeric'});
-    if(dateStr!==lastDate){
-      const div=document.createElement('div');div.className='date-divider';
-      div.innerHTML='<span>'+dateStr+'</span>';el.appendChild(div);lastDate=dateStr;
-    }
-    // 시스템 메시지
-    if(m.type==='system'){
-      const sys=document.createElement('div');sys.className='date-divider';
-      sys.innerHTML='<span>'+esc(m.text)+'</span>';el.appendChild(sys);return;
-    }
-    const isMe=m.from===myId;
-    const row=document.createElement('div');row.className='msg-row'+(isMe?' me':'');
-    // 아바타
-    const av=document.createElement('div');av.className='msg-avatar';av.textContent=isMe?'나':'👤';
-    // 컬럼
-    const col=document.createElement('div');col.className='msg-col';
-    if(!isMe){const nm=document.createElement('div');nm.className='msg-name';nm.textContent=esc(m.from||'');col.appendChild(nm);}
-    // 삭제된 메시지 (카톡 방식)
-    if(m.deleted){
-      const del=document.createElement('div');del.className='msg-bubble';
-      del.style.cssText='font-style:italic;color:var(--muted,#9ca3af);background:transparent;border:1px dashed var(--border)';
-      del.textContent='삭제된 메시지입니다.';
-      col.appendChild(del);
-      // 시간만 표시하고 종료
-      const tmW=document.createElement('div');tmW.style.cssText='display:flex;align-items:flex-end;gap:3px;flex-direction:'+(isMe?'row-reverse':'row');
-      const tmm=document.createElement('div');tmm.className='msg-time';tmm.textContent=fmtTime(m.at);tmW.appendChild(tmm);
-      col.appendChild(tmW);
-      if(isMe){row.appendChild(col);row.appendChild(av);}else{row.appendChild(av);row.appendChild(col);}
-      el.appendChild(row);
-      return;
-    }
-    // 길게 누르기(롱프레스) → 메시지 메뉴
-    attachLongPress(row, m, isMe);
-    // 내용
-    if(m.type==='image'){
-      const imgSrc = m.data || m.fileUrl || '';
-      const wrap=document.createElement('div');wrap.className='msg-img-wrap';
-      const img=document.createElement('img');img.className='msg-img';img.alt=m.fileName||'이미지';
-      img.style.cssText='max-width:220px;max-height:280px;border-radius:12px;display:block;cursor:pointer;object-fit:cover';
-      // lh3 URL은 직접 src로 쓰면 CORS 없이 표시됨
-      img.src = imgSrc;
-      img.onerror=function(){
-        // 이미지 로드 실패 시 링크로 대체
-        const lnk=document.createElement('a');lnk.href=imgSrc;lnk.target='_blank';lnk.rel='noopener';
-        lnk.style.cssText='display:inline-flex;align-items:center;gap:6px;padding:8px 12px;background:var(--bg3);border-radius:10px;color:var(--text);font-size:.85rem;text-decoration:none';
-        lnk.textContent='🖼 '+esc(m.fileName||'이미지 열기');
-        wrap.innerHTML='';wrap.appendChild(lnk);
-      };
-      img.onclick=function(){
-        // 라이트박스 or 새 탭
-        const lb=document.getElementById('lightbox');
-        const lbImg=document.getElementById('lightboxImg');
-        if(lb&&lbImg){lbImg.src=imgSrc;lb.classList.add('on');}
-        else{window.open(imgSrc,'_blank');}
-      };
-      wrap.appendChild(img);
-      col.appendChild(wrap);
-    } else if(m.type==='file'){
-      const a=document.createElement('a');a.className='msg-file';a.href=m.data;a.download=m.fileName||'file';
-      a.innerHTML='<div class="msg-file-icon">📄</div><div class="msg-file-info"><div class="msg-file-name">'+esc(m.fileName||'파일')+'</div><div class="msg-file-size">'+fmtSize(m.fileSize)+'</div></div>';
-      col.appendChild(a);
-    } else {
-      const bub=document.createElement('div');bub.className='msg-bubble';bub.textContent=m.text||'';col.appendChild(bub);
-    }
-    // 시간 + 읽음표시(카톡식 "1")
-    const tmWrap=document.createElement('div');tmWrap.style.cssText='display:flex;align-items:flex-end;gap:3px;flex-direction:'+(isMe?'row-reverse':'row');
-    const tm=document.createElement('div');tm.className='msg-time';tm.textContent=fmtTime(m.at);
-    tmWrap.appendChild(tm);
-    // 내 메시지이고, 상대가 아직 안 읽었으면 "1" 표시
-    if(isMe&&!_cur.isMyChat){
-      const unreadCount=countUnreadByOthers(m);
-      if(unreadCount>0){
-        const rd=document.createElement('div');rd.className='msg-read';rd.textContent=unreadCount>1?String(unreadCount):'1';
-        tmWrap.appendChild(rd);
-      }
-    }
-    // ★ 전송 상태 표시 (전송중/실패+재시도)
-    if(isMe && m.sendState){
-      if(m.sendState==='sending'){
-        const st=document.createElement('div');
-        st.style.cssText='font-size:.7rem;color:var(--text2);opacity:.6';
-        st.textContent='⏳';
-        tmWrap.appendChild(st);
-      } else if(m.sendState==='failed'){
-        const st=document.createElement('div');
-        st.style.cssText='font-size:.72rem;color:#ef4444;cursor:pointer;font-weight:700';
-        st.textContent='⚠️ 재전송';
-        st.title='전송 실패 - 탭하여 재전송';
-        st.onclick=function(){ retryMsg(m.id); };
-        tmWrap.appendChild(st);
-      }
-    }
-    col.appendChild(tmWrap);
-    if(isMe){row.appendChild(col);row.appendChild(av);}
-    else{row.appendChild(av);row.appendChild(col);}
-    el.appendChild(row);
+    if(dateStr!==lastDate){ units.push({key:'date_'+dateStr, sig:'date', kind:'date', dateStr:dateStr}); lastDate=dateStr; }
+    if(m.type==='system'){ units.push({key:'sys_'+(m.id||m.at), sig:'sys␟'+(m.text||''), kind:'sys', m:m}); return; }
+    units.push({key:'msg_'+(m.id||m.at), sig:msgSig(m,myId), kind:'msg', m:m});
   });
+  // 기존 노드를 키로 매핑
+  const existing={};
+  Array.from(el.children).forEach(function(c){ if(c===bgLayer) return; const k=c.getAttribute('data-key'); if(k) existing[k]=c; else c.remove(); });
+  // 순서대로 재조정: 서명 동일하면 재사용, 다르면 새로 만들고, 없는 건 추가
+  let prevNode=bgLayer||null;
+  units.forEach(function(u){
+    let node=existing[u.key];
+    if(node && node.getAttribute('data-sig')===u.sig){
+      // 재사용 (DOM/이미지 유지 → 깜빡임 없음)
+    } else {
+      if(node) node.remove();
+      if(u.kind==='date'){ node=document.createElement('div');node.className='date-divider';node.innerHTML='<span>'+esc(u.dateStr)+'</span>'; }
+      else if(u.kind==='sys'){ node=document.createElement('div');node.className='date-divider';node.innerHTML='<span>'+esc(u.m.text)+'</span>'; }
+      else { node=buildMsgRow(u.m, myId); }
+      node.setAttribute('data-key',u.key);
+      node.setAttribute('data-sig',u.sig);
+    }
+    delete existing[u.key];
+    // 올바른 위치로 이동 (이미 제자리면 그대로)
+    const ref = prevNode ? prevNode.nextSibling : el.firstChild;
+    if(node!==ref) el.insertBefore(node, ref);
+    prevNode=node;
+  });
+  // 남은(사라진) 노드 제거
+  Object.keys(existing).forEach(function(k){ existing[k].remove(); });
 }
 
 // ══ 메시지 길게 누르기 → 카톡 스타일 메뉴 ══
@@ -1809,19 +1854,28 @@ function closeSettings(){document.getElementById('settingsPanel').classList.remo
 function openModal(id){
   const el=document.getElementById(id);
   if(!el)return;
+  // ★ 인라인 display 제거 → 표시/숨김은 오직 .on CSS 클래스가 제어 (인라인 display:flex 잔류로 오버레이가 클릭을 막던 버그 수정)
+  el.style.display='';
   el.classList.add('on');
-  el.style.display='flex';
 }
 function closeModal(id){
   const _el=document.getElementById(id);
-  if(_el){ _el.classList.remove('on'); if(_el.classList.contains('modal-overlay')) _el.style.display='none'; }
+  if(_el){
+    _el.classList.remove('on');
+    // ★ 인라인 display 완전 제거 → 닫은 뒤 투명 오버레이가 남아 클릭을 가로채지 않게 함
+    _el.style.display='';
+  }
   // 모달 닫히면 입력창 포커스 복원
   setTimeout(function(){
     var ci=document.getElementById('chatInput');
-    if(ci&&document.getElementById('chatRoom').style.display!=='none') ci.focus();
+    var cr=document.getElementById('chatRoom');
+    if(ci&&cr&&cr.style.display!=='none') ci.focus();
   },100);
 }
-document.querySelectorAll('.modal-bg').forEach(function(m){m.addEventListener('click',function(e){if(e.target===m)m.classList.remove('on');});});
+// 배경(오버레이) 클릭 시 닫기 — 인라인 display 잔류 방지를 위해 closeModal 사용
+document.querySelectorAll('.modal-bg,.modal-overlay').forEach(function(m){
+  m.addEventListener('click',function(e){ if(e.target===m) closeModal(m.id); });
+});
 
 // ── 유틸 ──
 function esc(s){return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');}
