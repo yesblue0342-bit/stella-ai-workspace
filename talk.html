@@ -194,6 +194,9 @@ body.theme-dark .theme-btn.active{background:#1e3a5f}
 .sound-opt{background:var(--bg2);border:2px solid transparent;border-radius:12px;padding:10px 14px;font-size:.9rem;cursor:pointer;color:var(--text);text-align:left;transition:all .15s;font-family:inherit}
 .sound-opt:hover,.sound-opt:active{background:var(--accent);color:#fff;border-color:var(--accent)}
 .sound-opt.active{border-color:var(--accent);background:rgba(124,58,237,.15);font-weight:700}
+.mode-opt{background:var(--bg2);border:2px solid transparent;border-radius:12px;padding:10px 6px;font-size:.85rem;cursor:pointer;color:var(--text);text-align:center;line-height:1.5;font-family:inherit;font-weight:600;transition:all .15s}
+.mode-opt:hover{border-color:var(--accent)}
+.mode-opt.active{border-color:var(--accent);background:rgba(124,58,237,.15);font-weight:800}
 </style>
 </head>
 <body class="theme-kakao">
@@ -375,25 +378,25 @@ body.theme-dark .theme-btn.active{background:#1e3a5f}
   </div>
 </div>
 
-<!-- ── 알림음 설정 모달 ── -->
+<!-- ── 알림 설정 모달 (카톡식: 소리/진동/무음 + 음성 5종) ── -->
 <div class="modal-overlay" id="soundSettingsModal" onclick="if(event.target===this)closeModal('soundSettingsModal')" style="display:none">
   <div class="modal" style="max-width:340px">
-    <h3>🔔 알림음 설정</h3>
-    <p style="font-size:.82rem;color:var(--text2);margin-bottom:14px">버튼을 눌러 미리 들어보세요</p>
-    <div style="display:flex;flex-direction:column;gap:8px;margin-bottom:18px">
-      <button class="sound-opt" onclick="previewSound('stella1')" data-key="stella1">⭐ 스텔라~ <span style="font-size:.75rem;color:var(--text2)">(기본)</span></button>
-      <button class="sound-opt" onclick="previewSound('stella2')" data-key="stella2">✨ 스텔라~~톡</button>
-      <button class="sound-opt" onclick="previewSound('byeolha')" data-key="byeolha">👸 별하공주님~~</button>
-      <button class="sound-opt" onclick="previewSound('byeolping')" data-key="byeolping">💫 우리별핑~~</button>
-      <button class="sound-opt" onclick="previewSound('byeoldong')" data-key="byeoldong">🌟 김별똥~~</button>
-      <button class="sound-opt" onclick="previewSound('lucy')" data-key="lucy">🐣 꼬마~~루시</button>
-      <button class="sound-opt" onclick="previewSound('hachoo')" data-key="hachoo">🌈 하츄핑~~</button>
+    <h3>🔔 알림 설정</h3>
+    <p style="font-size:.82rem;color:var(--text2);margin-bottom:12px">메시지 수신 시 알림 방식을 선택하세요</p>
+    <div style="display:flex;gap:8px;margin-bottom:16px">
+      <button class="mode-opt" data-mode="sound" onclick="setNotifyMode('sound')" style="flex:1">🔊<br>소리</button>
+      <button class="mode-opt" data-mode="vibrate" onclick="setNotifyMode('vibrate')" style="flex:1">📳<br>진동</button>
+      <button class="mode-opt" data-mode="silent" onclick="setNotifyMode('silent')" style="flex:1">🔕<br>무음</button>
     </div>
-    <div style="display:flex;align-items:center;gap:10px;margin-bottom:18px;padding:12px;background:var(--bg3);border-radius:10px">
-      <span style="font-size:.88rem">🔕 소리 끄기</span>
-      <input type="checkbox" id="soundOffCheck" onchange="setSoundOff(this.checked)" style="width:20px;height:20px;margin-left:auto;accent-color:var(--accent)">
+    <div style="font-size:.8rem;color:var(--text2);margin-bottom:8px">🎵 알림 음성 (눌러서 미리듣기)</div>
+    <div id="voiceOptList" style="display:flex;flex-direction:column;gap:8px;margin-bottom:18px">
+      <button class="sound-opt" onclick="previewSound('s1')" data-key="s1">⭐ 스텔라~ <span style="font-size:.75rem;color:var(--text2)">(기본)</span></button>
+      <button class="sound-opt" onclick="previewSound('s2')" data-key="s2">✨ 스텔라~톡</button>
+      <button class="sound-opt" onclick="previewSound('byeolping')" data-key="byeolping">💫 우리 별핑~</button>
+      <button class="sound-opt" onclick="previewSound('gongju')" data-key="gongju">👸 별하 공주님~</button>
+      <button class="sound-opt" onclick="previewSound('byeolha')" data-key="byeolha">🌟 김별하~</button>
     </div>
-    <button class="btn-primary" onclick="closeModal('soundSettingsModal');toast('알림음이 저장되었습니다')">확인</button>
+    <button class="btn-primary" onclick="closeModal('soundSettingsModal');toast('알림 설정이 저장되었습니다')">확인</button>
   </div>
 </div>
 
@@ -412,12 +415,9 @@ function loadSettings(){
   try{return JSON.parse(localStorage.getItem(ST)||'{}');}catch{return {};}
 }
 function saveSetting(k,v){const s=loadSettings();s[k]=v;localStorage.setItem(ST,JSON.stringify(s));}
-function setSoundOff(off){saveSetting('soundOff',off);}
 function openSoundSettings(){
-  const key=localStorage.getItem('stella_talk_sound')||'stella1';
-  document.querySelectorAll('.sound-opt').forEach(function(b){b.classList.toggle('active',b.dataset.key===key);});
-  const chk=document.getElementById('soundOffCheck');
-  if(chk) chk.checked=!!(loadSettings().soundOff);
+  // 현재 모드/음성 선택 상태를 UI에 반영 (syncSoundUI는 아래 알림 섹션에서 정의)
+  try{ syncSoundUI(); }catch(e){}
   openModal('soundSettingsModal');
 }
 
@@ -934,10 +934,8 @@ async function syncRoomFromServer(scrollAfter){
         const last=serverMsgs[serverMsgs.length-1];
         const myId=getMyId();
         if(last && last.from!==myId){
-          // ★ 알림음 재생 (앱 활성/비활성 모두)
+          // ★ 알림 재생 (설정 모드: 소리/진동/무음 - 진동도 모드 내부에서 처리)
           playNotifySound();
-          // ★ 진동 (모바일)
-          try{ if(navigator.vibrate) navigator.vibrate([100,50,100]); }catch(e){}
           // 백그라운드면 푸시 알림
           if(document.hidden || document.visibilityState==='hidden'){
             notify(_cur.name, last.text||'📎 파일');
@@ -989,38 +987,89 @@ function notify(title, body){
       }
     }catch(e){}
   }
-  // 2) 진동 (모바일)
-  try{ if(navigator.vibrate) navigator.vibrate([200, 100, 200]); }catch(e){}
-  // 3) 알림음 재생
+  // 2) 알림 재생 (설정 모드: 소리/진동/무음 - 진동도 모드 내부에서 처리)
   playNotifySound();
 }
 
-// ── 알림음 (Web Audio API) ──
-// 설정: 스텔라~/스텔라~~톡/별하공주님~~/우리별핑~~/김별똥~~/꼬마루시/하츄핑
-var _notifySoundKey = localStorage.getItem('stella_talk_sound') || 'stella1';
-var _audioCtx = null; // 전역 AudioContext - 첫 터치 시 생성
+// ── 알림 (Web Speech API - 실제 음성) ──
+// 5종 옵션을 ko-KR 음성으로 읽음. ko-KR voice 없으면 기본 voice, 그것도 불가면 비프음.
+var TALK_VOICES = {
+  's1':        {emoji:'⭐', label:'스텔라~',      phrase:'스텔라',     rate:0.95, pitch:1.35},
+  's2':        {emoji:'✨', label:'스텔라~톡',    phrase:'스텔라 톡',  rate:1.0,  pitch:1.30},
+  'byeolping': {emoji:'💫', label:'우리 별핑~',   phrase:'우리 별핑',  rate:1.0,  pitch:1.40},
+  'gongju':    {emoji:'👸', label:'별하 공주님~', phrase:'별하 공주님',rate:0.95, pitch:1.25},
+  'byeolha':   {emoji:'🌟', label:'김별하~',      phrase:'김별하',     rate:0.97, pitch:1.30}
+};
 
-// ★ 첫 터치 시 AudioContext 초기화 (모바일 자동재생 정책 우회)
-function unlockAudio(){
-  if(_audioCtx) return;
-  try{
-    _audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-    // 무음 재생으로 unlock
-    const buf = _audioCtx.createBuffer(1,1,22050);
-    const src = _audioCtx.createBufferSource();
-    src.buffer = buf; src.connect(_audioCtx.destination); src.start(0);
-    console.log('[Audio] AudioContext 초기화 완료');
-  }catch(e){}
+var _audioCtx = null;    // 비프음 폴백용 AudioContext
+var _speechReady = false; // speechSynthesis unlock 여부
+
+// ── per-user 알림 설정 (mode: sound/vibrate/silent, voiceKey) ──
+function _talkNotifKey(){
+  var id=''; try{ id=(typeof getMyId==='function'?getMyId():'')||''; }catch(e){}
+  if(!id||id==='나') id='guest';
+  return 'stella_talk_notify_'+id;
 }
-// 모든 터치/클릭에서 unlock 시도
-document.addEventListener('touchstart', unlockAudio, {once:false, passive:true});
-document.addEventListener('click', unlockAudio, {once:false, passive:true});
+function loadNotif(){
+  var s={}; try{ s=JSON.parse(localStorage.getItem(_talkNotifKey())||'{}')||{}; }catch(e){ s={}; }
+  // 레거시 값 마이그레이션 (기존 soundOff / stella_talk_sound)
+  if(!s.mode){
+    var legacyOff=false; try{ legacyOff=!!((JSON.parse(localStorage.getItem(ST)||'{}')||{}).soundOff); }catch(e){}
+    s.mode=legacyOff?'silent':'sound';
+  }
+  if(!s.voiceKey){
+    var legacyKey=null; try{ legacyKey=localStorage.getItem('stella_talk_sound'); }catch(e){}
+    var map={stella1:'s1',stella2:'s2',byeolping:'byeolping',byeolha:'gongju',byeoldong:'byeolha'};
+    s.voiceKey=(legacyKey&&map[legacyKey])||'s1';
+  }
+  if(!TALK_VOICES[s.voiceKey]) s.voiceKey='s1';
+  return s;
+}
+function saveNotif(patch){
+  var s=loadNotif();
+  for(var k in patch){ if(Object.prototype.hasOwnProperty.call(patch,k)) s[k]=patch[k]; }
+  try{ localStorage.setItem(_talkNotifKey(), JSON.stringify(s)); }catch(e){}
+}
+function getNotifMode(){ return loadNotif().mode||'sound'; }
+function getVoiceKey(){ var k=loadNotif().voiceKey; return TALK_VOICES[k]?k:'s1'; }
 
-// ★ 첫 사용자 상호작용 시 오디오 unlock (모바일 자동재생 정책)
+// 음성 목록 비동기 워밍업
+try{ if('speechSynthesis' in window){ window.speechSynthesis.getVoices(); window.speechSynthesis.onvoiceschanged=function(){ try{ window.speechSynthesis.getVoices(); }catch(e){} }; } }catch(e){}
+
+function pickKoVoice(){
+  try{
+    var vs=(window.speechSynthesis.getVoices())||[];
+    return vs.find(function(v){return /ko([-_]?kr)?/i.test(v.lang)||/korean|한국/i.test(v.name);})||null;
+  }catch(e){ return null; }
+}
+
+// ★ 첫 사용자 제스처에서 오디오/음성 unlock (자동재생 정책 대응)
+function unlockAudio(){
+  if(!_audioCtx){
+    try{
+      _audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+      var buf=_audioCtx.createBuffer(1,1,22050), src=_audioCtx.createBufferSource();
+      src.buffer=buf; src.connect(_audioCtx.destination); src.start(0);
+    }catch(e){}
+  }
+  if(_audioCtx && _audioCtx.state==='suspended'){ try{ _audioCtx.resume(); }catch(e){} }
+  if(!_speechReady){
+    try{
+      if('speechSynthesis' in window && window.SpeechSynthesisUtterance){
+        var u=new SpeechSynthesisUtterance(' '); u.volume=0; u.lang='ko-KR';
+        window.speechSynthesis.speak(u); // 무음 1회 → speechSynthesis unlock
+        _speechReady=true;
+      }
+    }catch(e){}
+  }
+}
+document.addEventListener('touchstart', unlockAudio, {passive:true});
+document.addEventListener('click', unlockAudio, {passive:true});
+
+// ★ 첫 사용자 상호작용 시 unlock + 알림권한 요청
 (function setupAudioUnlock(){
   function once(){
     unlockAudio();
-    // 알림 권한도 첫 상호작용 시 요청 (사용자 제스처 필요)
     try{ if(window.Notification && Notification.permission==='default'){ Notification.requestPermission(); } }catch(e){}
     document.removeEventListener('touchstart', once);
     document.removeEventListener('click', once);
@@ -1031,58 +1080,78 @@ document.addEventListener('click', unlockAudio, {once:false, passive:true});
   document.addEventListener('keydown', once);
 })();
 
-function playNotifySound(){
+// 비프음 폴백 (음성 합성 불가 환경)
+function beepFallback(){
   try{
-    const s = loadSettings();
-    if(s.soundOff) return;
-    const key = _notifySoundKey;
-    // 전역 ctx 재사용 (이미 unlock됨)
-    const ctx = _audioCtx || new (window.AudioContext || window.webkitAudioContext)();
-    // suspended 상태면 재개 (모바일에서 자주 발생)
+    var ctx=_audioCtx||new (window.AudioContext||window.webkitAudioContext)();
+    _audioCtx=ctx;
     if(ctx.state==='suspended'){ try{ctx.resume();}catch(e){} }
-    const sounds = {
-      // 스텔라~ (기본) - 맑고 귀여운 2음
-      'stella1': [[523,0.15],[659,0.35],[784,0.6],[659,0.9],[784,1.1]],
-      // 스텔라~~톡 - 경쾌한 3음
-      'stella2': [[784,0.0],[880,0.18],[1047,0.36],[880,0.55],[1047,0.75],[880,1.0]],
-      // 별하공주님~~ - 동화같은 멜로디
-      'byeolha': [[523,0.0],[659,0.2],[784,0.4],[1047,0.6],[784,0.85],[880,1.1]],
-      // 우리별핑~~ - 통통 튀는 느낌
-      'byeolping': [[880,0.0],[1047,0.15],[880,0.3],[1047,0.5],[1319,0.7],[1047,0.95]],
-      // 김별똥~~ - 귀여운 별
-      'byeoldong': [[659,0.0],[784,0.2],[659,0.4],[523,0.6],[659,0.8],[784,1.05]],
-      // 꼬마루시 - 아기자기
-      'lucy': [[523,0.0],[587,0.18],[659,0.36],[698,0.54],[784,0.72],[698,0.95]],
-      // 하츄핑 - 발랄한 3단
-      'hachoo': [[784,0.0],[1047,0.2],[784,0.4],[880,0.6],[1047,0.85],[1319,1.1]]
-    };
-    const notes = sounds[key] || sounds['stella1'];
-    notes.forEach(function([freq, time]){
-      const osc = ctx.createOscillator();
-      const gain = ctx.createGain();
-      osc.connect(gain);
-      gain.connect(ctx.destination);
-      osc.type = 'sine';
-      osc.frequency.setValueAtTime(freq, ctx.currentTime + time);
-      gain.gain.setValueAtTime(0.3, ctx.currentTime + time);
-      gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + time + 0.25);
-      osc.start(ctx.currentTime + time);
-      osc.stop(ctx.currentTime + time + 0.3);
+    [[880,0],[1175,0.18]].forEach(function(p){
+      var o=ctx.createOscillator(), g=ctx.createGain();
+      o.connect(g); g.connect(ctx.destination); o.type='sine';
+      o.frequency.setValueAtTime(p[0], ctx.currentTime+p[1]);
+      g.gain.setValueAtTime(0.25, ctx.currentTime+p[1]);
+      g.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime+p[1]+0.25);
+      o.start(ctx.currentTime+p[1]); o.stop(ctx.currentTime+p[1]+0.28);
     });
-    setTimeout(function(){ try{ctx.close();}catch(e){} }, 2000);
   }catch(e){}
 }
 
-// 알림음 미리 듣기
-function previewSound(key){
-  _notifySoundKey = key;
-  localStorage.setItem('stella_talk_sound', key);
-  // 선택된 버튼 하이라이트
-  document.querySelectorAll('.sound-opt').forEach(function(b){b.classList.toggle('active',b.dataset.key===key);});
-  // 오디오 확실히 unlock 후 재생
+// 선택 음성 문구를 실제로 읽기 (ko-KR → 기본 voice → 비프음)
+function speakVoice(key){
+  var cfg=TALK_VOICES[key]||TALK_VOICES['s1'];
+  if(!('speechSynthesis' in window) || !window.SpeechSynthesisUtterance){ beepFallback(); return; }
+  try{
+    var synth=window.speechSynthesis;
+    try{ synth.cancel(); }catch(e){}
+    var u=new SpeechSynthesisUtterance(cfg.phrase);
+    u.lang='ko-KR'; u.rate=cfg.rate||1; u.pitch=cfg.pitch||1.2; u.volume=1;
+    var v=pickKoVoice(); if(v) u.voice=v; // 없으면 브라우저 기본 voice 사용
+    var spoke=false;
+    u.onstart=function(){ spoke=true; };
+    u.onerror=function(){ if(!spoke) beepFallback(); };
+    synth.speak(u);
+    // 합성이 아예 시작되지 않으면(차단) 비프음 폴백
+    setTimeout(function(){ try{ if(!spoke && !synth.speaking && !synth.pending) beepFallback(); }catch(e){} }, 700);
+  }catch(e){ beepFallback(); }
+}
+
+// 메시지 수신 시 호출 - 설정 모드대로 소리/진동/무음
+function playNotifySound(){
+  try{
+    var mode=getNotifMode();
+    if(mode==='silent') return;
+    if(mode==='vibrate'){ try{ if(navigator.vibrate) navigator.vibrate([120,60,120]); }catch(e){} return; }
+    speakVoice(getVoiceKey()); // sound 모드
+  }catch(e){}
+}
+
+// 알림 모드 변경 (소리/진동/무음) - 즉시 피드백
+function setNotifyMode(mode){
+  if(mode!=='sound'&&mode!=='vibrate'&&mode!=='silent') mode='sound';
+  saveNotif({mode:mode});
+  syncSoundUI();
   unlockAudio();
-  if(_audioCtx && _audioCtx.state==='suspended'){ _audioCtx.resume(); }
-  playNotifySound();
+  if(mode==='vibrate'){ try{ if(navigator.vibrate) navigator.vibrate([120,60,120]); }catch(e){} }
+  else if(mode==='sound'){ speakVoice(getVoiceKey()); }
+}
+
+// 음성 선택 + 즉시 미리듣기 (선택 시 자동으로 소리 모드)
+function previewSound(key){
+  if(!TALK_VOICES[key]) key='s1';
+  saveNotif({voiceKey:key, mode:'sound'});
+  syncSoundUI();
+  unlockAudio();
+  speakVoice(key);
+}
+
+// 설정 모달 UI 동기화 (모드 버튼 + 음성 선택 하이라이트)
+function syncSoundUI(){
+  var n=loadNotif();
+  document.querySelectorAll('[data-mode]').forEach(function(b){ b.classList.toggle('active', b.dataset.mode===n.mode); });
+  document.querySelectorAll('.sound-opt').forEach(function(b){ b.classList.toggle('active', b.dataset.key===n.voiceKey); });
+  var box=document.getElementById('voiceOptList');
+  if(box) box.style.opacity=(n.mode==='sound')?'1':'0.45';
 }
 
 // 앱 아이콘 뱃지 업데이트 (홈화면 숫자)
@@ -1909,9 +1978,8 @@ async function syncRoomListFromServer(){
       }
     }
     if(newMsgRoom){
-      // 소리 + 진동
+      // 알림 재생 (설정 모드: 소리/진동/무음)
       playNotifySound();
-      try{ if(navigator.vibrate) navigator.vibrate([200,100,200]); }catch(e){}
       // ★ 브라우저 알림 (백그라운드에서도 뜸)
       try{
         notify(newMsgRoom.title||'새 메시지', newMsgRoom.lastMessage||'새 메시지가 도착했습니다');
