@@ -1,7 +1,7 @@
 # Stella AI Workspace
 
 ## 프로젝트 개요
-GITHUB_TOKEN=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 GITHUB_REPO=https://github com/yesblue0342/my-vibe-project.git
+<!-- 보안: 비밀키/토큰은 코드·문서에 평문 저장 금지. Vercel 환경변수로만 관리. -->
 - 메인 앱: index.html(Stella GPT), db.html(Stella DB), talk.html(Stella Talk)
 - 저장소: Google Drive API (primary)
 - 검색 인덱싱: Azure SQL
