@@ -885,6 +885,7 @@ function serverMsgToLocal(m){
   }
   return {
     id: m.id || ('srv_'+Date.now()+'_'+Math.random().toString(36).slice(2,6)),
+    clientId: m.clientId || '',   // 서버가 에코한 클라 임시 id (정확한 dedup용)
     from: m.userId || m.sender || '?',
     text: m.deleted ? '' : (m.message || ''),
     fileName: m.deleted ? null : (fName || null),
@@ -944,9 +945,13 @@ async function syncRoomFromServer(scrollAfter){
     const byId=new Map();
     existingMsgs.forEach(function(m){ if(m.id) byId.set(m.id, m); });   // 기존 baseline 보존
     dedupedMsgs.forEach(function(m){ if(m.id) byId.set(m.id, m); });    // 서버로 덮어쓰기(삭제/수정 반영)
-    // 로컬 임시(m_) 메시지 중 서버에 같은 텍스트+발신자로 확정된 건 제거
+    // 서버가 에코한 clientId 집합 (확정된 임시 메시지를 정확히 식별)
+    const confirmedClientIds=new Set();
+    dedupedMsgs.forEach(function(sm){ if(sm.clientId) confirmedClientIds.add(sm.clientId); });
+    // 로컬 임시(m_) 메시지 중 서버에 확정된 건 제거: ①clientId 일치(정확) ②동일 발신자+텍스트+시간(폴백)
     let merged=Array.from(byId.values()).filter(function(m){
       if(m.id && m.id.startsWith('m_')){
+        if(confirmedClientIds.has(m.id)) return false; // 서버가 이 임시 메시지를 확정함 → 임시본 제거
         return !dedupedMsgs.some(function(sm){ return sm.from===m.from && sm.text===m.text && Math.abs((sm.at||0)-(m.at||0))<10000; });
       }
       return true;
@@ -1849,7 +1854,7 @@ function showTypingIndicator(typingData){
 function sendTextToServer(roomId, roomName, myId, myName, text, members, tempId){
   fetch('/api/chat-room?action=send',{
     method:'POST', headers:{'Content-Type':'application/json'},
-    body: JSON.stringify({ roomId, title:roomName, userId:myId, sender:myName, message:text, members })
+    body: JSON.stringify({ roomId, title:roomName, userId:myId, sender:myName, message:text, members, clientId:tempId })
   }).then(function(r){
     if(!r.ok) throw new Error('status '+r.status);
     return r.json();
