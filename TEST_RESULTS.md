@@ -76,3 +76,37 @@ pull → mergeById → push 의 구조적 로그를 캡처하여 첨부 예정.
 - 인수조건 매핑: KST 자정 경계/경로 생성/중복 방지 = 유닛테스트 검증, 실 저장 = 실검증대기.
 
 > 나머지 백로그(A 인증, B 친구, C1~C6, D)는 TASKS.md에 상태 기록. 다음 Ralph 반복에서 진행.
+
+---
+
+# Stella Talk 백로그 — 2차 반복 (C3 방나가기 · C5 배경 · A 해시 점검)
+
+실행: `npm test` → **# tests 25  # pass 25  # fail 0**  (+ jsdom 통합 9/9)
+
+## C3 방 나가기 영구 반영 (부활/중복 방지)
+`lib/room-membership.js` 단위테스트 6/6:
+| 테스트 | 결과 |
+|--------|------|
+| applyLeave 멤버 제외+left, 타 멤버 유지, 원본 불변 | PASS |
+| 마지막 멤버 나가면 tombstone | PASS |
+| 재나가기 멱등(left 중복 X) | PASS |
+| shouldListRoom 나간 사람 숨김/남은 사람 노출(부활 방지) | PASS |
+| soft-deleted 방 전원 숨김 | PASS |
+| 멤버/비멤버 노출 규칙 | PASS |
+
+클라이언트 jsdom 4/4: addLeftRoom/isLeftRoom/멱등/loadLeftRooms.
+서버: `action=leave` 추가 + `list`가 `shouldListRoom` 적용. (`node --check` 통과)
+
+## C5 배경 투명도/흐림
+근본원인: `.chat-bg-layer { background-color: var(--bg) }`(불투명)이 이미지 opacity/blur를 가림 → `transparent`로 수정.
+jsdom 5/5: setBgOpacity(0.55) 인라인 적용·라벨·저장, setBgBlur(5) 인라인 filter·라벨, 설정 저장.
+
+## A 비밀번호 해시 점검 — PASS (코드 감사)
+- 모든 인증 경로가 `api/auth.js`로 수렴, **PBKDF2(100k·SHA-512·16B salt)**로 `password_hash` 저장.
+- 평문 저장 없음. 클라(localStorage)에 비밀번호 원문 미저장. → 보안 인수조건 충족.
+
+## C6 배경 되돌리기 — 기존 구현 확인(clearBgImage→초기화 버튼).
+## C7 메시지 깜빡임 — 기존 PR #3·#5로 해결(이전 기록).
+
+> 남은 항목: A1 자동로그인 체크박스 UI, B 친구, C1 동영상(대용량 업로드 경로), C2 진동(실기기),
+> C4 알림 닫기, D 알림음/PWA, E 실Drive 검증. 다음 반복에서 진행.

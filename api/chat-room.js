@@ -1,4 +1,5 @@
 import { saveJsonToDrive, readJsonFromDrive, listJsonFromDrive } from "../lib/drive-utils.js";
+import { applyLeave, shouldListRoom } from "../lib/room-membership.js";
 
 const clean = (v) => String(v || "").trim();
 const makeRoomId = (v) => (clean(v) || "default-room").replace(/[^a-zA-Z0-9가-힣_-]/g, "_").slice(0, 80);
@@ -122,8 +123,8 @@ export default async function handler(req, res) {
           const r = await readJsonFromDrive({ folderPath: ["MemberChat"], fileName: f.name.replace(/\.json$/, "") });
           if (!r?.data) continue;
           const d = r.data;
-          // userId가 멤버인 방만 (없으면 전체)
-          if (userId && Array.isArray(d.members) && d.members.length && !d.members.includes(userId)) continue;
+          // C3: 나간 사람/soft-deleted 방 제외 (재동기화로 부활 방지)
+          if (!shouldListRoom(d, userId)) continue;
           rooms.push({
             roomId: d.roomId,
             title: d.title,
@@ -179,6 +180,18 @@ export default async function handler(req, res) {
       // soft delete
       await saveJsonToDrive({ folderPath: ["MemberChat"], fileName: roomId, data: { ...existing.data, deleted: true, deletedAt: new Date().toISOString() } });
       return res.status(200).json({ ok: true, message: "방 삭제됨" });
+    }
+
+    // ── 방 나가기 (C3: 멤버에서 제외 + left 기록, 영구 반영) ──
+    if (action === "leave") {
+      const roomId = makeRoomId(req.body?.roomId || req.query.roomId);
+      const userId = clean(req.body?.userId || req.query.userId);
+      if (!roomId || !userId) return res.status(400).json({ ok: false, message: "roomId, userId 필요" });
+      const existing = await readJsonFromDrive({ folderPath: ["MemberChat"], fileName: roomId }).catch(() => null);
+      if (!existing?.data) return res.status(200).json({ ok: true, message: "이미 없음" }); // 멱등
+      const patched = applyLeave(existing.data, userId);
+      await saveJsonToDrive({ folderPath: ["MemberChat"], fileName: roomId, data: patched });
+      return res.status(200).json({ ok: true, members: patched.members, left: patched.left, deleted: !!patched.deleted });
     }
 
     return res.status(400).json({ ok: false, message: "Unknown action: " + action });
