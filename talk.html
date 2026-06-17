@@ -317,10 +317,11 @@ body.theme-dark .theme-btn.active{background:#1e3a5f}
   <div class="modal">
     <h3>⚙️ 채팅방 설정</h3>
     <input id="editRoomName" placeholder="채팅방 이름">
+    <!-- FIX-LOCK [3] 인라인 onclick 대신 data-act → document-level 위임 핸들러로 처리(re-render에도 생존, 클릭+터치) -->
     <div class="modal-btns">
-      <button onclick="closeModal('roomSettingsModal')">취소</button>
-      <button class="danger" onclick="deleteRoom()">방 나가기</button>
-      <button class="pri" onclick="saveRoomName()">저장</button>
+      <button type="button" data-act="roomSettings.cancel">취소</button>
+      <button type="button" class="danger" data-act="roomSettings.leave">방 나가기</button>
+      <button type="button" class="pri" data-act="roomSettings.save">저장</button>
     </div>
   </div>
 </div>
@@ -820,6 +821,8 @@ function openRoom(id){
   // ★ 서버에 읽음 시각 전송 (상대방의 "1" 표시 제거용)
   const myId = getMyId();
   if(myId && !_cur.isMyChat){
+    // FIX-LOCK [1] 방 열 때 내 읽음 시각을 로컬에도 즉시 단조 반영 (서버 왕복 전에도 상태 보존)
+    if(idx>=0){ _rooms[idx].reads=_rooms[idx].reads||{}; if(Date.now()>(Number(_rooms[idx].reads[myId])||0)) _rooms[idx].reads[myId]=Date.now(); _cur=_rooms[idx]; saveRooms(); }
     fetch('/api/chat-room?action=read',{
       method:'POST', headers:{'Content-Type':'application/json'},
       body: JSON.stringify({ roomId: _cur.id, userId: myId })
@@ -894,6 +897,22 @@ function serverMsgToLocal(m){
   };
 }
 
+// FIX-LOCK [1] 읽음표시("1") 회귀 방지: reads는 멤버별 readAt를 "단조 증가"로만 병합.
+// 폴링이 옛/빈 reads를 받아도 기존 읽음 시각을 되돌리지 않아 "1"이 되살아나지 않음.
+// (서버 read 액션의 read-modify-write 레이스로 stale reads가 와도 안전)
+function mergeReadsMonotonic(roomObj, incoming){
+  if(!roomObj) return;
+  var cur=roomObj.reads||{};
+  if(incoming && typeof incoming==='object'){
+    for(var k in incoming){
+      if(!Object.prototype.hasOwnProperty.call(incoming,k)) continue;
+      var nv=Number(incoming[k])||0, ov=Number(cur[k])||0;
+      if(nv>ov) cur[k]=nv;  // 더 최신 읽음 시각만 반영, 과거로 되돌리지 않음
+    }
+  }
+  roomObj.reads=cur;
+}
+
 async function syncRoomFromServer(scrollAfter){
   if(!_cur||_cur.isMyChat)return;
   try{
@@ -908,11 +927,12 @@ async function syncRoomFromServer(scrollAfter){
     if(idx<0)return;
     const existingMsgs=(_rooms[idx].messages||[]);
     const prevCount=existingMsgs.length;
-    // ★ 빈 응답으로 기존 확정 메시지를 덮어쓰지 않음 (메시지 나왔다 사라지는 race 방지)
+    // FIX-LOCK [4] 빈 응답으로 기존 확정 메시지를 덮어쓰지 않음 (메시지 나왔다 사라지는 race 방지)
     if(dedupedMsgs.length===0 && prevCount>0){
       // 메시지는 보존하고 메타데이터(멤버/읽음/타이핑)만 갱신
       if(d.room&&d.room.members) _rooms[idx].members=d.room.members;
-      if(d.reads) _rooms[idx].reads=d.reads;
+      // FIX-LOCK [1] 단조 병합(되돌림 금지)
+      mergeReadsMonotonic(_rooms[idx], d.reads);
       showTypingIndicator(d.typing);
       _rooms[idx].lastReadAt=Date.now();
       _cur=_rooms[idx];
@@ -920,7 +940,7 @@ async function syncRoomFromServer(scrollAfter){
       reportRead(_cur.id);
       return;
     }
-    // ★ id 기준 union 병합 (서버 우선) — 서버가 일부만 반환해도 기존 확정 메시지 보존
+    // FIX-LOCK [4] id 기준 union 병합 (서버 우선) — 서버가 일부만 반환해도 기존 확정 메시지 보존 (빈배열 덮어쓰기 금지)
     const byId=new Map();
     existingMsgs.forEach(function(m){ if(m.id) byId.set(m.id, m); });   // 기존 baseline 보존
     dedupedMsgs.forEach(function(m){ if(m.id) byId.set(m.id, m); });    // 서버로 덮어쓰기(삭제/수정 반영)
@@ -936,7 +956,8 @@ async function syncRoomFromServer(scrollAfter){
     _rooms[idx].messages = merged;
     if(d.room&&d.room.members) _rooms[idx].members=d.room.members;
     // 상대방 읽음 정보 저장 (카톡 "1" 표시용)
-    if(d.reads) _rooms[idx].reads=d.reads;
+    // FIX-LOCK [1] 단조 병합(되돌림 금지)
+      mergeReadsMonotonic(_rooms[idx], d.reads);
     // 상대방 타이핑 상태 표시
     showTypingIndicator(d.typing);
     // 현재 방을 보고 있으므로 읽음 처리
@@ -1012,14 +1033,21 @@ function notify(title, body){
 }
 
 // ── 알림 (Web Speech API - 실제 음성) ──
-// 5종 옵션을 ko-KR 음성으로 읽음. ko-KR voice 없으면 기본 voice, 그것도 불가면 비프음.
+// FIX-LOCK [2] 5종 옵션. 귀여운 8살 여아 톤을 위해 pitch 1.6~1.8 / rate ~1.05로 조정.
+// ko-KR voice 우선 → 없으면 기본 voice → 그것도 불가면 비프음.
 var TALK_VOICES = {
-  's1':        {emoji:'⭐', label:'스텔라~',      phrase:'스텔라',     rate:0.95, pitch:1.35},
-  's2':        {emoji:'✨', label:'스텔라~톡',    phrase:'스텔라 톡',  rate:1.0,  pitch:1.30},
-  'byeolping': {emoji:'💫', label:'우리 별핑~',   phrase:'우리 별핑',  rate:1.0,  pitch:1.40},
-  'gongju':    {emoji:'👸', label:'별하 공주님~', phrase:'별하 공주님',rate:0.95, pitch:1.25},
-  'byeolha':   {emoji:'🌟', label:'김별하~',      phrase:'김별하',     rate:0.97, pitch:1.30}
+  's1':        {emoji:'⭐', label:'스텔라~',      phrase:'스텔라',     rate:1.05, pitch:1.75},
+  's2':        {emoji:'✨', label:'스텔라~톡',    phrase:'스텔라 톡',  rate:1.08, pitch:1.70},
+  'byeolping': {emoji:'💫', label:'우리 별핑~',   phrase:'우리 별핑',  rate:1.05, pitch:1.80},
+  'gongju':    {emoji:'👸', label:'별하 공주님~', phrase:'별하 공주님',rate:1.02, pitch:1.65},
+  'byeolha':   {emoji:'🌟', label:'김별하~',      phrase:'김별하',     rate:1.05, pitch:1.72}
 };
+// FIX-LOCK [2] 실제 녹음(mp3) 교체 지점 — key별 mp3 경로를 넣으면 TTS 대신 우선 재생.
+// 예: { s1:'/sounds/stella.mp3', ... }. 파일이 없으면(로드 실패) 자동으로 TTS 폴백.
+var TALK_VOICE_MP3 = {
+  's1': null, 's2': null, 'byeolping': null, 'gongju': null, 'byeolha': null
+};
+var _voiceAudioCache = {};
 
 var _audioCtx = null;    // 비프음 폴백용 AudioContext
 var _speechReady = false; // speechSynthesis unlock 여부
@@ -1118,7 +1146,22 @@ function beepFallback(){
 }
 
 // 선택 음성 문구를 실제로 읽기 (ko-KR → 기본 voice → 비프음)
+// FIX-LOCK [2] mp3 우선 → 없거나 실패하면 TTS → 그것도 불가면 비프음
 function speakVoice(key){
+  if(!TALK_VOICES[key]) key='s1';
+  var mp3=TALK_VOICE_MP3 && TALK_VOICE_MP3[key];
+  if(mp3){
+    try{
+      var a=_voiceAudioCache[key]||(_voiceAudioCache[key]=new Audio(mp3));
+      a.currentTime=0;
+      var p=a.play();
+      if(p&&p.catch) p.catch(function(){ ttsVoice(key); }); // 재생 실패 시 TTS 폴백
+      return;
+    }catch(e){ /* 폴백 진행 */ }
+  }
+  ttsVoice(key);
+}
+function ttsVoice(key){
   var cfg=TALK_VOICES[key]||TALK_VOICES['s1'];
   if(!('speechSynthesis' in window) || !window.SpeechSynthesisUtterance){ beepFallback(); return; }
   try{
@@ -1234,6 +1277,7 @@ function closeMobileRoom(){
 
 // ── 메시지 렌더 ──
 // 이 메시지를 안 읽은 상대 수 계산 (카톡 "1")
+// FIX-LOCK [1] "1"(안읽음) 계산: 나 외 멤버의 단조 병합된 readAt 기준. 본인 메시지에만 표시(렌더에서 isMe 조건).
 function countUnreadByOthers(m){
   if(!_cur||_cur.isMyChat)return 0;
   const myId=getMyId();
@@ -1346,8 +1390,8 @@ function msgSig(m, myId){
           unread, m.sendState||''].join('␟');
 }
 
-// ── 키 기반 증분 렌더 (innerHTML 전면 교체 폐기) ──
-// 같은 키+서명의 노드는 재사용하고, 바뀐 것만 갱신/추가/삭제 → 폴링 중 깜빡임 제거
+// FIX-LOCK [4] 키 기반 증분 렌더 (innerHTML 전면 교체 폐기) — 폴링 re-render가 깜빡임/회귀를 만들지 않게.
+// 같은 키+서명의 노드는 재사용하고, 바뀐 것만 갱신/추가/삭제. (전면 innerHTML 교체로 되돌리지 말 것)
 function renderMessages(){
   const el=document.getElementById('chatMessages');
   if(!el) return;
@@ -1876,6 +1920,23 @@ function closeModal(id){
 document.querySelectorAll('.modal-bg,.modal-overlay').forEach(function(m){
   m.addEventListener('click',function(e){ if(e.target===m) closeModal(m.id); });
 });
+
+// FIX-LOCK [3] 모달 버튼 동작: document-level 이벤트 위임.
+// 메시지 폴링 re-render와 무관한 정적 요소이지만, 위임으로 처리해 어떤 재렌더에도 핸들러가 살아남고
+// 클릭(데스크탑) + 탭(모바일은 click이 합성됨) 모두 동작한다.
+var TALK_ACTIONS = {
+  'roomSettings.cancel': function(){ closeModal('roomSettingsModal'); },
+  'roomSettings.save':   function(){ saveRoomName(); },
+  'roomSettings.leave':  function(){ deleteRoom(); }
+};
+function _talkDelegatedAction(e){
+  var t=e.target.closest('[data-act]');
+  if(!t) return;
+  var act=t.getAttribute('data-act');
+  var fn=TALK_ACTIONS[act];
+  if(fn){ e.preventDefault(); e.stopPropagation(); fn(t, e); }
+}
+document.addEventListener('click', _talkDelegatedAction);
 
 // ── 유틸 ──
 function esc(s){return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');}
