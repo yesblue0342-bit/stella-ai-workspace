@@ -345,7 +345,12 @@ export default async function handler(req, res) {
       try {
         actualDriveContext = await buildDriveContextForChat(message);
         if (actualDriveContext?.prompt) {
-          aiMessage = message + actualDriveContext.prompt;
+          // Drive 파일 내용이 너무 크면 context 초과 방지를 위해 60,000자로 truncate
+          let driveContent = actualDriveContext.prompt;
+          if (driveContent.length > 60000) {
+            driveContent = driveContent.slice(0, 60000) + "\n\n⚠️ 파일이 너무 커서 앞부분(60,000자)만 분석합니다. 전체 내용은 다운로드 버튼을 이용하세요.";
+          }
+          aiMessage = message + driveContent;
           const readNames = (actualDriveContext.files||[]).filter(f=>f.read).map(f=>f.name);
           const unreadNames = (actualDriveContext.files||[]).filter(f=>!f.read).map(f=>f.name);
           driveContext = [
