@@ -901,20 +901,34 @@ async function syncRoomFromServer(scrollAfter){
     const dedupedMsgs=serverMsgs.filter(m=>{ if(!m.id||seen.has(m.id)) return false; seen.add(m.id); return true; });
     const idx=_rooms.findIndex(x=>x.id===_cur.id);
     if(idx<0)return;
-    const prevCount=(_rooms[idx].messages||[]).length;
-    // 서버 메시지와 로컬 임시 메시지 병합 (중복 방지: 같은 텍스트+발신자면 서버 것 우선)
-    const localOnly = (_rooms[idx].messages||[]).filter(function(lm){
-      if(!lm.id || !lm.id.startsWith('m_')) return false;
-      if(seen.has(lm.id)) return false;
-      // 서버에 같은 텍스트+발신자 메시지가 있으면 로컬 중복 제거
-      var isDup = dedupedMsgs.some(function(sm){
-        return sm.from === lm.from && sm.text === lm.text && Math.abs((sm.at||0) - (lm.at||0)) < 10000;
-      });
-      return !isDup;
+    const existingMsgs=(_rooms[idx].messages||[]);
+    const prevCount=existingMsgs.length;
+    // ★ 빈 응답으로 기존 확정 메시지를 덮어쓰지 않음 (메시지 나왔다 사라지는 race 방지)
+    if(dedupedMsgs.length===0 && prevCount>0){
+      // 메시지는 보존하고 메타데이터(멤버/읽음/타이핑)만 갱신
+      if(d.room&&d.room.members) _rooms[idx].members=d.room.members;
+      if(d.reads) _rooms[idx].reads=d.reads;
+      showTypingIndicator(d.typing);
+      _rooms[idx].lastReadAt=Date.now();
+      _cur=_rooms[idx];
+      saveRooms();
+      reportRead(_cur.id);
+      return;
+    }
+    // ★ id 기준 union 병합 (서버 우선) — 서버가 일부만 반환해도 기존 확정 메시지 보존
+    const byId=new Map();
+    existingMsgs.forEach(function(m){ if(m.id) byId.set(m.id, m); });   // 기존 baseline 보존
+    dedupedMsgs.forEach(function(m){ if(m.id) byId.set(m.id, m); });    // 서버로 덮어쓰기(삭제/수정 반영)
+    // 로컬 임시(m_) 메시지 중 서버에 같은 텍스트+발신자로 확정된 건 제거
+    let merged=Array.from(byId.values()).filter(function(m){
+      if(m.id && m.id.startsWith('m_')){
+        return !dedupedMsgs.some(function(sm){ return sm.from===m.from && sm.text===m.text && Math.abs((sm.at||0)-(m.at||0))<10000; });
+      }
+      return true;
     });
-    _rooms[idx].messages = dedupedMsgs.concat(localOnly);
     // 시간순 정렬
-    _rooms[idx].messages.sort(function(a,b){ return (a.at||0) - (b.at||0); });
+    merged.sort(function(a,b){ return (a.at||0) - (b.at||0); });
+    _rooms[idx].messages = merged;
     if(d.room&&d.room.members) _rooms[idx].members=d.room.members;
     // 상대방 읽음 정보 저장 (카톡 "1" 표시용)
     if(d.reads) _rooms[idx].reads=d.reads;
