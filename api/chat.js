@@ -426,7 +426,10 @@ export default async function handler(req, res) {
           name: f.name,
           mimeType: f.mimeType,
           read: !!f.read,
-          error: f.error || ""
+          error: f.error || "",
+          link: f.link || (f.id ? ((f.isFolder || f.mimeType === "application/vnd.google-apps.folder")
+            ? `https://drive.google.com/drive/folders/${f.id}`
+            : `https://drive.google.com/file/d/${f.id}/view`) : "")
         }))
       } : null
     });
