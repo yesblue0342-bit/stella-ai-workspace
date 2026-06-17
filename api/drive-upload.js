@@ -3,6 +3,43 @@
 // base64 또는 multipart/form-data 지원
 
 import { getDrive, getDriveRootId, FOLDER_MIME } from "../lib/drive-utils.js";
+import { kstDateString, familyPhotoPath } from "../lib/kst-date.js";
+
+// PART E: 첨부 사본을 "내 드라이브 / 0가족 / 1_사진 / stella talk / [KST날짜]" 에 보관.
+// 실제 드라이브 루트('root')부터 폴더를 조회/생성한다(없으면 자동 생성). 폴더 id 반환.
+async function ensureFamilyDateFolder(drive, kstDate) {
+  const esc = (v) => String(v || "").replace(/'/g, "\\'");
+  let parentId = "root";
+  for (const name of familyPhotoPath(kstDate)) {
+    const found = await drive.files.list({
+      q: `mimeType='${FOLDER_MIME}' and name='${esc(name)}' and '${esc(parentId)}' in parents and trashed=false`,
+      fields: "files(id)", pageSize: 1
+    });
+    if (found.data.files?.[0]) { parentId = found.data.files[0].id; continue; }
+    const created = await drive.files.create({
+      requestBody: { name, mimeType: FOLDER_MIME, parents: [parentId] }, fields: "id"
+    });
+    parentId = created.data.id;
+  }
+  return parentId;
+}
+
+// 업로드된 파일을 가족 사진 날짜 폴더로 복사(사본). 같은 이름이 이미 있으면 중복 저장하지 않음.
+async function archiveToFamily(drive, fileId, fileName, when) {
+  const esc = (v) => String(v || "").replace(/'/g, "\\'");
+  const kstDate = kstDateString(when || new Date());
+  const folderId = await ensureFamilyDateFolder(drive, kstDate);
+  // 중복 방지: 같은 이름 파일이 이미 그 날짜 폴더에 있으면 스킵
+  const dup = await drive.files.list({
+    q: `name='${esc(fileName)}' and '${esc(folderId)}' in parents and trashed=false`,
+    fields: "files(id)", pageSize: 1
+  });
+  if (dup.data.files?.[0]) return { archived: true, deduped: true, folderId, kstDate, copyId: dup.data.files[0].id };
+  const copy = await drive.files.copy({
+    fileId, requestBody: { name: fileName, parents: [folderId] }, fields: "id"
+  });
+  return { archived: true, deduped: false, folderId, kstDate, copyId: copy.data.id };
+}
 
 export const config = {
   api: { bodyParser: { sizeLimit: "10mb" } },
@@ -101,13 +138,21 @@ export default async function handler(req, res) {
     // fallback URL
     const fallbackUrl = `https://drive.google.com/uc?export=view&id=${fileId}`;
 
+    // PART E: 가족 사진 폴더(KST 날짜별)로 사본 보관 — 메시지 전송 실패와 무관하게 best-effort
+    let archive = null;
+    if (body.archiveFamily) {
+      try { archive = await archiveToFamily(drive, fileId, fileName, new Date()); }
+      catch (e) { console.warn("[drive-upload] 가족 폴더 보관 실패:", e.message); archive = { archived: false, error: e.message }; }
+    }
+
     return res.status(200).json({
       ok: true,
       fileId,
       imageUrl,
       fallbackUrl,
       webViewLink: uploaded.data.webViewLink || "",
-      fileName
+      fileName,
+      archive
     });
   } catch (error) {
     console.error("[drive-upload] 오류:", error.message);

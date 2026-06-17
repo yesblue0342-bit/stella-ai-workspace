@@ -1665,7 +1665,8 @@ async function uploadImageToDrive(file){
   const base64 = await readFileAsDataURL(file);
   const res = await fetch('/api/drive-upload',{
     method:'POST', headers:{'Content-Type':'application/json'},
-    body: JSON.stringify({ base64, fileName: file.name, mimeType: file.type })
+    // PART E: 첨부 사본을 0가족/1_사진/stella talk/[KST날짜]에 보관 요청
+    body: JSON.stringify({ base64, fileName: file.name, mimeType: file.type, archiveFamily: true })
   });
   const d = await res.json();
   if(!d.ok) throw new Error(d.message || '이미지 업로드 실패');
