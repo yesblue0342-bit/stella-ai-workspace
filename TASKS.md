@@ -4,12 +4,17 @@
 > 자동 검증 불가(실기기/실 Drive 필요) 항목은 [코드완료/실검증대기]로 구분.
 
 ## PART A. 계정/인증
-- [ ] A1 초기화면 가입/로그인 + remember me
-- [ ] A2 Stella GPT 계정 통합(동일 id/pw 양쪽 로그인)
-- [ ] A3 Stella Talk 독립 가입 = 통합계정 생성
-- [ ] A4 로그아웃 시 세션/캐시 초기화
-- 메모: talk.html에 `doTalkLogin`(→/api/auth) + `showTalkLogin` 존재. /api/login·signup·auth 존재.
-  비밀번호 해시 저장 여부를 api/signup·login에서 점검 필요(보안 인수조건).
+- [x] A 비밀번호 해시 점검 — **PASS**: 모든 경로(signup/login/auth/login/register/talk)가 api/auth.js로
+  수렴, **PBKDF2(100k iters, SHA-512, 16B salt, `salt:hash`)** 저장. 평문 저장 없음.
+  (login.js→auth/login.js→auth.js, signup.js→auth.js, register.js→signup.js→auth.js)
+- [x] A2 계정 통합 — talk.html과 index.html 모두 동일 세션키 `stella_session_final_v82` 사용 +
+  동일 /api/auth 백엔드 → 같은 id/pw로 양쪽 로그인. (코드 확인)
+- [x] A3 독립 가입 — talk.html `doTalkLogin`/가입이 /api/auth(mode signup) 통합계정 생성.
+- [x] A4 로그아웃 — talk/GPT 모두 세션키 제거 후 reload(캐시성 상태 초기화).
+- [~] A1 remember me — 세션이 localStorage에 저장되어 재접속 유지(사실상 항상 remember).
+  명시적 "자동 로그인 체크박스" UI는 미구현 → [부분/UI추가 대기]
+- 마이너 노트: index.html forgotPassword의 로컬 레거시 경로에 `btoa` 해시 사용(서버 SSOT 아님).
+  보안 위험 낮으나 추후 제거 권장(서버 PBKDF2가 실제 인증).
 
 ## PART B. 친구
 - [ ] B1 친구 목록 화면
@@ -22,12 +27,15 @@
   base64 21MB(≈28MB) 초과로 실패. 해결: drive-upload-url.js(서명 URL/resumable) 경로로 전환 필요.
 - [~] C2 진동/무음 — `setNotifyMode('vibrate')`+`navigator.vibrate([120,60,120])`(talk.html:1192) 존재.
   [코드존재/실기기검증대기] (Android Chrome는 사용자 제스처 필요)
-- [ ] C3 방 나가기 영구 반영 + 방 중복 방지 — deleteRoom이 로컬 삭제만 → 서버 방목록 재동기화로 부활 가능.
-  해결: sync-engine tombstone을 방 목록에도 적용(서버 영구 반영). (sync-engine.js 재사용)
+- [x] C3 방 나가기 영구 반영 + 부활 방지 — **완료**:
+  - 서버 `api/chat-room?action=leave`(멤버 제외+left 기록, 마지막이면 tombstone), `list`가 `shouldListRoom`으로
+    나간 사람/삭제 방 제외. (lib/room-membership.js, 단위테스트 6/6)
+  - 클라 deleteRoom: 로컬 left-set tombstone(`stella_talk_left_v1`) 기록 + 서버 leave 호출,
+    syncRoomListFromServer가 left-set 방을 재추가하지 않음(부활 방지). (jsdom 4/4)
 - [ ] C4 읽으면 알림 사라짐(Notification.close + 배지 갱신)
-- [ ] C5 배경 투명도/흐림 미적용 — setBgOpacity/setBgBlur가 layer.style에 직접 적용(talk.html:507/514).
-  실제 레이어 변수(--_opacity/--_blur) 연결 점검 필요.
-- [ ] C6 배경 사진 되돌리기(초기화) 버튼
+- [x] C5 배경 투명도/흐림 — **완료**: `.chat-bg-layer`의 불투명 `background-color:var(--bg)`가
+  효과를 가리던 게 원인 → `transparent`로 변경. setBgOpacity/setBgBlur 인라인 적용·저장 검증(jsdom 5/5).
+- [x] C6 배경 되돌리기 — `clearBgImage()`가 초기화 버튼(talk.html)에 이미 연결됨(이미지 제거+설정 초기화). 확인 완료.
 - [x] C7 메시지 깜빡임 — 키 기반 증분 렌더 + clientId dedup + 서버 클로버링 수정(PR #3·#5)으로 해결.
   jsdom 테스트로 검증됨(test 이력). [검증완료]
 

@@ -79,7 +79,8 @@ body.theme-dark .chat-area::before{opacity:0.06}
 .chat-bg-layer{
   position:absolute;inset:0;z-index:0;
   background-size:cover;background-position:center;
-  background-color:var(--bg);
+  /* C5: 불투명 배경색 제거 — opacity/blur가 배경 이미지에 실제로 보이도록(이전엔 var(--bg)가 효과를 가렸음) */
+  background-color:transparent;
   opacity:var(--_opacity,1);
   filter:blur(var(--_blur,0px));
   pointer-events:none;
@@ -523,6 +524,11 @@ function setBubbleMe(v){
 // ── 방 관리 ──
 function loadRooms(){try{_rooms=JSON.parse(localStorage.getItem(SK)||'[]');}catch{_rooms=[];}}
 function saveRooms(){localStorage.setItem(SK,JSON.stringify(_rooms));}
+// C3: 나간 방 로컬 tombstone (서버 반영 전/지연에도 폴링이 방을 되살리지 못하게)
+const LEFT_SK='stella_talk_left_v1';
+function loadLeftRooms(){try{return new Set(JSON.parse(localStorage.getItem(LEFT_SK)||'[]'));}catch{return new Set();}}
+function isLeftRoom(id){return loadLeftRooms().has(id);}
+function addLeftRoom(id){const s=loadLeftRooms();s.add(id);localStorage.setItem(LEFT_SK,JSON.stringify(Array.from(s)));}
 function uid(){return 'r_'+Math.random().toString(36).slice(2)+Date.now().toString(36);}
 // ── 로그인 사용자 정보 (다중 키 호환) ──
 function getSession(){
@@ -801,7 +807,16 @@ function deleteRoom(){
   if(!_cur)return;
   if(_cur.isMyChat){alert('나와의 채팅은 삭제할 수 없습니다.');closeModal('roomSettingsModal');return;}
   if(!confirm('"'+_cur.name+'" 채팅방을 나가시겠습니까?'))return;
-  _rooms=_rooms.filter(r=>r.id!==_cur.id);saveRooms();
+  const leaveId=_cur.id;
+  // C3: 로컬 tombstone 먼저 → 폴링 재동기화로 부활 방지
+  addLeftRoom(leaveId);
+  // 서버에 나가기 영구 반영 (멤버에서 제외)
+  const _myId=getMyId();
+  if(_myId){
+    fetch('/api/chat-room?action=leave',{method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({roomId:leaveId,userId:_myId})}).catch(function(){});
+  }
+  _rooms=_rooms.filter(r=>r.id!==leaveId);saveRooms();
   closeModal('roomSettingsModal');
   _cur=null;
   document.getElementById('chatRoom').style.display='none';
@@ -2096,6 +2111,7 @@ async function syncRoomListFromServer(){
     let newMsgRoom=null;
     for(const sr of d.rooms){
       if(sr.deleted)continue;
+      if(isLeftRoom(sr.roomId))continue; // C3: 나간 방은 재추가 금지(부활 방지)
       const exists=_rooms.find(x=>x.id===sr.roomId);
       if(!exists){
         // 새 방 - 메시지가 이미 있으면 알림 (상대가 먼저 말 검)
