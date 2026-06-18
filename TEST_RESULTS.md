@@ -143,3 +143,15 @@ jsdom 5/5: setBgOpacity(0.55) 인라인 적용·라벨·저장, setBgBlur(5) 인
 - **D2**: beforeinstallprompt→설치 버튼 노출, installTalkApp이 prompt() 호출.
 
 C1 남음: >~4.5MB 대용량 동영상 업로드는 서명URL/resumable 전환 필요(후속).
+
+---
+
+# Stella Talk 백로그 — 5차 반복 (B 친구 시스템)
+
+`npm test` **30/30** (friends 5 추가) + jsdom 통합 **8/8**:
+- `lib/friends.js`(순수): addFriend id-dedup, isFriend, removeFriend, visibleFriends 정렬, normalizeProfile. 단위 5/5.
+- 클라(talk.html): friendSearch(/api/user-search)→addFriendById(중복 방지, 추가자만 노출),
+  renderFriends(목록/삭제), 프로필(사진 dataURL + 이름) 저장 — jsdom 8/8.
+- 저장: 사용자별 localStorage(`stella_talk_friends_<id>`, `stella_talk_profile_<id>`).
+
+B 인수조건: 아이디 검색·추가 시 목록 표시 / 미추가자 비노출 / 프로필 사진·이름 편집 — 충족.

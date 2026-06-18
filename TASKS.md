@@ -18,10 +18,12 @@
   보안 위험 낮으나 추후 제거 권장(서버 PBKDF2가 실제 인증).
 
 ## PART B. 친구
-- [ ] B1 친구 목록 화면
-- [ ] B2 아이디로 친구 추가/검색(추가해야 노출)
-- [ ] B3 프로필 사진/이름 편집
-- 메모: api/user-search.js 존재(아이디 검색 토대).
+- [x] B1 친구 목록 화면 — 설정의 '👥 친구 목록' 모달(친구만 노출, 삭제). (jsdom)
+- [x] B2 아이디로 친구 추가/검색 — friendSearch(/api/user-search) → addFriendById(id 기준 dedup).
+  추가한 사용자만 목록에 보임(미추가자 비노출). (lib/friends.js 단위 5/5 + jsdom)
+- [x] B3 프로필 사진/이름 편집 — '🙂 내 프로필' 모달(사진 업로드 dataURL + 표시 이름=가입자명 기본). (jsdom)
+- 구현: lib/friends.js(순수, globalThis.StellaFriends) + talk.html 모달/함수, 사용자별 localStorage 저장.
+  [후속] 친구/프로필의 디바이스 간 Drive 동기화는 sync-engine 활용 가능(선택).
 
 ## PART C. 버그
 - [~] C1 동영상 — **재생/다운로드 구현**: serverMsgToLocal이 mp4/webm/mov 등을 type 'video'로 감지,
