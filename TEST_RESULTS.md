@@ -1,11 +1,10 @@
-# TEST RESULTS — Stella Agent Code (워크스페이스 코딩 에이전트 + OMC 모드)
+# TEST RESULTS — Stella Agent Code (코딩 에이전트 + OMC + CLI)
 
-실행 시각: 2026-06-18 11:52:44 UTC
+실행 시각: 2026-06-18 12:20:04 UTC
 환경: node v22.22.2 (의존성 0, `node tests/*.mjs`)
 
-## 1) 단위 테스트 — tests/test_agentcore.mjs (lib/agentcore.mjs)
-모델 검증/폴백, AgentRun 누적·정렬·dedupe·tool_result 매칭·종료감지, 백오프, 트랜스크립트,
-OMC(oh-my-claudecode) 부트스트랩 시스템 프롬프트 빌드.
+## 1) 단위 — tests/test_agentcore.mjs (lib/agentcore.mjs)
+모델 검증/폴백, AgentRun 누적·정렬·dedupe·tool_result 매칭·종료감지, 백오프, 트랜스크립트, OMC 부트스트랩 프롬프트.
 ```
 PASS  1 isValidModel opus
 PASS  2 isValidModel 무효
@@ -31,7 +30,22 @@ PASS  19 OMC on: 부트스트랩 지시 + repo 포함
 ```
 종료코드: 0
 
-## 2) 통합 테스트 — tests/test_cc_integration.mjs (실 1회, Haiku + 소액 예산)
+## 2) 단위 — tests/test_cli.mjs (cli/stella-agent.mjs parseArgs)
+```
+PASS  1 기본 run + 프롬프트 결합
+PASS  2 --list
+PASS  3 --cancel <id>
+PASS  4 --resume <id> + 후속프롬프트
+PASS  5 model/budget/omc + 프롬프트
+PASS  6 base/bypass/save
+PASS  7 --help
+PASS  8 --json 플래그
+
+총 8건: 8 PASS / 0 FAIL
+```
+종료코드: 0
+
+## 3) 통합 — tests/test_cc_integration.mjs (실 1회, 배포 환경 필요)
 ```
 SKIP: CC_BASE_URL 미설정 — 배포 환경에서 실행하세요.
 예) CC_BASE_URL=https://stella-ai-workspace.vercel.app node tests/test_cc_integration.mjs
@@ -39,10 +53,11 @@ SKIP: CC_BASE_URL 미설정 — 배포 환경에서 실행하세요.
 총 0건 (SKIPPED): 통합 테스트는 배포된 프록시 + 서버측 ANTHROPIC_API_KEY 필요.
 ```
 종료코드: 0
-
-> ⚠️ 통합 테스트는 배포된 프록시 + 서버측 ANTHROPIC_API_KEY + 실제 과금 호출이 필요합니다(샌드박스 SKIP).
-> 배포 후: `CC_BASE_URL=https://stella-ai-workspace.vercel.app node tests/test_cc_integration.mjs`
+> ⚠️ 배포된 프록시 + 서버 ANTHROPIC_API_KEY + 과금 필요(샌드박스 SKIP).
+> 배포 보호 켜진 경우 CLI/테스트는 VERCEL_AUTOMATION_BYPASS_SECRET 사용.
 
 ## 총합
-- 단위(agentcore): 총 19건: 19 PASS / 0 FAIL  → **19/19 PASS ✅** (OMC 빌드 2건 포함)
-- 통합(cc): 배포 환경 실행 필요 (현재 SKIPPED)
+- agentcore: 총 19건: 19 PASS / 0 FAIL
+- cli:       총 8건: 8 PASS / 0 FAIL
+- 통합:      배포 환경 실행 필요 (SKIPPED)
+- **단위 합계: 27/27 PASS ✅**

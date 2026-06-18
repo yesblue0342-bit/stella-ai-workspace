@@ -3,8 +3,12 @@
   "version": "1.0.0",
   "private": true,
   "type": "module",
+  "bin": {
+    "stella-agent": "cli/stella-agent.mjs"
+  },
   "scripts": {
-    "test": "node --test test/*.test.js"
+    "test": "node --test test/*.test.js",
+    "cc": "node cli/stella-agent.mjs"
   },
   "dependencies": {
     "openai": "^4.104.0",
