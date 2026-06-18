@@ -13,12 +13,14 @@ body.light{--bg:#f6f8fa;--bg2:#fff;--bg3:#f3f4f6;--border:#d1d5db;--text:#111827
 *{box-sizing:border-box;margin:0;padding:0}
 body{font-family:system-ui,-apple-system,sans-serif;background:var(--bg);color:var(--text);min-height:100dvh;display:flex;flex-direction:column}
 a{color:var(--primary)}
-.top{display:flex;align-items:center;gap:10px;padding:10px 16px;border-bottom:1px solid var(--border);background:var(--bg2);position:sticky;top:0;z-index:5}
+.top{display:flex;align-items:center;gap:12px;padding:12px 18px;border-bottom:1px solid var(--border);background:var(--bg2);position:sticky;top:0;z-index:5}
 .top h1{font-size:1.05rem;font-weight:900;white-space:nowrap}
-.nav{margin-left:auto;display:flex;gap:6px;flex-wrap:wrap;align-items:center}
-.nav a{font-size:.8rem;text-decoration:none;border:1px solid var(--border);border-radius:8px;padding:5px 9px;color:var(--text2)}
+.nav{margin-left:auto;display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+.nav a{font-size:.85rem;text-decoration:none;border:1px solid var(--border);border-radius:10px;padding:8px 13px;color:var(--text2);display:inline-flex;align-items:center;min-height:38px;white-space:nowrap}
+.nav a:hover{border-color:var(--primary);color:var(--text)}
 .nav a.active{background:var(--primary);border-color:var(--primary);color:#fff}
-.icon-btn{font-size:.95rem;line-height:1;border:1px solid var(--border);border-radius:8px;padding:5px 8px;background:var(--bg3);color:var(--text);cursor:pointer}
+.icon-btn{font-size:1rem;line-height:1;border:1px solid var(--border);border-radius:10px;padding:0 12px;min-height:38px;background:var(--bg3);color:var(--text);cursor:pointer;display:inline-flex;align-items:center}
+.icon-btn:hover{border-color:var(--primary)}
 .wrap{flex:1;display:flex;min-height:0}
 .side{width:300px;flex:0 0 auto;border-right:1px solid var(--border);background:var(--bg);overflow:auto;padding:10px;display:flex;flex-direction:column;gap:8px}
 .side h2{font-size:.72rem;text-transform:uppercase;color:var(--text2);margin:4px 4px;letter-spacing:.5px}
@@ -62,7 +64,7 @@ pre.code{background:var(--bg2);border:1px solid var(--border);border-radius:10px
   <button class="icon-btn hamb" id="hambBtn" title="레포 목록">☰</button>
   <h1>🌐 Stella Hub</h1>
   <nav class="nav">
-    <a href="/">🤖 GPT</a><a href="/talk">💬 Talk</a><a href="/db">🗄 DB</a><a href="/cc">🛠 Code</a><a href="/hub" class="active">🌐 Hub</a><a href="/abap">🧑‍💻 ABAP</a>
+    <a href="/">🤖 GPT</a><a href="/abap">🧑‍💻 ABAP</a><a href="/db">🗄 DB</a><a href="/talk">💬 Talk</a>
     <button class="icon-btn" id="refreshBtn" title="새로고침">↻</button>
     <button class="icon-btn" id="themeToggle" title="다크/라이트 모드">🌙</button>
   </nav>
@@ -98,7 +100,11 @@ let curRepoFiles = [];     // 현재 레포 루트 파일(검색 필터용)
 
 // ── 테마 (Stella DB와 동일: body.light + stella_db_theme) ──
 function applyTheme(){
-  let t='dark'; try{ t=localStorage.getItem('stella_db_theme')||'dark'; }catch(e){}
+  let t; try{ t=localStorage.getItem('stella_db_theme'); }catch(e){}
+  // 저장값이 없으면 시스템 설정(prefers-color-scheme)을 따른다.
+  if(t!=='light'&&t!=='dark'){
+    t=(window.matchMedia&&window.matchMedia('(prefers-color-scheme: light)').matches)?'light':'dark';
+  }
   document.body.classList.toggle('light', t==='light');
   $('themeToggle').textContent = t==='light' ? '☀️' : '🌙';
   const m=document.querySelector('meta[name=theme-color]'); if(m) m.setAttribute('content', t==='light'?'#f6f8fa':'#0d1117');
@@ -113,6 +119,18 @@ applyTheme();
 $('themeToggle').addEventListener('click', toggleTheme);
 
 function esc(s){ return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+
+// 방어적 JSON 파싱: 서버가 평문(타임아웃·에러 페이지 등)을 보내도
+// "Unexpected token" 대신 깔끔한 한국어 메시지를 보장한다.
+async function safeJson(r){
+  const text = await r.text();
+  try{ return JSON.parse(text); }
+  catch(e){
+    throw new Error(r.ok
+      ? '서버 응답 형식 오류로 데이터를 불러오지 못했습니다. 잠시 후 다시 시도하세요.'
+      : ('서버 오류('+r.status+')로 요청을 처리하지 못했습니다. 잠시 후 다시 시도하세요.'));
+  }
+}
 
 // ── GitHub 비인증 API ──
 async function ghApi(path){
@@ -131,7 +149,7 @@ async function loadRepos(){
   try{
     let repos, authed=false;
     try{
-      const d = await (await fetch('/api/github?action=repos')).json();
+      const d = await safeJson(await fetch('/api/github?action=repos'));
       if(d && d.ok && Array.isArray(d.repos)){ repos=d.repos; authed=!!d.authenticated; }
       else throw new Error((d&&d.message)||'repos 로드 실패');
     }catch(_){
@@ -166,14 +184,26 @@ async function openRepo(name, branch, el, owner, isPrivate){
     const items = await loadDir('');
     curRepoFiles = items;
     $('tree').innerHTML='';
+    if(!items.length){
+      $('tree').innerHTML='<div class="note" style="padding:8px">📭 이 레포지토리는 비어 있습니다.<br><span class="note">아직 커밋된 파일이 없습니다.</span></div>';
+      $('pvBody').innerHTML='<div class="empty">📭 비어 있는 레포지토리입니다.<br><span class="note">파일을 커밋하면 여기에 표시됩니다.</span></div>';
+      return;
+    }
     renderNodes($('tree'), items, '');
-  }catch(e){ $('tree').innerHTML='<div class="err">'+esc(e.message)+'</div>'; }
+  }catch(e){
+    // 빈 레포(커밋 없음)는 GitHub가 "This repository is empty." 를 반환 → 에러 대신 안내
+    if(/empty/i.test(e.message||'')){
+      $('tree').innerHTML='<div class="note" style="padding:8px">📭 이 레포지토리는 비어 있습니다.<br><span class="note">아직 커밋된 파일이 없습니다.</span></div>';
+    }else{
+      $('tree').innerHTML='<div class="err">'+esc(e.message)+'</div>';
+    }
+  }
 }
 
 async function loadDir(path){
   try{
     const u='/api/github?action=contents&owner='+encodeURIComponent(curRepo.owner)+'&repo='+encodeURIComponent(curRepo.name)+'&path='+encodeURIComponent(path)+'&ref='+encodeURIComponent(curRepo.default_branch);
-    const d=await (await fetch(u)).json();
+    const d=await safeJson(await fetch(u));
     if(d && d.ok && d.type==='dir') return H.sortContents(d.items||[]);
     throw new Error((d&&d.message)||'contents 로드 실패');
   }catch(err){
@@ -223,7 +253,7 @@ async function openFile(it){
     $('pvBody').innerHTML='<div class="note">불러오는 중… <span class="spin"></span></div>';
     try{
       const u='/api/github?action=contents&owner='+encodeURIComponent(curRepo.owner)+'&repo='+encodeURIComponent(curRepo.name)+'&path='+encodeURIComponent(it.path)+'&ref='+encodeURIComponent(branch);
-      const d=await (await fetch(u)).json();
+      const d=await safeJson(await fetch(u));
       if(!d.ok || d.type!=='file') throw new Error((d&&d.message)||'파일 로드 실패');
       const bytes=Uint8Array.from(atob((d.content||'').replace(/\s/g,'')), c=>c.charCodeAt(0));
       const url=URL.createObjectURL(new Blob([bytes]));
