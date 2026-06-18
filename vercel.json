@@ -12,6 +12,9 @@
     { "source": "/cloud", "destination": "/cloud.html" },
     { "source": "/stella-cloud", "destination": "/cloud.html" },
     { "source": "/db", "destination": "/db.html" },
+    { "source": "/cc", "destination": "/cc.html" },
+    { "source": "/code", "destination": "/cc.html" },
+    { "source": "/stella-code", "destination": "/cc.html" },
     { "source": "/developer", "destination": "/developer.html" }
   ]
 }
