@@ -2,6 +2,7 @@
 <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <title>Stella Talk</title>
 <link rel="manifest" href="/manifest-talk.json">
+<script src="/lib/friends.js"></script>
 <meta name="theme-color" content="#7c3aed">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="default">
@@ -327,6 +328,40 @@ body.theme-dark .theme-btn.active{background:#1e3a5f}
   </div>
 </div>
 
+<!-- B: 친구 목록 모달 -->
+<div class="modal-bg" id="friendsModal">
+  <div class="modal">
+    <h3>👥 친구</h3>
+    <input id="friendSearchInput" placeholder="아이디 또는 이름으로 검색해 추가" oninput="friendSearch(this.value)" autocomplete="off">
+    <div id="friendSearchDrop" class="user-dropdown" style="display:none;position:relative"></div>
+    <div style="font-size:.78rem;color:var(--text2);margin:10px 0 6px">내 친구</div>
+    <div id="friendsList" style="display:flex;flex-direction:column;gap:6px;max-height:50vh;overflow:auto"></div>
+    <div class="modal-btns" style="margin-top:14px">
+      <button type="button" onclick="closeModal('friendsModal')">닫기</button>
+    </div>
+  </div>
+</div>
+
+<!-- B3: 내 프로필 모달 -->
+<div class="modal-bg" id="profileModal">
+  <div class="modal">
+    <h3>🙂 내 프로필</h3>
+    <div style="display:flex;align-items:center;gap:12px;margin-bottom:12px">
+      <img id="profileAvatar" alt="프로필" style="width:64px;height:64px;border-radius:50%;object-fit:cover;background:var(--bg3);border:1px solid var(--border)">
+      <div>
+        <button class="hbtn" onclick="document.getElementById('profileAvatarInput').click()">사진 변경</button>
+        <input type="file" id="profileAvatarInput" accept="image/*" hidden onchange="onProfileAvatar(this)">
+      </div>
+    </div>
+    <label style="font-size:.78rem;color:var(--text2)">표시 이름 (가입자명)</label>
+    <input id="profileNameInput" placeholder="이름">
+    <div class="modal-btns" style="margin-top:12px">
+      <button type="button" onclick="closeModal('profileModal')">취소</button>
+      <button type="button" class="pri" onclick="saveProfile()">저장</button>
+    </div>
+  </div>
+</div>
+
 <!-- ── 설정 패널 ── -->
 <div class="settings-overlay" id="settingsOverlay" onclick="closeSettings()"></div>
 <div class="settings-panel" id="settingsPanel">
@@ -335,6 +370,12 @@ body.theme-dark .theme-btn.active{background:#1e3a5f}
     <button class="icon-btn" onclick="closeSettings()" style="margin-left:auto">✕</button>
   </div>
   <div class="sp-body">
+    <div class="sp-section">친구 · 프로필</div>
+    <div class="sp-row">
+      <label>친구</label>
+      <button class="hbtn" onclick="openFriends()">👥 친구 목록</button>
+      <button class="hbtn" onclick="openProfile()" style="margin-left:4px">🙂 내 프로필</button>
+    </div>
     <div class="sp-section">테마</div>
     <div class="theme-btns">
       <button class="theme-btn" id="themeKakao" onclick="setTheme('kakao')">🟡 카카오</button>
@@ -534,6 +575,79 @@ const LEFT_SK='stella_talk_left_v1';
 function loadLeftRooms(){try{return new Set(JSON.parse(localStorage.getItem(LEFT_SK)||'[]'));}catch{return new Set();}}
 function isLeftRoom(id){return loadLeftRooms().has(id);}
 function addLeftRoom(id){const s=loadLeftRooms();s.add(id);localStorage.setItem(LEFT_SK,JSON.stringify(Array.from(s)));}
+
+// ── B: 친구 / 프로필 (사용자별 localStorage) ──
+function _friendsKey(){ return 'stella_talk_friends_'+(getMyId()||'guest'); }
+function _profileKey(){ return 'stella_talk_profile_'+(getMyId()||'guest'); }
+function loadFriends(){ try{ return JSON.parse(localStorage.getItem(_friendsKey())||'[]'); }catch(e){ return []; } }
+function saveFriends(list){ try{ localStorage.setItem(_friendsKey(), JSON.stringify(list||[])); }catch(e){} }
+function loadProfile(){ try{ return StellaFriends.normalizeProfile(JSON.parse(localStorage.getItem(_profileKey())||'{}'), getMyName()); }catch(e){ return {name:getMyName(),avatar:''}; } }
+
+function openFriends(){ renderFriends(); openModal('friendsModal'); }
+function renderFriends(){
+  var box=document.getElementById('friendsList'); if(!box) return;
+  var list=StellaFriends.visibleFriends(loadFriends());
+  if(!list.length){ box.innerHTML='<div style="color:var(--text2);font-size:.82rem;padding:8px 2px">아직 친구가 없습니다. 위에서 아이디로 검색해 추가하세요.</div>'; return; }
+  box.innerHTML=list.map(function(f){
+    var av=f.avatar?('<img src="'+esc(f.avatar)+'" style="width:34px;height:34px;border-radius:50%;object-fit:cover">'):('<div style="width:34px;height:34px;border-radius:50%;background:var(--bg3);display:flex;align-items:center;justify-content:center">👤</div>');
+    return '<div style="display:flex;align-items:center;gap:10px;padding:6px 4px">'+av+
+      '<div style="flex:1;min-width:0"><div style="font-weight:600;font-size:.9rem">'+esc(f.name)+'</div><div style="font-size:.74rem;color:var(--text2)">'+esc(f.id)+'</div></div>'+
+      '<button class="hbtn" onclick="removeFriendUI(\''+esc(f.id)+'\')">삭제</button></div>';
+  }).join('');
+}
+async function friendSearch(q){
+  var drop=document.getElementById('friendSearchDrop'); if(!drop) return;
+  q=(q||'').trim();
+  if(!q){ drop.style.display='none'; drop.innerHTML=''; return; }
+  try{
+    var r=await fetch('/api/user-search?q='+encodeURIComponent(q),{cache:'no-store'});
+    var d=await r.json();
+    var users=(d&&d.users)||[];
+    var myId=getMyId();
+    users=users.filter(function(u){ return String(u.id)!==String(myId); });
+    if(!users.length){ drop.style.display='block'; drop.innerHTML='<div style="padding:8px 10px;color:var(--text2);font-size:.82rem">검색 결과 없음</div>'; return; }
+    drop.style.display='block';
+    drop.innerHTML=users.slice(0,8).map(function(u){
+      var added=StellaFriends.isFriend(loadFriends(),u.id);
+      return '<div style="display:flex;align-items:center;gap:8px;padding:8px 10px;cursor:pointer" onclick="addFriendById(\''+esc(u.id)+'\',\''+esc(u.name||u.id)+'\',\''+esc(u.email||'')+'\')">'+
+        '<div style="flex:1;min-width:0"><b style="font-size:.86rem">'+esc(u.name||u.id)+'</b> <span style="font-size:.74rem;color:var(--text2)">'+esc(u.id)+'</span></div>'+
+        '<span style="font-size:.78rem;color:'+(added?'var(--text2)':'var(--accent)')+'">'+(added?'추가됨':'＋ 추가')+'</span></div>';
+    }).join('');
+  }catch(e){ drop.style.display='none'; }
+}
+function addFriendById(id,name,email){
+  var list=StellaFriends.addFriend(loadFriends(), {id:id,name:name,email:email});
+  saveFriends(list);
+  var inp=document.getElementById('friendSearchInput'); if(inp) inp.value='';
+  var drop=document.getElementById('friendSearchDrop'); if(drop){ drop.style.display='none'; drop.innerHTML=''; }
+  renderFriends();
+  try{ toast(name+' 친구 추가됨'); }catch(e){}
+}
+function removeFriendUI(id){
+  saveFriends(StellaFriends.removeFriend(loadFriends(), id));
+  renderFriends();
+}
+var _profileAvatarTmp=null;
+function openProfile(){
+  var p=loadProfile(); _profileAvatarTmp=null;
+  var ni=document.getElementById('profileNameInput'); if(ni) ni.value=p.name||getMyName();
+  var av=document.getElementById('profileAvatar'); if(av) av.src=p.avatar||'/icons/talk-192.png?v=3';
+  openModal('profileModal');
+}
+function onProfileAvatar(input){
+  var f=input.files&&input.files[0]; if(!f) return;
+  var fr=new FileReader();
+  fr.onload=function(e){ _profileAvatarTmp=e.target.result; var av=document.getElementById('profileAvatar'); if(av) av.src=_profileAvatarTmp; };
+  fr.readAsDataURL(f);
+}
+function saveProfile(){
+  var ni=document.getElementById('profileNameInput');
+  var p=loadProfile();
+  var prof={ name:(ni&&ni.value.trim())||getMyName(), avatar:_profileAvatarTmp||p.avatar||'' };
+  try{ localStorage.setItem(_profileKey(), JSON.stringify(prof)); }catch(e){}
+  closeModal('profileModal');
+  try{ toast('프로필이 저장되었습니다'); }catch(e){}
+}
 function uid(){return 'r_'+Math.random().toString(36).slice(2)+Date.now().toString(36);}
 // ── 로그인 사용자 정보 (다중 키 호환) ──
 function getSession(){
