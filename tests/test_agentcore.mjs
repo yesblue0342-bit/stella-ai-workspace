@@ -1,5 +1,5 @@
 // tests/test_agentcore.mjs — Stella Agent Code 핵심 로직 단위 테스트 (의존성 0)
-import { CLAUDE_MODELS, DEFAULT_MODEL, isValidModel, resolveModel, AgentRun, nextDelayMs, buildTranscript } from "../lib/agentcore.mjs";
+import { CLAUDE_MODELS, DEFAULT_MODEL, isValidModel, resolveModel, AgentRun, nextDelayMs, buildTranscript, buildAgentSystem, OMC_REPO } from "../lib/agentcore.mjs";
 
 let pass = 0, fail = 0;
 function A(name, ok, extra) { ok ? pass++ : fail++; console.log(`${ok ? "PASS" : "FAIL"}  ${name}` + (ok || !extra ? "" : `  (${extra})`)); }
@@ -69,6 +69,14 @@ A("16 nextDelayMs 증가+상한 4000", nextDelayMs(0) === 800 && nextDelayMs(3) 
     t.includes("# 테스트") && t.includes("claude-haiku-4-5-20251001") && t.includes("fib 작성") &&
     t.includes("🔧 **write**") && t.includes("완료했습니다."),
     JSON.stringify(t.slice(0, 60)));
+}
+
+// ── OMC 부트스트랩 시스템 프롬프트 (18~19) ──
+{
+  const base = buildAgentSystem(false);
+  const omc = buildAgentSystem(true);
+  A("18 OMC off: 기본 프롬프트(OMC 미포함)", base.indexOf("Stella Agent Code") >= 0 && base.indexOf("OMC") < 0 && base.indexOf(OMC_REPO) < 0);
+  A("19 OMC on: 부트스트랩 지시 + repo 포함", omc.indexOf("OMC") >= 0 && omc.indexOf(OMC_REPO) >= 0 && omc.indexOf("npm install") >= 0);
 }
 
 console.log(`\n총 ${pass + fail}건: ${pass} PASS / ${fail} FAIL`);

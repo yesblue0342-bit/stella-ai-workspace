@@ -2,6 +2,8 @@
 // (_ 프리픽스 → Vercel 라우트 아님. 프록시 함수들이 import해서 사용)
 // 베타 헤더: managed-agents-2026-04-01
 
+import { buildAgentSystem } from "../../lib/agentcore.mjs";
+
 const BASE = "https://api.anthropic.com";
 const BETA = "managed-agents-2026-04-01";
 
@@ -51,20 +53,21 @@ export async function getOrCreateEnvironment(getMeta, setMeta) {
   try { setMeta && (await setMeta("cc_env_id", _envId)); } catch {}
   return _envId;
 }
-export async function getOrCreateAgent(model, getMeta, setMeta) {
-  if (_agentCache.has(model)) return _agentCache.get(model);
-  const metaKey = "cc_agent_" + model;
-  try { const m = getMeta && (await getMeta(metaKey)); if (m) { _agentCache.set(model, m); return m; } } catch {}
+export async function getOrCreateAgent(model, omc, getMeta, setMeta) {
+  const cacheKey = model + (omc ? "+omc" : "");
+  if (_agentCache.has(cacheKey)) return _agentCache.get(cacheKey);
+  const metaKey = "cc_agent_" + cacheKey;
+  try { const m = getMeta && (await getMeta(metaKey)); if (m) { _agentCache.set(cacheKey, m); return m; } } catch {}
   const agent = await maFetch("/v1/agents", {
     method: "POST",
     body: {
-      name: "Stella Agent Code (" + model + ")",
+      name: "Stella Agent Code" + (omc ? " +OMC" : "") + " (" + model + ")",
       model,
-      system: "You are Stella Agent Code, an autonomous coding agent running in a sandbox. Write clean, well-documented code, run and verify it, and explain results concisely. Reply in Korean when the user writes Korean.",
+      system: buildAgentSystem(omc),
       tools: [{ type: "agent_toolset_20260401" }],
     },
   });
-  _agentCache.set(model, agent.id);
+  _agentCache.set(cacheKey, agent.id);
   try { setMeta && (await setMeta(metaKey, agent.id)); } catch {}
   return agent.id;
 }
