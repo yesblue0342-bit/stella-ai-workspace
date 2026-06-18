@@ -6,45 +6,58 @@
 <title>Stella Agent Code</title>
 <meta name="theme-color" content="#0d1117">
 <style>
+/* ── 테마 토큰 (Stella GPT와 동일한 body.dark 방식 + stella_theme 키 공유) ── */
+:root{
+  --bg:#ffffff; --top-bg:#fbfbfc; --side-bg:#fbfbfc; --card:#f3f4f6; --step-bg:#f6f8fa;
+  --ink:#111827; --muted:#6b7280; --line:#e5e7eb; --accent:#1f6feb;
+  --input-bg:#ffffff; --send:#238636; --cancel:#da3633; --err:#b91c1c; --ok:#1a7f37; --on-accent:#ffffff;
+}
+body.dark{
+  --bg:#0d1117; --top-bg:#161b22; --side-bg:#0d1117; --card:#161b22; --step-bg:#0f1620;
+  --ink:#e6edf3; --muted:#8b949e; --line:#21262d; --accent:#1f6feb;
+  --input-bg:#0d1117; --send:#238636; --cancel:#da3633; --err:#f85149; --ok:#3fb950; --on-accent:#ffffff;
+}
 *{box-sizing:border-box;margin:0;padding:0}
-body{font-family:system-ui,-apple-system,sans-serif;background:#0d1117;color:#e6edf3;min-height:100dvh;display:flex;flex-direction:column}
-a{color:#58a6ff}
-.top{display:flex;align-items:center;gap:10px;padding:10px 16px;border-bottom:1px solid #21262d;background:#161b22;position:sticky;top:0;z-index:5}
+body{font-family:system-ui,-apple-system,sans-serif;background:var(--bg);color:var(--ink);min-height:100dvh;display:flex;flex-direction:column}
+a{color:var(--accent)}
+.top{display:flex;align-items:center;gap:10px;padding:10px 16px;border-bottom:1px solid var(--line);background:var(--top-bg);position:sticky;top:0;z-index:5}
 .top h1{font-size:1.05rem;font-weight:900}
-.nav{margin-left:auto;display:flex;gap:6px;flex-wrap:wrap}
-.nav a{font-size:.8rem;text-decoration:none;border:1px solid #30363d;border-radius:8px;padding:5px 9px;color:#c9d1d9}
-.nav a.active{background:#1f6feb;border-color:#1f6feb;color:#fff}
+.nav{margin-left:auto;display:flex;gap:6px;flex-wrap:wrap;align-items:center}
+.nav a{font-size:.8rem;text-decoration:none;border:1px solid var(--line);border-radius:8px;padding:5px 9px;color:var(--muted)}
+.nav a.active{background:var(--accent);border-color:var(--accent);color:var(--on-accent)}
+.theme-toggle{font-size:.95rem;line-height:1;border:1px solid var(--line);border-radius:8px;padding:5px 8px;background:var(--card);color:var(--ink);cursor:pointer}
 .wrap{flex:1;display:flex;min-height:0}
-.side{width:230px;flex:0 0 auto;border-right:1px solid #21262d;background:#0d1117;overflow:auto;padding:10px}
-.side h2{font-size:.72rem;text-transform:uppercase;color:#8b949e;margin:6px 4px 8px;letter-spacing:.5px}
-.sitem{padding:8px 9px;border:1px solid #21262d;border-radius:8px;margin-bottom:6px;cursor:pointer;font-size:.82rem}
-.sitem:hover{border-color:#1f6feb;background:#161b22}
+.side{width:230px;flex:0 0 auto;border-right:1px solid var(--line);background:var(--side-bg);overflow:auto;padding:10px}
+.side h2{font-size:.72rem;text-transform:uppercase;color:var(--muted);margin:6px 4px 8px;letter-spacing:.5px}
+.sitem{padding:8px 9px;border:1px solid var(--line);border-radius:8px;margin-bottom:6px;cursor:pointer;font-size:.82rem}
+.sitem:hover{border-color:var(--accent);background:var(--card)}
 .sitem .t{font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.sitem .m{color:#8b949e;font-size:.72rem;margin-top:2px}
+.sitem .m{color:var(--muted);font-size:.72rem;margin-top:2px}
 .main{flex:1;min-width:0;display:flex;flex-direction:column}
 .msgs{flex:1;overflow:auto;padding:18px;display:flex;flex-direction:column;gap:12px}
 .bubble{max-width:860px;width:100%;margin:0 auto;line-height:1.7}
-.bubble.user{background:#161b22;border:1px solid #30363d;border-radius:12px;padding:10px 13px;white-space:pre-wrap}
-.step{background:#0f1620;border:1px solid #21262d;border-left:3px solid #1f6feb;border-radius:8px;padding:7px 10px;font-size:.83rem;font-family:ui-monospace,Consolas,monospace;color:#c9d1d9;overflow-x:auto}
-.step .nm{color:#58a6ff;font-weight:700}
-.step .rs{color:#8b949e;white-space:pre-wrap;display:block;margin-top:4px;max-height:200px;overflow:auto}
+.bubble.user{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:10px 13px;white-space:pre-wrap}
+.step{background:var(--step-bg);border:1px solid var(--line);border-left:3px solid var(--accent);border-radius:8px;padding:7px 10px;font-size:.83rem;font-family:ui-monospace,Consolas,monospace;color:var(--ink);overflow-x:auto}
+.step .nm{color:var(--accent);font-weight:700}
+.step .rs{color:var(--muted);white-space:pre-wrap;display:block;margin-top:4px;max-height:200px;overflow:auto}
 .answer{white-space:pre-wrap}
-.barwrap{border-top:1px solid #21262d;background:#161b22;padding:10px 14px}
+.barwrap{border-top:1px solid var(--line);background:var(--top-bg);padding:10px 14px}
 .ctl{display:flex;gap:8px;align-items:center;margin-bottom:8px;flex-wrap:wrap}
-select,input,textarea,button{font:inherit;color:#e6edf3;background:#0d1117;border:1px solid #30363d;border-radius:8px}
+select,input,textarea,button{font:inherit;color:var(--ink);background:var(--input-bg);border:1px solid var(--line);border-radius:8px}
 select,#budget{padding:6px 8px}
 #budget{width:90px}
-.lbl{font-size:.78rem;color:#8b949e}
+.lbl{font-size:.78rem;color:var(--muted)}
 .iorow{display:flex;gap:8px;align-items:flex-end}
 #prompt{flex:1;resize:none;padding:10px;min-height:46px;max-height:160px;line-height:1.5}
 button.act{cursor:pointer;font-weight:800;padding:0 16px;height:46px;border:none}
-#sendBtn{background:#238636;color:#fff}
-#sendBtn:disabled{background:#30363d;color:#8b949e;cursor:not-allowed}
-#cancelBtn{background:#da3633;color:#fff;display:none}
-.status{font-size:.78rem;color:#8b949e}
-.status .err{color:#f85149}
-.status .ok{color:#3fb950}
-.empty{color:#8b949e;text-align:center;margin:auto;font-size:.9rem}
+#sendBtn{background:var(--send);color:var(--on-accent)}
+#sendBtn:disabled{background:var(--line);color:var(--muted);cursor:not-allowed}
+#cancelBtn{background:var(--cancel);color:var(--on-accent);display:none}
+#saveGhBtn{background:var(--card);color:var(--ink);border:1px solid var(--line);font-weight:700;font-size:.78rem;padding:5px 9px;border-radius:8px;cursor:pointer}
+.status{font-size:.78rem;color:var(--muted)}
+.status .err{color:var(--err)}
+.status .ok{color:var(--ok)}
+.empty{color:var(--muted);text-align:center;margin:auto;font-size:.9rem}
 @media(max-width:760px){.side{display:none}}
 </style>
 </head>
@@ -53,6 +66,7 @@ button.act{cursor:pointer;font-weight:800;padding:0 16px;height:46px;border:none
   <h1>🛠️ Stella Agent Code</h1>
   <nav class="nav">
     <a href="/">GPT</a><a href="/talk">Talk</a><a href="/db">DB</a><a href="/cc" class="active">Code</a>
+    <button type="button" class="theme-toggle" id="themeToggle" title="다크/라이트 모드">🌙</button>
   </nav>
 </div>
 <div class="wrap">
@@ -69,6 +83,7 @@ button.act{cursor:pointer;font-weight:800;padding:0 16px;height:46px;border:none
         <span class="lbl">예산($)</span>
         <input id="budget" type="number" min="0.5" max="50" step="0.5" value="20">
         <label class="lbl" style="display:flex;align-items:center;gap:4px;cursor:pointer" title="oh-my-claudecode 멀티에이전트 부트스트랩"><input type="checkbox" id="omc" style="width:auto"> 🤖 OMC</label>
+        <button type="button" id="saveGhBtn" title="이 세션 산출물을 GitHub에 저장" style="display:none">💾 GitHub에 저장</button>
         <span class="status" id="status"></span>
       </div>
       <div class="iorow">
@@ -86,6 +101,22 @@ import { CLAUDE_MODELS, DEFAULT_MODEL, AgentRun, nextDelayMs, buildTranscript } 
 const $ = (id) => document.getElementById(id);
 const MODEL_KEY = 'stella_cc_model';
 let cur = null;       // { sessionId, model, budgetUsd, title, run, attempt, polling, stopped }
+
+// ── 테마: Stella GPT와 동일한 body.dark 방식 + 'stella_theme' 키 공유 ──
+function applyTheme(){
+  let t='dark'; try{ t=localStorage.getItem('stella_theme')||'dark'; }catch(e){}
+  document.body.classList.toggle('dark', t!=='light');
+  const b=$('themeToggle'); if(b) b.textContent = (t==='light')?'🌙':'☀️';
+  const meta=document.querySelector('meta[name="theme-color"]'); if(meta) meta.setAttribute('content', t==='light'?'#ffffff':'#0d1117');
+}
+function toggleTheme(){
+  const dark=document.body.classList.toggle('dark');
+  try{ localStorage.setItem('stella_theme', dark?'dark':'light'); }catch(e){}
+  const b=$('themeToggle'); if(b) b.textContent = dark?'☀️':'🌙';
+  const meta=document.querySelector('meta[name="theme-color"]'); if(meta) meta.setAttribute('content', dark?'#0d1117':'#ffffff');
+}
+applyTheme();
+$('themeToggle').addEventListener('click', toggleTheme);
 
 // ── 모델 드롭다운 ──
 (function initModels(){
@@ -158,8 +189,23 @@ async function finish(failed){
       await fetch('/api/cc/save',{method:'POST',headers:{'Content-Type':'application/json'},
         body:JSON.stringify({ session:cur.sessionId, markdown:md, title:cur.title, status:run.status })});
     }catch(e){}
+    // PART B: 세션 완료 시 산출물 GitHub 자동 저장 (best-effort) + 수동 버튼 노출
+    if(cur && cur.sessionId){ $('saveGhBtn').style.display=''; saveToGithub(true); }
   }
   loadSessions();
+}
+
+// PART B: 세션 산출물을 GitHub에 커밋 (auto=자동 트리거 / 수동 버튼 공용)
+async function saveToGithub(auto){
+  if(!cur || !cur.sessionId){ if(!auto) setStatus('<span class="err">세션이 없습니다</span>'); return; }
+  const btn=$('saveGhBtn'); const prev=btn.textContent; btn.disabled=true; btn.textContent='저장 중…';
+  try{
+    const r=await fetch('/api/cc/save-github',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({session:cur.sessionId})});
+    const d=await r.json();
+    if(d.ok){ setStatus('<span class="ok">GitHub 저장 ✓ '+d.committed+'개 파일</span>'+(d.folderUrl?(' · <a href="'+esc(d.folderUrl)+'" target="_blank" rel="noopener">폴더 열기</a>'):'')); }
+    else if(!auto){ setStatus('<span class="err">GitHub 저장 실패: '+esc(d.message||d.error||'')+'</span>'); }
+  }catch(e){ if(!auto) setStatus('<span class="err">GitHub 저장 오류: '+esc(e.message)+'</span>'); }
+  finally{ btn.disabled=false; btn.textContent=prev; }
 }
 
 function setUIBusy(busy){
@@ -223,6 +269,7 @@ function resume(id, model, title){
   if(cur && cur._timer) clearTimeout(cur._timer);
   $('msgs').innerHTML='';
   cur = { sessionId:id, model:model||DEFAULT_MODEL, title:title||'세션', run:new AgentRun(), attempt:0, stopped:false, prompt:'(재개)' };
+  $('saveGhBtn').style.display=''; // 재개 세션도 수동 GitHub 저장 가능
   setUIBusy(true); setStatus('세션 재개 — 이벤트 로드 중…'); poll();
 }
 
@@ -240,6 +287,7 @@ $('prompt').addEventListener('input',function(){ this.style.height='auto'; this.
 $('sendBtn').addEventListener('click', send);
 $('cancelBtn').addEventListener('click', cancel);
 $('refreshBtn').addEventListener('click', loadSessions);
+$('saveGhBtn').addEventListener('click', () => saveToGithub(false));
 
 loadSessions();
 if('serviceWorker' in navigator){ navigator.serviceWorker.register('/sw.js').catch(function(){}); }
