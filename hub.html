@@ -1,0 +1,219 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Stella Hub</title>
+<meta name="theme-color" content="#0d1117">
+<script src="/lib/hub-utils.js"></script>
+<style>
+/* ── 테마 토큰 (Stella DB와 동일: :root 다크 / body.light 라이트, stella_db_theme 키) ── */
+:root{--bg:#0d1117;--bg2:#161b22;--bg3:#21262d;--border:#30363d;--text:#e6edf3;--text2:#8b949e;--text3:#c9d1d9;--accent:#e6edf3;--danger:#f85149;--primary:#1f6feb}
+body.light{--bg:#f6f8fa;--bg2:#fff;--bg3:#f3f4f6;--border:#d1d5db;--text:#111827;--text2:#6b7280;--text3:#374151;--accent:#111827;--danger:#dc2626;--primary:#1f6feb}
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:system-ui,-apple-system,sans-serif;background:var(--bg);color:var(--text);min-height:100dvh;display:flex;flex-direction:column}
+a{color:var(--primary)}
+.top{display:flex;align-items:center;gap:10px;padding:10px 16px;border-bottom:1px solid var(--border);background:var(--bg2);position:sticky;top:0;z-index:5}
+.top h1{font-size:1.05rem;font-weight:900;white-space:nowrap}
+.nav{margin-left:auto;display:flex;gap:6px;flex-wrap:wrap;align-items:center}
+.nav a{font-size:.8rem;text-decoration:none;border:1px solid var(--border);border-radius:8px;padding:5px 9px;color:var(--text2)}
+.nav a.active{background:var(--primary);border-color:var(--primary);color:#fff}
+.icon-btn{font-size:.95rem;line-height:1;border:1px solid var(--border);border-radius:8px;padding:5px 8px;background:var(--bg3);color:var(--text);cursor:pointer}
+.wrap{flex:1;display:flex;min-height:0}
+.side{width:300px;flex:0 0 auto;border-right:1px solid var(--border);background:var(--bg);overflow:auto;padding:10px;display:flex;flex-direction:column;gap:8px}
+.side h2{font-size:.72rem;text-transform:uppercase;color:var(--text2);margin:4px 4px;letter-spacing:.5px}
+.searchbar{display:flex;gap:6px}
+.searchbar input{flex:1;background:var(--bg2);border:1px solid var(--border);border-radius:8px;padding:7px 9px;color:var(--text);font-size:.82rem;outline:none}
+.repo{padding:8px 9px;border:1px solid var(--border);border-radius:8px;cursor:pointer;font-size:.82rem;background:var(--bg2)}
+.repo:hover{border-color:var(--primary)}
+.repo.active{border-color:var(--primary);background:var(--bg3)}
+.repo .t{font-weight:700}
+.repo .m{color:var(--text2);font-size:.72rem;margin-top:2px}
+.tree{font-size:.83rem}
+.node{padding:3px 4px;border-radius:6px;cursor:pointer;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.node:hover{background:var(--bg3)}
+.node.file.sel{background:var(--bg3);outline:1px solid var(--primary)}
+.children{margin-left:14px;border-left:1px solid var(--border);padding-left:6px}
+.main{flex:1;min-width:0;display:flex;flex-direction:column}
+.pv-head{display:flex;align-items:center;gap:8px;padding:10px 14px;border-bottom:1px solid var(--border);background:var(--bg2);flex-wrap:wrap}
+.pv-path{font-family:ui-monospace,Consolas,monospace;font-size:.82rem;color:var(--text2);flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.btn{font-size:.78rem;border:1px solid var(--border);border-radius:8px;padding:6px 10px;background:var(--bg3);color:var(--text);cursor:pointer;text-decoration:none;display:inline-block}
+.btn:hover{border-color:var(--primary)}
+.btn[disabled],.btn.disabled{opacity:.5;cursor:not-allowed}
+.pv-body{flex:1;overflow:auto;padding:14px}
+pre.code{background:var(--bg2);border:1px solid var(--border);border-radius:10px;padding:12px;overflow:auto;font-family:ui-monospace,Consolas,monospace;font-size:.82rem;line-height:1.55;white-space:pre;color:var(--text3)}
+.pv-img{max-width:100%;border-radius:10px;border:1px solid var(--border)}
+.empty{color:var(--text2);text-align:center;margin:auto;font-size:.9rem;padding:30px}
+.spin{display:inline-block;width:14px;height:14px;border:2px solid var(--text2);border-top-color:transparent;border-radius:50%;animation:sp .7s linear infinite;vertical-align:middle}
+@keyframes sp{to{transform:rotate(360deg)}}
+.note{color:var(--text2);font-size:.78rem}
+.err{color:var(--danger);font-size:.82rem}
+@media(max-width:760px){.side{position:fixed;inset:48px 0 0 0;width:100%;z-index:20;display:none}.side.open{display:flex}.hamb{display:inline-block!important}}
+.hamb{display:none}
+</style>
+</head>
+<body>
+<div class="top">
+  <button class="icon-btn hamb" id="hambBtn" title="레포 목록">☰</button>
+  <h1>🌐 Stella Hub</h1>
+  <nav class="nav">
+    <a href="/">🤖 GPT</a><a href="/talk">💬 Talk</a><a href="/db">🗄 DB</a><a href="/cc">🛠 Code</a><a href="/hub" class="active">🌐 Hub</a>
+    <button class="icon-btn" id="refreshBtn" title="새로고침">↻</button>
+    <button class="icon-btn" id="themeToggle" title="다크/라이트 모드">🌙</button>
+  </nav>
+</div>
+<div class="wrap">
+  <aside class="side" id="side">
+    <div class="searchbar">
+      <input id="fileSearch" placeholder="파일명 검색(현재 레포)" autocomplete="off">
+    </div>
+    <h2>내 레포</h2>
+    <div id="repoList"><div class="note" style="padding:8px">불러오는 중… <span class="spin"></span></div></div>
+    <h2 id="treeTitle" style="display:none">파일 트리</h2>
+    <div class="tree" id="tree"></div>
+  </aside>
+  <main class="main">
+    <div class="pv-head">
+      <span class="pv-path" id="pvPath">레포와 파일을 선택하세요</span>
+      <a class="btn" id="dlBtn" style="display:none">⬇ 다운로드</a>
+      <button class="btn disabled" id="upBtn" disabled title="GitHub 쓰기 권한이 필요합니다. 토큰을 Vercel 환경변수(GITHUB_TOKEN)에 추가하세요.">⬆ 업로드</button>
+      <button class="btn disabled" id="mkdirBtn" disabled title="GitHub 쓰기 권한이 필요합니다. 토큰을 Vercel 환경변수(GITHUB_TOKEN)에 추가하세요.">＋ 폴더</button>
+      <button class="btn disabled" id="delBtn" disabled title="GitHub 쓰기 권한이 필요합니다. 토큰을 Vercel 환경변수(GITHUB_TOKEN)에 추가하세요.">🗑 삭제</button>
+    </div>
+    <div class="pv-body" id="pvBody"><div class="empty">왼쪽에서 레포 → 폴더/파일을 선택하면 여기서 미리보기·다운로드할 수 있습니다.<br><span class="note">쓰기 기능(업로드/삭제/폴더)은 GITHUB_TOKEN 설정 시 활성화됩니다.</span></div></div>
+  </main>
+</div>
+
+<script>
+const H = window.StellaHub;
+const $ = (id) => document.getElementById(id);
+const OWNER = H.OWNER;
+let curRepo = null;        // {name, default_branch}
+let curRepoFiles = [];     // 현재 레포 루트 파일(검색 필터용)
+
+// ── 테마 (Stella DB와 동일: body.light + stella_db_theme) ──
+function applyTheme(){
+  let t='dark'; try{ t=localStorage.getItem('stella_db_theme')||'dark'; }catch(e){}
+  document.body.classList.toggle('light', t==='light');
+  $('themeToggle').textContent = t==='light' ? '☀️' : '🌙';
+  const m=document.querySelector('meta[name=theme-color]'); if(m) m.setAttribute('content', t==='light'?'#f6f8fa':'#0d1117');
+}
+function toggleTheme(){
+  const light=document.body.classList.toggle('light');
+  try{ localStorage.setItem('stella_db_theme', light?'light':'dark'); }catch(e){}
+  $('themeToggle').textContent = light?'☀️':'🌙';
+  const m=document.querySelector('meta[name=theme-color]'); if(m) m.setAttribute('content', light?'#f6f8fa':'#0d1117');
+}
+applyTheme();
+$('themeToggle').addEventListener('click', toggleTheme);
+
+function esc(s){ return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+
+// ── GitHub 비인증 API ──
+async function ghApi(path){
+  const r = await fetch('https://api.github.com'+path, { headers:{ 'Accept':'application/vnd.github+json' } });
+  let body=null; try{ body=await r.json(); }catch(e){}
+  if(!r.ok){
+    if(H.isRateLimited(r.status, body)) throw new Error('GitHub API 요청 한도 초과(비로그인 시간당 60회). 잠시 후 다시 시도하세요.');
+    throw new Error('GitHub '+r.status+': '+((body&&body.message)||''));
+  }
+  return body;
+}
+
+// ── 공개 레포 목록 ──
+async function loadRepos(){
+  $('repoList').innerHTML='<div class="note" style="padding:8px">불러오는 중… <span class="spin"></span></div>';
+  try{
+    const repos = await ghApi('/users/'+OWNER+'/repos?per_page=100&sort=updated');
+    const pub = (repos||[]).filter(r=>!r.private);
+    if(!pub.length){ $('repoList').innerHTML='<div class="note" style="padding:8px">공개 레포가 없습니다.</div>'; return; }
+    $('repoList').innerHTML = pub.map(r=>`<div class="repo" data-name="${esc(r.name)}" data-branch="${esc(r.default_branch||'main')}">
+      <div class="t">${esc(r.name)}</div>
+      <div class="m">${esc(r.language||'')}${r.stargazers_count?(' · ★'+r.stargazers_count):''}${r.description?(' · '+esc(r.description)):''}</div></div>`).join('');
+    $('repoList').querySelectorAll('.repo').forEach(el=>el.addEventListener('click',()=>openRepo(el.dataset.name, el.dataset.branch, el)));
+  }catch(e){ $('repoList').innerHTML='<div class="err" style="padding:8px">'+esc(e.message)+'</div>'; }
+}
+
+// ── 레포 열기 → 루트 트리 ──
+async function openRepo(name, branch, el){
+  curRepo = { name, default_branch: branch||'main' };
+  document.querySelectorAll('.repo').forEach(x=>x.classList.remove('active'));
+  if(el) el.classList.add('active');
+  $('treeTitle').style.display='';
+  $('tree').innerHTML='<div class="note">불러오는 중… <span class="spin"></span></div>';
+  $('pvPath').textContent = name;
+  $('pvBody').innerHTML='<div class="empty">파일을 선택하세요.</div>';
+  $('dlBtn').style.display='none';
+  try{
+    const items = await loadDir('');
+    curRepoFiles = items;
+    $('tree').innerHTML='';
+    renderNodes($('tree'), items, '');
+  }catch(e){ $('tree').innerHTML='<div class="err">'+esc(e.message)+'</div>'; }
+}
+
+async function loadDir(path){
+  const items = await ghApi('/repos/'+OWNER+'/'+curRepo.name+'/contents/'+path.split('/').map(encodeURIComponent).join('/'));
+  return H.sortContents(Array.isArray(items)?items:[]);
+}
+
+function renderNodes(host, items, parentPath){
+  items.forEach(it=>{
+    const row=document.createElement('div');
+    row.className='node '+(it.type==='dir'?'dir':'file');
+    row.textContent=(it.type==='dir'?'📁 ':'📄 ')+it.name;
+    row.dataset.path=it.path;
+    if(it.type==='dir'){
+      const kids=document.createElement('div'); kids.className='children'; kids.style.display='none';
+      let loaded=false;
+      row.addEventListener('click', async (e)=>{
+        e.stopPropagation();
+        if(kids.style.display==='none'){
+          kids.style.display='';
+          row.textContent='📂 '+it.name;
+          if(!loaded){ loaded=true; kids.innerHTML='<div class="note">…</div>';
+            try{ const sub=await loadDir(it.path); kids.innerHTML=''; renderNodes(kids, sub, it.path); }
+            catch(err){ kids.innerHTML='<div class="err">'+esc(err.message)+'</div>'; } }
+        }else{ kids.style.display='none'; row.textContent='📁 '+it.name; }
+      });
+      host.appendChild(row); host.appendChild(kids);
+    }else{
+      row.addEventListener('click', (e)=>{ e.stopPropagation();
+        document.querySelectorAll('.node.file.sel').forEach(n=>n.classList.remove('sel'));
+        row.classList.add('sel'); openFile(it); });
+      host.appendChild(row);
+    }
+  });
+}
+
+// ── 파일 미리보기/다운로드 ──
+async function openFile(it){
+  const branch=curRepo.default_branch;
+  const raw=H.rawUrl(OWNER, curRepo.name, branch, it.path);
+  $('pvPath').textContent=curRepo.name+'/'+it.path;
+  const dl=$('dlBtn'); dl.style.display=''; dl.href=raw; dl.setAttribute('download', it.name);
+  const kind=H.classify(it.name);
+  if(kind==='image'){ $('pvBody').innerHTML='<img class="pv-img" alt="'+esc(it.name)+'" src="'+esc(raw)+'">'; return; }
+  if(kind==='binary'){ $('pvBody').innerHTML='<div class="empty">바이너리 파일입니다. <br>「⬇ 다운로드」로 내려받으세요.<br><span class="note">'+esc(it.name)+(it.size?(' · '+Math.round(it.size/1024)+'KB'):'')+'</span></div>'; return; }
+  // 텍스트: raw 본문 로드
+  $('pvBody').innerHTML='<div class="note">불러오는 중… <span class="spin"></span></div>';
+  try{
+    const r=await fetch(raw); const txt=await r.text();
+    $('pvBody').innerHTML='<pre class="code">'+esc(txt)+'</pre>';
+  }catch(e){ $('pvBody').innerHTML='<div class="err">미리보기 실패: '+esc(e.message)+'</div>'; }
+}
+
+// ── 검색(현재 레포 루트 파일명 필터) ──
+$('fileSearch').addEventListener('input', function(){
+  if(!curRepo){ return; }
+  const filtered=H.filterFiles(curRepoFiles, this.value);
+  $('tree').innerHTML=''; renderNodes($('tree'), filtered, '');
+});
+$('refreshBtn').addEventListener('click', ()=>{ if(curRepo){ const n=curRepo.name,b=curRepo.default_branch; loadRepos().then(()=>openRepo(n,b)); } else loadRepos(); });
+$('hambBtn').addEventListener('click', ()=>$('side').classList.toggle('open'));
+
+loadRepos();
+if('serviceWorker' in navigator){ navigator.serviceWorker.register('/sw.js').catch(function(){}); }
+</script>
+</body>
+</html>
