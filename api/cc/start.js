@@ -11,7 +11,7 @@ export default async function handler(req, res) {
     const { model: reqModel, prompt, title, budgetUsd, omc } = req.body || {};
     if (!prompt || !String(prompt).trim()) return res.status(400).json({ error: "prompt required" });
     const model = isValidModel(reqModel) ? reqModel : DEFAULT_MODEL; // 화이트리스트 검증
-    const budget = Math.max(0.01, Math.min(Number(budgetUsd) || 0.5, 20)); // 기본 $0.50, 상한 $20
+    const budget = Math.max(0.01, Math.min(Number(budgetUsd) || 20, 50)); // 기본 $20, 상한 $50
     const useOmc = !!omc;
 
     const environmentId = await MA.getOrCreateEnvironment(getMeta, setMeta);
