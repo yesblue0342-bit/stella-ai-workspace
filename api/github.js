@@ -108,7 +108,17 @@ async function readContents(owner, repo, path, ref) {
   const p = String(path || "").split("/").filter(Boolean).map(encodeURIComponent).join("/");
   let url = `https://api.github.com/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}/contents/${p}`;
   if (ref) url += `?ref=${encodeURIComponent(ref)}`;
-  const data = await ghGet(url, token);
+  let data;
+  try {
+    data = await ghGet(url, token);
+  } catch (e) {
+    // 빈 레포(커밋 0개)는 GitHub가 404/409 "This repository is empty." 를 반환.
+    // 루트 조회라면 에러 대신 빈 디렉터리로 정규화해 프런트가 안내 문구를 띄우게 한다.
+    if ((e.status === 404 || e.status === 409) && /empty/i.test(e.message || "") && !p) {
+      return { type: "dir", items: [], empty: true, message: "이 레포지토리는 비어 있습니다 (아직 커밋된 파일이 없습니다)." };
+    }
+    throw e;
+  }
   if (Array.isArray(data)) return { type: "dir", items: data.map((x) => ({ name: x.name, path: x.path, type: x.type, sha: x.sha, size: x.size || 0 })) };
   return { type: "file", name: data.name, path: data.path, sha: data.sha, size: data.size || 0, encoding: data.encoding, content: data.content || "", download_url: data.download_url || null };
 }
