@@ -532,8 +532,10 @@ function addLeftRoom(id){const s=loadLeftRooms();s.add(id);localStorage.setItem(
 function uid(){return 'r_'+Math.random().toString(36).slice(2)+Date.now().toString(36);}
 // ── 로그인 사용자 정보 (다중 키 호환) ──
 function getSession(){
-  // 1순위: index.html의 stella_session_final_v82
+  // 1순위: index.html의 stella_session_final_v82 (자동 로그인=영구)
   try{ const s=JSON.parse(localStorage.getItem('stella_session_final_v82')||'null'); if(s&&(s.id||s.user?.id)) return s; }catch(e){}
+  // A1: 자동 로그인 해제 시 sessionStorage(브라우저 닫으면 사라짐)
+  try{ const s=JSON.parse(sessionStorage.getItem('stella_session_final_v82')||'null'); if(s&&(s.id||s.user?.id)) return s; }catch(e){}
   // 2순위: stella_user
   try{ const s=JSON.parse(localStorage.getItem('stella_user')||'null'); if(s&&(s.id||s.email)) return {id:s.id||s.email,user:s}; }catch(e){}
   // 3순위: user / currentUser
@@ -862,6 +864,7 @@ function openRoom(id){
   // 서버에서 메시지 동기화 + 폴링 시작
   syncRoomFromServer(true);
   reportRead(id);
+  clearTalkNotifications(); // C4: 방 읽음 → 해당 알림 닫기
   startPolling();
 }
 // ── 폴링 / 실시간 수신 (향후 WebSocket/SSE로 교체 가능) ──
@@ -1051,6 +1054,27 @@ function notify(title, body){
   // 2) 알림 재생 (설정 모드: 소리/진동/무음 - 진동도 모드 내부에서 처리)
   playNotifySound();
 }
+
+// C4: 읽으면(방 열기/앱 포커스) 떠 있는 Stella Talk 알림을 닫는다 + 배지 갱신
+function clearTalkNotifications(){
+  try{
+    if(navigator.serviceWorker && navigator.serviceWorker.ready){
+      navigator.serviceWorker.ready.then(function(reg){
+        if(reg && reg.getNotifications){
+          reg.getNotifications({tag:'stella-talk-msg'}).then(function(list){
+            (list||[]).forEach(function(n){ try{ n.close(); }catch(e){} });
+          }).catch(function(){});
+        }
+      }).catch(function(){});
+    }
+  }catch(e){}
+  try{ updateAppBadge(); }catch(e){}
+}
+// C4: 앱이 다시 보이고 방을 보고 있으면 알림 닫기
+document.addEventListener('visibilitychange', function(){
+  if(document.visibilityState==='visible' && _cur && !_cur.isMyChat) clearTalkNotifications();
+});
+window.addEventListener('focus', function(){ if(_cur && !_cur.isMyChat) clearTalkNotifications(); });
 
 // ── 알림 (Web Speech API - 실제 음성) ──
 // FIX-LOCK [2] 5종 옵션. 귀여운 8살 여아 톤을 위해 pitch 1.6~1.8 / rate ~1.05로 조정.
@@ -2058,6 +2082,8 @@ function initTalk(){
 // ── Stella Talk 자체 로그인 ──
 function showTalkLogin(){
   document.getElementById('talkLoginOverlay').style.display='flex';
+  // A1: 저장된 자동 로그인 선호 복원 (기본 체크)
+  try{ var el=document.getElementById('talkRemember'); if(el) el.checked = (localStorage.getItem('stella_talk_remember')!=='0'); }catch(e){}
 }
 function hideTalkLogin(){
   document.getElementById('talkLoginOverlay').style.display='none';
@@ -2081,7 +2107,17 @@ async function doTalkLogin(){
     if(d.ok && d.user){
       // 세션 저장 (index.html과 동일한 키)
       const sessionData = {id: d.user.id, user: d.user, savedAt: Date.now()};
-      localStorage.setItem('stella_session_final_v82', JSON.stringify(sessionData));
+      // A1: 자동 로그인 체크 시 영구(localStorage), 해제 시 세션 한정(sessionStorage)
+      var rememberEl=document.getElementById('talkRemember');
+      var remember=rememberEl? rememberEl.checked : true;
+      try{ localStorage.setItem('stella_talk_remember', remember?'1':'0'); }catch(e){}
+      if(remember){
+        localStorage.setItem('stella_session_final_v82', JSON.stringify(sessionData));
+        try{ sessionStorage.removeItem('stella_session_final_v82'); }catch(e){}
+      } else {
+        try{ sessionStorage.setItem('stella_session_final_v82', JSON.stringify(sessionData)); }catch(e){}
+        try{ localStorage.removeItem('stella_session_final_v82'); }catch(e){}
+      }
       hideTalkLogin();
       initTalk();
     } else {
@@ -2179,6 +2215,10 @@ function ensureMyChat(){
     <input id="talkLoginPw" type="password" placeholder="비밀번호"
       onkeydown="talkLoginKeydown(event)"
       style="width:100%;background:var(--bg2,#0f172a);border:1px solid var(--border,#334155);border-radius:12px;padding:13px 16px;font-size:.95rem;color:var(--text,#f1f5f9);box-sizing:border-box;margin-bottom:14px;outline:none">
+    <label style="display:flex;align-items:center;gap:8px;font-size:.85rem;color:var(--text2,#94a3b8);margin-bottom:14px;cursor:pointer;user-select:none">
+      <input type="checkbox" id="talkRemember" checked style="width:16px;height:16px;accent-color:var(--accent,#7c3aed)">
+      자동 로그인 유지
+    </label>
     <button onclick="doTalkLogin()"
       style="width:100%;background:var(--accent,#7c3aed);color:#fff;border:none;border-radius:12px;padding:14px;font-size:1rem;font-weight:700;cursor:pointer">
       로그인
