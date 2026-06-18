@@ -1,0 +1,240 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Stella Claude Code</title>
+<meta name="theme-color" content="#0d1117">
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:system-ui,-apple-system,sans-serif;background:#0d1117;color:#e6edf3;min-height:100dvh;display:flex;flex-direction:column}
+a{color:#58a6ff}
+.top{display:flex;align-items:center;gap:10px;padding:10px 16px;border-bottom:1px solid #21262d;background:#161b22;position:sticky;top:0;z-index:5}
+.top h1{font-size:1.05rem;font-weight:900}
+.nav{margin-left:auto;display:flex;gap:6px;flex-wrap:wrap}
+.nav a{font-size:.8rem;text-decoration:none;border:1px solid #30363d;border-radius:8px;padding:5px 9px;color:#c9d1d9}
+.nav a.active{background:#1f6feb;border-color:#1f6feb;color:#fff}
+.wrap{flex:1;display:flex;min-height:0}
+.side{width:230px;flex:0 0 auto;border-right:1px solid #21262d;background:#0d1117;overflow:auto;padding:10px}
+.side h2{font-size:.72rem;text-transform:uppercase;color:#8b949e;margin:6px 4px 8px;letter-spacing:.5px}
+.sitem{padding:8px 9px;border:1px solid #21262d;border-radius:8px;margin-bottom:6px;cursor:pointer;font-size:.82rem}
+.sitem:hover{border-color:#1f6feb;background:#161b22}
+.sitem .t{font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.sitem .m{color:#8b949e;font-size:.72rem;margin-top:2px}
+.main{flex:1;min-width:0;display:flex;flex-direction:column}
+.msgs{flex:1;overflow:auto;padding:18px;display:flex;flex-direction:column;gap:12px}
+.bubble{max-width:860px;width:100%;margin:0 auto;line-height:1.7}
+.bubble.user{background:#161b22;border:1px solid #30363d;border-radius:12px;padding:10px 13px;white-space:pre-wrap}
+.step{background:#0f1620;border:1px solid #21262d;border-left:3px solid #1f6feb;border-radius:8px;padding:7px 10px;font-size:.83rem;font-family:ui-monospace,Consolas,monospace;color:#c9d1d9;overflow-x:auto}
+.step .nm{color:#58a6ff;font-weight:700}
+.step .rs{color:#8b949e;white-space:pre-wrap;display:block;margin-top:4px;max-height:200px;overflow:auto}
+.answer{white-space:pre-wrap}
+.barwrap{border-top:1px solid #21262d;background:#161b22;padding:10px 14px}
+.ctl{display:flex;gap:8px;align-items:center;margin-bottom:8px;flex-wrap:wrap}
+select,input,textarea,button{font:inherit;color:#e6edf3;background:#0d1117;border:1px solid #30363d;border-radius:8px}
+select,#budget{padding:6px 8px}
+#budget{width:90px}
+.lbl{font-size:.78rem;color:#8b949e}
+.iorow{display:flex;gap:8px;align-items:flex-end}
+#prompt{flex:1;resize:none;padding:10px;min-height:46px;max-height:160px;line-height:1.5}
+button.act{cursor:pointer;font-weight:800;padding:0 16px;height:46px;border:none}
+#sendBtn{background:#238636;color:#fff}
+#sendBtn:disabled{background:#30363d;color:#8b949e;cursor:not-allowed}
+#cancelBtn{background:#da3633;color:#fff;display:none}
+.status{font-size:.78rem;color:#8b949e}
+.status .err{color:#f85149}
+.status .ok{color:#3fb950}
+.empty{color:#8b949e;text-align:center;margin:auto;font-size:.9rem}
+@media(max-width:760px){.side{display:none}}
+</style>
+</head>
+<body>
+<div class="top">
+  <h1>🛠️ Stella Claude Code</h1>
+  <nav class="nav">
+    <a href="/">GPT</a><a href="/talk">Talk</a><a href="/db">DB</a><a href="/cc" class="active">Code</a>
+  </nav>
+</div>
+<div class="wrap">
+  <aside class="side">
+    <h2>세션 <button id="refreshBtn" style="float:right;font-size:.7rem;padding:2px 6px;cursor:pointer">↻</button></h2>
+    <div id="sessionList"><div class="lbl" style="padding:8px">불러오는 중…</div></div>
+  </aside>
+  <main class="main">
+    <div class="msgs" id="msgs"><div class="empty">모델을 고르고 코딩 작업을 요청하세요.<br>예: "write fibonacci.py with the first 20 numbers and run it"</div></div>
+    <div class="barwrap">
+      <div class="ctl">
+        <span class="lbl">모델</span>
+        <select id="model"></select>
+        <span class="lbl">예산($)</span>
+        <input id="budget" type="number" min="0.01" max="20" step="0.05" value="0.50">
+        <span class="status" id="status"></span>
+      </div>
+      <div class="iorow">
+        <textarea id="prompt" placeholder="코딩 작업을 입력하세요 (Enter 전송 / Shift+Enter 줄바꿈)"></textarea>
+        <button class="act" id="sendBtn">전송</button>
+        <button class="act" id="cancelBtn">중단</button>
+      </div>
+    </div>
+  </main>
+</div>
+
+<script type="module">
+import { CLAUDE_MODELS, DEFAULT_MODEL, AgentRun, nextDelayMs, buildTranscript } from '/lib/agentcore.mjs';
+
+const $ = (id) => document.getElementById(id);
+const MODEL_KEY = 'stella_cc_model';
+let cur = null;       // { sessionId, model, budgetUsd, title, run, attempt, polling, stopped }
+
+// ── 모델 드롭다운 ──
+(function initModels(){
+  const sel = $('model');
+  sel.innerHTML = CLAUDE_MODELS.map(m => `<option value="${m.id}">${m.label} — ${m.note}</option>`).join('');
+  let saved = null; try { saved = localStorage.getItem(MODEL_KEY); } catch(e){}
+  sel.value = (saved && CLAUDE_MODELS.some(m=>m.id===saved)) ? saved : DEFAULT_MODEL;
+  sel.addEventListener('change', () => { try { localStorage.setItem(MODEL_KEY, sel.value); } catch(e){} });
+})();
+
+function esc(s){ return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+function setStatus(html){ $('status').innerHTML = html || ''; }
+
+function addUserBubble(text){
+  const d = document.createElement('div'); d.className='bubble user'; d.textContent = text;
+  const m=$('msgs'); const empty=m.querySelector('.empty'); if(empty) empty.remove();
+  m.appendChild(d); m.scrollTop=m.scrollHeight;
+}
+
+// 진행 렌더: 같은 run을 한 컨테이너에 다시 그림
+function renderRun(run){
+  let host = cur._host;
+  if(!host){ host=document.createElement('div'); host.className='bubble'; $('msgs').appendChild(host); cur._host=host; }
+  const toolIcon = (n) => n==='bash' ? '🔧' : (n==='write'||n==='str_replace'||n==='edit' ? '✏️' : (n==='read'||n==='view' ? '📄' : '🛠️'));
+  let html = '';
+  for(const t of run.tools){
+    const inp = t.input!=null ? esc(JSON.stringify(t.input)).slice(0,160) : '';
+    html += `<div class="step"><span class="nm">${toolIcon(t.name)} ${esc(t.name)}</span> ${inp}` +
+            (t.result!=null ? `<span class="rs">${esc(typeof t.result==='string'?t.result:JSON.stringify(t.result)).slice(0,800)}</span>`:'') + `</div>`;
+  }
+  if(run.text) html += `<div class="answer">${esc(run.text)}</div>`;
+  host.innerHTML = html;
+  $('msgs').scrollTop = $('msgs').scrollHeight;
+}
+
+async function poll(){
+  if(!cur || cur.stopped) return;
+  try{
+    const r = await fetch('/api/cc/events?session='+encodeURIComponent(cur.sessionId)+'&after='+cur.run.cursor);
+    const d = await r.json();
+    if(d.events && d.events.length) cur.run.ingest(d.events);
+    renderRun(cur.run);
+    if(d.cost!=null) setStatus(`상태: ${cur.run.status} · 비용 약 $${Number(d.cost).toFixed(3)}${d.budget?(' / $'+Number(d.budget).toFixed(2)):''}`);
+    if(cur.run.done){ return finish(); }
+    cur.attempt++;
+    cur._timer = setTimeout(poll, nextDelayMs(cur.attempt));
+  }catch(e){
+    cur.attempt++;
+    if(cur.attempt>8){ setStatus('<span class="err">이벤트 폴링 실패: '+esc(e.message)+'</span>'); finish(true); return; }
+    cur._timer = setTimeout(poll, nextDelayMs(cur.attempt));
+  }
+}
+
+async function finish(failed){
+  setUIBusy(false);
+  const run = cur.run;
+  if(run.status==='error') setStatus('<span class="err">종료: '+esc(run.error||'error')+'</span>');
+  else setStatus('<span class="ok">완료 ✓</span>');
+  // 트랜스크립트 Drive 저장 (best-effort)
+  if(!failed){
+    try{
+      const md = buildTranscript({ title:cur.title, model:cur.model, prompt:cur.prompt, run });
+      await fetch('/api/cc/save',{method:'POST',headers:{'Content-Type':'application/json'},
+        body:JSON.stringify({ session:cur.sessionId, markdown:md, title:cur.title, status:run.status })});
+    }catch(e){}
+  }
+  loadSessions();
+}
+
+function setUIBusy(busy){
+  $('sendBtn').disabled = busy;
+  $('cancelBtn').style.display = busy ? 'block' : 'none';
+  $('model').disabled = busy; $('budget').disabled = busy;
+}
+
+async function send(){
+  const text = $('prompt').value.trim();
+  if(!text) return;
+  $('prompt').value=''; $('prompt').style.height='';
+  const model = $('model').value;
+  const budgetUsd = Math.max(0.01, Math.min(Number($('budget').value)||0.5, 20));
+
+  if(cur && !cur.run.done){ return; } // 진행 중이면 무시(중단 후)
+  addUserBubble(text);
+  setUIBusy(true); setStatus('시작 중…');
+
+  if(cur && cur.sessionId && cur.run && cur.run.done){
+    // 같은 세션 후속 턴
+    cur.run = new AgentRun(); cur.attempt=0; cur.stopped=false; cur._host=null; cur.prompt=text;
+    try{
+      const r=await fetch('/api/cc/turn',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({session:cur.sessionId,prompt:text})});
+      const d=await r.json(); if(!r.ok||d.error) throw new Error(d.message||d.error||'turn 실패');
+      poll();
+    }catch(e){ setStatus('<span class="err">'+esc(e.message)+'</span>'); setUIBusy(false); }
+    return;
+  }
+  // 신규 세션
+  cur = { sessionId:null, model, budgetUsd, title:text.slice(0,60), run:new AgentRun(), attempt:0, polling:true, stopped:false, prompt:text };
+  try{
+    const r=await fetch('/api/cc/start',{method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({ model, prompt:text, title:cur.title, budgetUsd })});
+    const d=await r.json(); if(!r.ok||d.error) throw new Error(d.message||d.error||'start 실패');
+    cur.sessionId=d.sessionId; cur.model=d.model; cur.budgetUsd=d.budgetUsd;
+    setStatus('세션 '+d.sessionId.slice(0,12)+'… 진행 중'); poll();
+  }catch(e){ setStatus('<span class="err">'+esc(e.message)+'</span>'); setUIBusy(false); cur=null; }
+}
+
+async function cancel(){
+  if(!cur || !cur.sessionId) return;
+  setStatus('중단 요청…');
+  try{ await fetch('/api/cc/cancel',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({session:cur.sessionId})}); }catch(e){}
+}
+
+async function loadSessions(){
+  try{
+    const r=await fetch('/api/cc/sessions'); const d=await r.json();
+    const items=d.items||[];
+    const host=$('sessionList');
+    if(!items.length){ host.innerHTML='<div class="lbl" style="padding:8px">세션 없음</div>'; return; }
+    host.innerHTML=items.map(x=>`<div class="sitem" data-id="${esc(x.id)}" data-model="${esc(x.model)}" data-title="${esc(x.title)}">
+      <div class="t">${esc(x.title||'세션')}</div>
+      <div class="m">${esc(x.model||'')} · ${esc(x.status||'')}${x.cost_usd?(' · $'+Number(x.cost_usd).toFixed(3)):''}</div></div>`).join('');
+    host.querySelectorAll('.sitem').forEach(el=>el.addEventListener('click',()=>resume(el.dataset.id, el.dataset.model, el.dataset.title)));
+  }catch(e){ $('sessionList').innerHTML='<div class="lbl" style="padding:8px">목록 로드 실패</div>'; }
+}
+
+function resume(id, model, title){
+  if(cur && cur._timer) clearTimeout(cur._timer);
+  $('msgs').innerHTML='';
+  cur = { sessionId:id, model:model||DEFAULT_MODEL, title:title||'세션', run:new AgentRun(), attempt:0, stopped:false, prompt:'(재개)' };
+  setUIBusy(true); setStatus('세션 재개 — 이벤트 로드 중…'); poll();
+}
+
+// ── 입력: Enter 전송 / Shift+Enter 줄바꿈 / IME 보호 / 모바일 줄바꿈 ──
+$('prompt').addEventListener('keydown', function(e){
+  if(e.key==='Enter'||e.keyCode===13){
+    if(e.isComposing||e.keyCode===229) return;
+    if(e.shiftKey) return;
+    const coarse=(window.matchMedia&&window.matchMedia('(pointer: coarse)').matches);
+    if(coarse) return; // 모바일: 줄바꿈, 전송은 버튼
+    e.preventDefault(); send();
+  }
+});
+$('prompt').addEventListener('input',function(){ this.style.height='auto'; this.style.height=Math.min(this.scrollHeight,160)+'px'; });
+$('sendBtn').addEventListener('click', send);
+$('cancelBtn').addEventListener('click', cancel);
+$('refreshBtn').addEventListener('click', loadSessions);
+
+loadSessions();
+if('serviceWorker' in navigator){ navigator.serviceWorker.register('/sw.js').catch(function(){}); }
+</script>
+</body>
+</html>
