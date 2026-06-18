@@ -1,4 +1,4 @@
-// tests/test_agentcore.mjs — Stella Claude Code 핵심 로직 단위 테스트 (의존성 0)
+// tests/test_agentcore.mjs — Stella Agent Code 핵심 로직 단위 테스트 (의존성 0)
 import { CLAUDE_MODELS, DEFAULT_MODEL, isValidModel, resolveModel, AgentRun, nextDelayMs, buildTranscript } from "../lib/agentcore.mjs";
 
 let pass = 0, fail = 0;

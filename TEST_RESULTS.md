@@ -1,4 +1,4 @@
-# TEST RESULTS — Stella Claude Code (워크스페이스 코딩 에이전트)
+# TEST RESULTS — Stella Agent Code (워크스페이스 코딩 에이전트)
 
 실행 시각: 2026-06-18 10:52:04 UTC
 환경: node v22.22.2 (의존성 0, `node tests/*.mjs`)
