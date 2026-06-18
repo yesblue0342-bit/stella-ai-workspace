@@ -15,6 +15,8 @@
     { "source": "/hub", "destination": "/hub.html" },
     { "source": "/stella-hub", "destination": "/hub.html" },
     { "source": "/cc", "destination": "/cc.html" },
+    { "source": "/abap", "destination": "/abap.html" },
+    { "source": "/stella-abap", "destination": "/abap.html" },
     { "source": "/code", "destination": "/cc.html" },
     { "source": "/stella-code", "destination": "/cc.html" },
     { "source": "/developer", "destination": "/developer.html" }
