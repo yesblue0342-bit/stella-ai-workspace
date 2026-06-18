@@ -26,10 +26,11 @@
   [후속] 친구/프로필의 디바이스 간 Drive 동기화는 sync-engine 활용 가능(선택).
 
 ## PART C. 버그
-- [~] C1 동영상 — **재생/다운로드 구현**: serverMsgToLocal이 mp4/webm/mov 등을 type 'video'로 감지,
-  렌더가 <video controls> 인라인 재생 + 다운로드 링크(로드 실패 시 링크 폴백). 동영상 첨부를 Drive 업로드
-  경로로 라우팅. (jsdom 6/6)
-  [남음] 대용량(>~4.5MB Vercel payload 한도) 업로드는 서명URL/resumable(drive-upload-url.js) 전환 필요 — 후속.
+- [x] C1 동영상 — **완료**: serverMsgToLocal이 mp4/webm/mov 등을 type 'video'로 감지, 렌더가
+  <video controls> 인라인 재생 + 다운로드 링크. **대용량(>3MB)은 resumable 직접 업로드**로 전환:
+  /api/drive-upload-url(세션) → Google에 직접 PUT(Vercel 4.5MB 한도 우회) → /api/drive-finalize
+  (공개+가족폴더 보관+스트리밍 URL). lib/upload-route.js(임계값) 단위 2/2 + jsdom 흐름 6/6 + 렌더 6/6.
+  [실Drive 검증 대기] 실제 21MB 업로드는 OAuth2 환경변수 필요(배포 후 실계정 확인).
 - [~] C2 진동/무음 — `setNotifyMode('vibrate')`+`navigator.vibrate([120,60,120])`(talk.html:1192) 존재.
   [코드존재/실기기검증대기] (Android Chrome는 사용자 제스처 필요)
 - [x] C3 방 나가기 영구 반영 + 부활 방지 — **완료**:
