@@ -21,7 +21,8 @@ body.dark{
 body{font-family:system-ui,-apple-system,sans-serif;background:var(--bg);color:var(--ink);min-height:100dvh;display:flex;flex-direction:column}
 a{color:var(--accent)}
 .top{display:flex;align-items:center;gap:10px;padding:10px 16px;border-bottom:1px solid var(--line);background:var(--top-bg);position:sticky;top:0;z-index:5}
-.top h1{font-size:1.05rem;font-weight:900}
+.top h1{font-size:1.05rem;font-weight:normal;color:var(--muted)}
+.hamb{font-size:1.05rem;line-height:1;border:1px solid var(--line);border-radius:8px;padding:5px 9px;background:var(--card);color:var(--ink);cursor:pointer;flex:0 0 auto}
 .nav{margin-left:auto;display:flex;gap:6px;flex-wrap:wrap;align-items:center}
 .nav a{font-size:.8rem;text-decoration:none;border:1px solid var(--line);border-radius:8px;padding:5px 9px;color:var(--muted)}
 .nav a.active{background:var(--accent);border-color:var(--accent);color:var(--on-accent)}
@@ -58,14 +59,29 @@ button.act{cursor:pointer;font-weight:800;padding:0 16px;height:46px;border:none
 .status .err{color:var(--err)}
 .status .ok{color:var(--ok)}
 .empty{color:var(--muted);text-align:center;margin:auto;font-size:.9rem}
-@media(max-width:760px){.side{display:none}}
+.side{transition:transform .25s ease}
+.resizer{flex:0 0 auto;width:5px;cursor:col-resize;background:var(--line)}
+.resizer:hover{background:var(--accent)}
+.side-backdrop{display:none;position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:9}
+#fsExit{display:none}
+body.side-collapsed .side,body.side-collapsed .resizer{display:none}
+body.fullscreen-code .top,body.fullscreen-code .side,body.fullscreen-code .resizer{display:none}
+body.fullscreen-code #fsExit{display:block;position:fixed;top:8px;right:10px;z-index:50}
+@media(max-width:760px){
+  .resizer{display:none}
+  .side{position:fixed;top:0;left:0;bottom:0;width:min(280px,82vw);z-index:10;transform:translateX(-110%);box-shadow:2px 0 18px rgba(0,0,0,.35)}
+  body.side-open .side{transform:translateX(0)}
+  body.side-open .side-backdrop{display:block}
+}
 </style>
 </head>
 <body>
 <div class="top">
+  <button type="button" class="hamb" id="hambBtn" title="메뉴 열기/닫기">☰</button>
   <h1>🛠️ Stella Agent Code</h1>
   <nav class="nav">
     <a href="/">🤖 GPT</a><a href="/talk">💬 Talk</a><a href="/db">🗄 DB</a><a href="/hub">🌐 Hub</a><a href="/cc" class="active">🛠 Code</a>
+    <button type="button" class="theme-toggle" id="fsBtn" title="코드 풀스크린">⛶</button>
     <button type="button" class="theme-toggle" id="themeToggle" title="다크/라이트 모드">🌙</button>
   </nav>
 </div>
@@ -74,6 +90,7 @@ button.act{cursor:pointer;font-weight:800;padding:0 16px;height:46px;border:none
     <h2>세션 <button id="refreshBtn" style="float:right;font-size:.7rem;padding:2px 6px;cursor:pointer">↻</button></h2>
     <div id="sessionList"><div class="lbl" style="padding:8px">불러오는 중…</div></div>
   </aside>
+  <div class="resizer" id="resizer" title="사이드바 너비 조절"></div>
   <main class="main">
     <div class="msgs" id="msgs"><div class="empty">모델을 고르고 코딩 작업을 요청하세요.<br>예: "write fibonacci.py with the first 20 numbers and run it"</div></div>
     <div class="barwrap">
@@ -94,6 +111,8 @@ button.act{cursor:pointer;font-weight:800;padding:0 16px;height:46px;border:none
     </div>
   </main>
 </div>
+<div class="side-backdrop" id="sideBackdrop"></div>
+<button type="button" class="theme-toggle" id="fsExit" title="풀스크린 종료">✕ 나가기</button>
 
 <script type="module">
 import { CLAUDE_MODELS, DEFAULT_MODEL, AgentRun, nextDelayMs, buildTranscript } from '/lib/agentcore.mjs';
@@ -117,6 +136,36 @@ function toggleTheme(){
 }
 applyTheme();
 $('themeToggle').addEventListener('click', toggleTheme);
+
+// ── 레이아웃: 햄버거 토글 + 외부클릭 닫기 + 풀스크린 + 드래그 리사이저 ──
+(function initLayout(){
+  const body=document.body, side=document.querySelector('.side'), main=document.querySelector('.main');
+  const isMobile=()=>window.matchMedia('(max-width:760px)').matches;
+  const closeMobile=()=>body.classList.remove('side-open');
+  function toggleSide(){ if(isMobile()) body.classList.toggle('side-open'); else body.classList.toggle('side-collapsed'); }
+  const hb=$('hambBtn'); if(hb) hb.addEventListener('click', e=>{ e.stopPropagation(); toggleSide(); });
+  const bd=$('sideBackdrop'); if(bd) bd.addEventListener('click', closeMobile);
+  if(main) main.addEventListener('click', ()=>{ if(isMobile()) closeMobile(); });
+  document.addEventListener('click', e=>{
+    if(!isMobile() || !body.classList.contains('side-open')) return;
+    if((side&&side.contains(e.target)) || (hb&&hb.contains(e.target))) return;
+    closeMobile();
+  });
+  // 풀스크린(코드 영역 최대화): 헤더+사이드바 숨김
+  const fs=$('fsBtn'), fx=$('fsExit');
+  const toggleFs=()=>body.classList.toggle('fullscreen-code');
+  if(fs) fs.addEventListener('click', toggleFs);
+  if(fx) fx.addEventListener('click', toggleFs);
+  // 데스크톱 사이드바 너비 드래그 (영속)
+  const rz=$('resizer');
+  try{ const w=parseInt(localStorage.getItem('stella_cc_sidew')||'',10); if(w>=180&&w<=520&&side) side.style.width=w+'px'; }catch(e){}
+  if(rz&&side) rz.addEventListener('mousedown', e=>{
+    e.preventDefault(); const sx=e.clientX, sw=side.offsetWidth;
+    const mv=ev=>{ side.style.width=Math.max(180,Math.min(520, sw+(ev.clientX-sx)))+'px'; };
+    const up=()=>{ document.removeEventListener('mousemove',mv); document.removeEventListener('mouseup',up); try{localStorage.setItem('stella_cc_sidew', String(side.offsetWidth));}catch(e){} };
+    document.addEventListener('mousemove',mv); document.addEventListener('mouseup',up);
+  });
+})();
 
 // ── 모델 드롭다운 ──
 (function initModels(){
