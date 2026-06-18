@@ -61,3 +61,23 @@ SKIP: CC_BASE_URL 미설정 — 배포 환경에서 실행하세요.
 - cli:       총 8건: 8 PASS / 0 FAIL
 - 통합:      배포 환경 실행 필요 (SKIPPED)
 - **단위 합계: 27/27 PASS ✅**
+
+---
+
+# Stella Agent Code — 테마 통일 + 세션 산출물 GitHub 저장
+
+`npm test` → **# tests 42  # pass 42  # fail 0** (cc-files 4 + gh-commit 6 신규 포함)
+
+## 작업 A — 다크/라이트 테마 통일 (cc.html ↔ Stella GPT)
+- Stella GPT와 **동일 방식**: `body.dark` 클래스 + **`stella_theme` localStorage 키 공유** + 🌙/☀️ 토글(헤더).
+- CSS 토큰화: `:root`(라이트) + `body.dark`(다크)에 bg/top/side/card/step/ink/muted/line/accent/input/send/cancel/err/ok/on-accent 정의.
+- **하드코딩 색 감사 = 0건**: CSS 규칙(22~61행) 내 `#hex`/`rgb()` 0개(토큰 정의 블록과 per-mode meta theme-color 값 제외).
+- `sw.js` 캐시 `stella-v13 → stella-v14` (+1).
+
+## 작업 B — 세션 산출물 GitHub 저장
+- `lib/cc-files.mjs` `extractFilesFromEvents`: write/create tool_use에서 {path,content} 복원, 최신 write 우선, traversal 차단. 단위 4/4.
+- `lib/gh-commit.mjs`: `outputPath`(stella-agent-output/YYYYMMDD/{title|id}/{path}), `commitMessage`([YYYYMMDD] cc {title} - N files), `ghPutFile`(GET sha→PUT, 신규/업데이트). 단위 6/6 — **토큰이 본문/반환값에 미노출** 검증 포함.
+- `api/cc/save-github.js`: 파일 수집(본문 직접 or 이벤트 폴백) → 커밋 → `github_url` 기록. 토큰 미설정 시 명확한 에러, 파일 없으면 빈 커밋 대신 404.
+- `lib/cc-db.mjs`: `cc_sessions.github_url` 컬럼 ALTER 추가 + `setSessionGithubUrl`.
+- `cc.html`: 세션 완료 시 자동 저장(best-effort) + '💾 GitHub에 저장' 수동 버튼.
+- 실제 커밋/Managed Agents 수집은 GITHUB_TOKEN·ANTHROPIC_API_KEY 등 배포 환경 필요 → 배포 후 실세션 검증.
