@@ -3,6 +3,7 @@
 <title>Stella Talk</title>
 <link rel="manifest" href="/manifest-talk.json">
 <script src="/lib/friends.js"></script>
+<script src="/lib/upload-route.js"></script>
 <meta name="theme-color" content="#7c3aed">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="default">
@@ -1854,6 +1855,32 @@ async function uploadImageToDrive(file){
   return d.imageUrl || d.fallbackUrl || '';
 }
 
+// C1: 대용량(동영상 등) — resumable 세션으로 Google에 직접 업로드(Vercel 4.5MB 한도 우회)
+async function uploadLargeToDrive(file){
+  // 1) 업로드 세션 URL 발급
+  const initRes = await fetch('/api/drive-upload-url',{
+    method:'POST', headers:{'Content-Type':'application/json'},
+    body: JSON.stringify({ fileName:file.name, mimeType:file.type||'application/octet-stream', fileSize:file.size })
+  });
+  const init = await initRes.json();
+  if(!init.ok || !init.uploadUrl) throw new Error(init.message||'업로드 세션 생성 실패');
+  // 2) 파일 바이트를 Google 업로드 URL에 직접 PUT
+  const putRes = await fetch(init.uploadUrl,{ method:'PUT', headers:{'Content-Type':file.type||'application/octet-stream'}, body:file });
+  if(!putRes.ok) throw new Error('업로드 실패('+putRes.status+')');
+  const meta = await putRes.json();
+  if(!meta.id) throw new Error('업로드 응답에 fileId 없음');
+  // 3) 공개 설정 + 가족폴더 보관 + 재생 URL
+  const finRes = await fetch('/api/drive-finalize',{
+    method:'POST', headers:{'Content-Type':'application/json'},
+    body: JSON.stringify({ fileId:meta.id, fileName:file.name, archiveFamily:true })
+  });
+  const fin = await finRes.json();
+  if(!fin.ok) throw new Error(fin.message||'마무리 실패');
+  const isVid = (file.type||'').startsWith('video/') || /\.(mp4|webm|mov|m4v|ogv)$/i.test(file.name);
+  // 동영상은 스트리밍 URL, 이미지는 lh3 썸네일 URL
+  return isVid ? (fin.streamUrl || fin.downloadUrl) : (fin.imageUrl || fin.streamUrl);
+}
+
 // ── 메시지 전송 ──
 async function sendMsg(){
   if(!_cur) return;
@@ -1907,7 +1934,10 @@ async function sendMsg(){
       const origTxt = sendBtn ? sendBtn.textContent : '';
       if(sendBtn){ sendBtn.disabled=true; sendBtn.textContent='업로드 중...'; }
       try{
-        const imageUrl = await uploadImageToDrive(f);
+        // C1: 큰 파일(>3MB)은 resumable 직접 업로드, 작으면 base64
+        const imageUrl = (window.StellaUpload && StellaUpload.useResumable(f.size))
+          ? await uploadLargeToDrive(f)
+          : await uploadImageToDrive(f);
         await fetch('/api/chat-room?action=send',{
           method:'POST', headers:{'Content-Type':'application/json'},
           body: JSON.stringify({
