@@ -11,8 +11,9 @@
   동일 /api/auth 백엔드 → 같은 id/pw로 양쪽 로그인. (코드 확인)
 - [x] A3 독립 가입 — talk.html `doTalkLogin`/가입이 /api/auth(mode signup) 통합계정 생성.
 - [x] A4 로그아웃 — talk/GPT 모두 세션키 제거 후 reload(캐시성 상태 초기화).
-- [~] A1 remember me — 세션이 localStorage에 저장되어 재접속 유지(사실상 항상 remember).
-  명시적 "자동 로그인 체크박스" UI는 미구현 → [부분/UI추가 대기]
+- [~] A1 remember me — **완료(체크박스 UI)**: 로그인 화면에 "자동 로그인 유지" 체크박스 추가.
+  체크 시 localStorage(영구), 해제 시 sessionStorage(브라우저 종료 시 만료) + 선호 저장/복원.
+  getSession이 sessionStorage 폴백. (jsdom 4/4)
 - 마이너 노트: index.html forgotPassword의 로컬 레거시 경로에 `btoa` 해시 사용(서버 SSOT 아님).
   보안 위험 낮으나 추후 제거 권장(서버 PBKDF2가 실제 인증).
 
@@ -32,7 +33,10 @@
     나간 사람/삭제 방 제외. (lib/room-membership.js, 단위테스트 6/6)
   - 클라 deleteRoom: 로컬 left-set tombstone(`stella_talk_left_v1`) 기록 + 서버 leave 호출,
     syncRoomListFromServer가 left-set 방을 재추가하지 않음(부활 방지). (jsdom 4/4)
-- [ ] C4 읽으면 알림 사라짐(Notification.close + 배지 갱신)
+- [x] C4 읽으면 알림 사라짐 — **완료**: `clearTalkNotifications()`가 SW의 `getNotifications({tag})`로
+  떠있는 알림 close + 배지 갱신. openRoom(방 읽음) + visibilitychange/focus(앱 복귀) 시 호출. (jsdom 1/1)
+- [~] C2 진동 — 코드 확인 완료: 수신 시 playNotifySound→mode 'vibrate'→navigator.vibrate([120,60,120]).
+  [실기기 검증 대기] (Android Chrome 제스처 정책)
 - [x] C5 배경 투명도/흐림 — **완료**: `.chat-bg-layer`의 불투명 `background-color:var(--bg)`가
   효과를 가리던 게 원인 → `transparent`로 변경. setBgOpacity/setBgBlur 인라인 적용·저장 검증(jsdom 5/5).
 - [x] C6 배경 되돌리기 — `clearBgImage()`가 초기화 버튼(talk.html)에 이미 연결됨(이미지 제거+설정 초기화). 확인 완료.

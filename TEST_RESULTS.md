@@ -110,3 +110,25 @@ jsdom 5/5: setBgOpacity(0.55) 인라인 적용·라벨·저장, setBgBlur(5) 인
 
 > 남은 항목: A1 자동로그인 체크박스 UI, B 친구, C1 동영상(대용량 업로드 경로), C2 진동(실기기),
 > C4 알림 닫기, D 알림음/PWA, E 실Drive 검증. 다음 반복에서 진행.
+
+---
+
+# Stella Talk 백로그 — 3차 반복 (C4 알림 닫기 · A1 자동로그인 체크박스 · C2 점검)
+
+실행: `npm test` → **# tests 25  # pass 25  # fail 0** (+ jsdom 통합 6/6)
+
+## C4 읽으면 알림 사라짐
+- `clearTalkNotifications()`: SW `reg.getNotifications({tag:'stella-talk-msg'})` → 전부 `close()` + 배지 갱신.
+- 호출 지점: `openRoom`(방 읽음), `visibilitychange`/`focus`(앱 복귀, 방 보고 있을 때).
+- jsdom: 떠있는 알림 2개 모두 close 확인.
+
+## A1 자동 로그인 체크박스
+- 로그인 화면 "자동 로그인 유지" 체크박스(기본 ON).
+- 체크 → `localStorage`(영구) / 해제 → `sessionStorage`(브라우저 종료 시 만료) + `localStorage` 제거.
+- `getSession` sessionStorage 폴백, 선호(`stella_talk_remember`) 저장·복원.
+- jsdom 4/4: localStorage/sessionStorage 라우팅 + getMyId 인식 + 선호 저장.
+
+## C2 진동 — 코드 확인(실기기 대기)
+- 수신 시 `playNotifySound`→mode 'vibrate'→`navigator.vibrate([120,60,120])`. 로직 정상, 실기기 검증만 대기.
+
+> 남은: B 친구, C1 동영상(대용량), D 알림음/PWA, E·C2 실환경 검증. 다음 반복.
