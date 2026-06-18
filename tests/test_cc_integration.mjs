@@ -1,4 +1,4 @@
-// tests/test_cc_integration.mjs — Stella Claude Code 통합 테스트 (실 1회, 저렴: Haiku + 소액 예산)
+// tests/test_cc_integration.mjs — Stella Agent Code 통합 테스트 (실 1회, 저렴: Haiku + 소액 예산)
 // 배포된 프록시를 대상으로 한다. 실행:
 //   CC_BASE_URL=https://stella-ai-workspace.vercel.app node tests/test_cc_integration.mjs
 // CC_BASE_URL 미설정 시 SKIP(과금/키 필요). ANTHROPIC_API_KEY는 서버(Vercel)에만 있으면 된다.

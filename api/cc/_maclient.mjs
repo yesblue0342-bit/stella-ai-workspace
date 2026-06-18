@@ -58,9 +58,9 @@ export async function getOrCreateAgent(model, getMeta, setMeta) {
   const agent = await maFetch("/v1/agents", {
     method: "POST",
     body: {
-      name: "Stella Claude Code (" + model + ")",
+      name: "Stella Agent Code (" + model + ")",
       model,
-      system: "You are Stella Claude Code, an autonomous coding agent running in a sandbox. Write clean, well-documented code, run and verify it, and explain results concisely. Reply in Korean when the user writes Korean.",
+      system: "You are Stella Agent Code, an autonomous coding agent running in a sandbox. Write clean, well-documented code, run and verify it, and explain results concisely. Reply in Korean when the user writes Korean.",
       tools: [{ type: "agent_toolset_20260401" }],
     },
   });
@@ -72,7 +72,7 @@ export async function getOrCreateAgent(model, getMeta, setMeta) {
 export async function createSession(agentId, environmentId, title) {
   const s = await maFetch("/v1/sessions", {
     method: "POST",
-    body: { agent: agentId, environment_id: environmentId, title: title || "Stella Claude Code 세션" },
+    body: { agent: agentId, environment_id: environmentId, title: title || "Stella Agent Code 세션" },
   });
   return s.id;
 }
