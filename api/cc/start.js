@@ -16,7 +16,8 @@ export default async function handler(req, res) {
 
     const environmentId = await MA.getOrCreateEnvironment(getMeta, setMeta);
     const agentId = await MA.getOrCreateAgent(model, useOmc, getMeta, setMeta);
-    const title2 = (title && String(title).trim()) || String(prompt).trim().slice(0, 60);
+    const rawTitle = (title && String(title).trim()) || String(prompt).trim();
+    const title2 = rawTitle.replace(/[\p{Cc}\p{Cf}]/gu, " ").replace(/\s+/g, " ").trim().slice(0, 60) || "Stella Agent Code";
     const sessionId = await MA.createSession(agentId, environmentId, title2);
     await MA.sendUserMessage(sessionId, prompt);
 

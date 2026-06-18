@@ -190,7 +190,7 @@ async function send(){
     return;
   }
   // 신규 세션
-  cur = { sessionId:null, model, budgetUsd, title:text.slice(0,60), run:new AgentRun(), attempt:0, polling:true, stopped:false, prompt:text };
+  cur = { sessionId:null, model, budgetUsd, title:text.replace(/[\p{Cc}\p{Cf}]/gu,' ').replace(/\s+/g,' ').trim().slice(0,60), run:new AgentRun(), attempt:0, polling:true, stopped:false, prompt:text };
   try{
     const r=await fetch('/api/cc/start',{method:'POST',headers:{'Content-Type':'application/json'},
       body:JSON.stringify({ model, prompt:text, title:cur.title, budgetUsd, omc: $('omc').checked })});
