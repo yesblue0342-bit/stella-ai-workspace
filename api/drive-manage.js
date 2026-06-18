@@ -1,4 +1,5 @@
 import { google } from "googleapis";
+import { repairMojibakePath } from "../lib/zipname.js";
 
 // googleapis drive 인스턴스
 function getDriveClient() {
@@ -67,8 +68,10 @@ async function unzipToDrive({ fileId, parentId }) {
   let uploaded = 0;
   const errors = [];
 
-  for (const [path, data] of entries) {
+  for (const [rawPath, data] of entries) {
     try {
+      // 한글(CP949) 파일/폴더명 깨짐 복구 후 사용
+      const path = repairMojibakePath(rawPath);
       if (path.endsWith("/") && data.length === 0) continue;
       if (path.startsWith("__MACOSX/") || path.includes("/.DS_Store")) continue;
       const parts = path.split("/");
@@ -88,7 +91,7 @@ async function unzipToDrive({ fileId, parentId }) {
       }
       await uploadFileToDrive({ parentId: curParent, fileName, mimeType: "application/octet-stream", buf: Buffer.from(data) });
       uploaded++;
-    } catch (e) { errors.push(`${path}: ${e.message}`); }
+    } catch (e) { errors.push(`${rawPath}: ${e.message}`); }
   }
   return { uploaded, errors, total: entries.filter(([p]) => !p.endsWith("/")).length };
 }
