@@ -72,8 +72,59 @@ async function getFile(config, path) {
   return githubFetch(config, url);
 }
 
+function ghToken() {
+  return clean(process.env.GITHUB_TOKEN || process.env.GH_TOKEN || process.env.STELLA_GITHUB_TOKEN);
+}
+function ghOwner() {
+  const repo = clean(process.env.GITHUB_REPO || process.env.GITHUB_REPOSITORY || process.env.STELLA_GITHUB_REPO) || DEFAULT_REPO;
+  return repo.split("/")[0] || "yesblue0342-bit";
+}
+async function ghGet(url, token) {
+  const headers = { "Accept": "application/vnd.github+json", "X-GitHub-Api-Version": "2022-11-28" };
+  if (token) headers.Authorization = `Bearer ${token}`;
+  const r = await fetch(url, { headers });
+  const text = await r.text();
+  let data; try { data = text ? JSON.parse(text) : {}; } catch { data = { raw: text }; }
+  if (!r.ok) { const e = new Error(data.message || `GitHub API 오류: ${r.status}`); e.status = r.status; e.data = data; throw e; }
+  return data;
+}
+// 레포 목록: 토큰 있으면 /user/repos(공개+비공개), 없으면 /users/{owner}/repos(공개만)
+async function listRepos() {
+  const token = ghToken(), owner = ghOwner();
+  const url = token
+    ? "https://api.github.com/user/repos?visibility=all&affiliation=owner,collaborator,organization_member&per_page=100&sort=updated"
+    : `https://api.github.com/users/${encodeURIComponent(owner)}/repos?per_page=100&sort=updated`;
+  const data = await ghGet(url, token);
+  const repos = (Array.isArray(data) ? data : []).map((x) => ({
+    name: x.name, full_name: x.full_name, owner: (x.owner && x.owner.login) || owner,
+    default_branch: x.default_branch || "main", private: !!x.private,
+    language: x.language || "", description: x.description || "", stargazers_count: x.stargazers_count || 0, updated_at: x.updated_at,
+  }));
+  return { authenticated: !!token, owner, count: repos.length, repos };
+}
+// 임의 레포 콘텐츠(디렉터리/파일) 읽기: 토큰 있으면 비공개 접근
+async function readContents(owner, repo, path, ref) {
+  const token = ghToken();
+  const p = String(path || "").split("/").filter(Boolean).map(encodeURIComponent).join("/");
+  let url = `https://api.github.com/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}/contents/${p}`;
+  if (ref) url += `?ref=${encodeURIComponent(ref)}`;
+  const data = await ghGet(url, token);
+  if (Array.isArray(data)) return { type: "dir", items: data.map((x) => ({ name: x.name, path: x.path, type: x.type, sha: x.sha, size: x.size || 0 })) };
+  return { type: "file", name: data.name, path: data.path, sha: data.sha, size: data.size || 0, encoding: data.encoding, content: data.content || "", download_url: data.download_url || null };
+}
+
 export default async function handler(req, res) {
   try {
+    // 토큰 선택적 액션(공개는 토큰 없이, 비공개는 토큰 있을 때) — getConfig(토큰 필수)보다 먼저
+    if (req.method === "GET" && clean(req.query?.action) === "repos") {
+      return res.status(200).json({ ok: true, ...(await listRepos()) });
+    }
+    if (req.method === "GET" && clean(req.query?.action) === "contents") {
+      const owner = clean(req.query?.owner), repo = clean(req.query?.repo);
+      if (!owner || !repo) return res.status(400).json({ ok: false, message: "owner, repo required" });
+      return res.status(200).json({ ok: true, ...(await readContents(owner, repo, clean(req.query?.path), clean(req.query?.ref))) });
+    }
+
     const config = getConfig();
 
     if (req.method === "GET") {

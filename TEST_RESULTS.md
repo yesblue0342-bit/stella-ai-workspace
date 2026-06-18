@@ -1,32 +1,36 @@
-# TEST RESULTS — cc.html UI 개선 (헤더/햄버거/풀스크린/리사이저)
+# TEST RESULTS — Stella Hub 비공개 레포 표시
 
-실행 시각: 2026-06-18 15:49:31 UTC · node v22.22.2
+실행 시각: 2026-06-18 16:09:44 UTC · node v22.22.2
+
+## 변경
+- api/github.js: action=repos(토큰 있으면 /user/repos 공개+비공개, 없으면 /users/{owner} 공개),
+  action=contents(토큰 있으면 비공개 디렉터리/파일 읽기). 토큰은 서버 env에만(클라이언트 비노출).
+- hub.html: 프록시 경유 목록 + 🔒비공개/🌐공개 배지, 비공개 레포 탐색·미리보기(base64),
+  프록시 실패 시 비인증 공개 폴백.
+- sw stella-v16 → v17.
 
 ## 정적 검증
-- cc.html `<script type="module">` node --check 통과
-- 구조: #hambBtn, #fsBtn, #fsExit, #sideBackdrop, #resizer, .side-collapsed/.side-open/.fullscreen-code 규칙 존재
-- sw.js CACHE = stella-v16
+- api/github.js node --check 통과 · hub.html 인라인 JS 문법 통과(bad=0).
 
-## 동작 검증 — tests/test_cc_ui.mjs (실제 initLayout 핸들러를 jsdom에서 실행)
+## 동작 검증 — tests/test_hub.mjs (fetch 모킹, 무과금)
 ```
-PASS  데스크톱: 햄버거 → side-collapsed 추가
-PASS  데스크톱: 햄버거 재클릭 → 해제
-PASS  모바일: 햄버거 → side-open
-PASS  모바일: 코드영역 클릭 → side-open 해제
-PASS  모바일: 백드롭 클릭 → 닫힘
-PASS  풀스크린 버튼 → fullscreen-code 추가
-PASS  풀스크린 종료 → 해제
+PASS  repos: ok + repos 배열(2)
+PASS  repos: private 플래그 매핑(공개/비공개 구분)
+PASS  repos: authenticated 필드 존재
+PASS  contents dir → type=dir + items
+PASS  contents file → type=file + base64 content
+PASS  contents owner/repo 누락 → 400
 
-총 7건: 7 PASS / 0 FAIL
+총 6건: 6 PASS / 0 FAIL
 ```
 
-## 회귀 (기존 테스트 영향 없음)
-- agentcore: 총 19건: 19 PASS / 0 FAIL
-- cli:       총 8건: 8 PASS / 0 FAIL
+## 회귀 (영향 없음)
+- cc_ui: 총 7건: 7 PASS / 0 FAIL
 - memory smoke: 총 16건: 16 PASS / 0 FAIL
 
-## 작업별 결과
-- A 헤더 색상: 헤더 텍스트/아이콘 CSS변수(--ink/--muted)로 다크·라이트 모두 가독.
-- B 제목 글씨: font-weight normal + var(--muted)(회색) → 진하지 않고 은은하게.
-- C 햄버거: 데스크톱=사이드바 접기/펼치기, 모바일=슬라이드 오버레이, 코드영역/백드롭 클릭 시 닫힘. (7/7 PASS)
-- D 풀스크린: ⛶ 버튼 → 헤더+사이드바 숨김(코드 100%), '✕ 나가기'로 복귀. + 데스크톱 드래그 리사이저(180~520px, 영속).
+## 배포 후 실제 동작(토큰 필요 — 외부 의존)
+- Vercel env GITHUB_TOKEN(또는 GH_TOKEN/STELLA_GITHUB_TOKEN) 설정 시 → /hub 에 비공개 레포가 🔒 배지로 표시되고 탐색·미리보기 가능.
+- 토큰 없으면 → 공개 레포만(🌐), 기존과 동일.
+
+## 보안
+- GitHub 토큰은 서버 프록시(api/github.js)에서만 사용. 클라이언트 코드/응답에 토큰 비노출. 시크릿 스캔 0.

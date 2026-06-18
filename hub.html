@@ -29,6 +29,11 @@ a{color:var(--primary)}
 .repo.active{border-color:var(--primary);background:var(--bg3)}
 .repo .t{font-weight:700}
 .repo .m{color:var(--text2);font-size:.72rem;margin-top:2px}
+.repo-badge{font-size:.64rem;font-weight:700;padding:1px 6px;border-radius:999px;vertical-align:middle;white-space:nowrap}
+.repo-badge.priv{background:#7c2d12;color:#fed7aa}
+.repo-badge.pub{background:#14532d;color:#bbf7d0}
+body.light .repo-badge.priv{background:#fde68a;color:#92400e}
+body.light .repo-badge.pub{background:#dcfce7;color:#166534}
 .tree{font-size:.83rem}
 .node{padding:3px 4px;border-radius:6px;cursor:pointer;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .node:hover{background:var(--bg3)}
@@ -120,23 +125,36 @@ async function ghApi(path){
   return body;
 }
 
-// ── 공개 레포 목록 ──
+// ── 레포 목록 (공개+비공개; 토큰 있으면 비공개 포함, 서버 프록시 경유) ──
 async function loadRepos(){
   $('repoList').innerHTML='<div class="note" style="padding:8px">불러오는 중… <span class="spin"></span></div>';
   try{
-    const repos = await ghApi('/users/'+OWNER+'/repos?per_page=100&sort=updated');
-    const pub = (repos||[]).filter(r=>!r.private);
-    if(!pub.length){ $('repoList').innerHTML='<div class="note" style="padding:8px">공개 레포가 없습니다.</div>'; return; }
-    $('repoList').innerHTML = pub.map(r=>`<div class="repo" data-name="${esc(r.name)}" data-branch="${esc(r.default_branch||'main')}">
-      <div class="t">${esc(r.name)}</div>
-      <div class="m">${esc(r.language||'')}${r.stargazers_count?(' · ★'+r.stargazers_count):''}${r.description?(' · '+esc(r.description)):''}</div></div>`).join('');
-    $('repoList').querySelectorAll('.repo').forEach(el=>el.addEventListener('click',()=>openRepo(el.dataset.name, el.dataset.branch, el)));
+    let repos, authed=false;
+    try{
+      const d = await (await fetch('/api/github?action=repos')).json();
+      if(d && d.ok && Array.isArray(d.repos)){ repos=d.repos; authed=!!d.authenticated; }
+      else throw new Error((d&&d.message)||'repos 로드 실패');
+    }catch(_){
+      // 폴백: 비인증 공개만 (토큰 미설정/프록시 오류 시)
+      const pub = await ghApi('/users/'+OWNER+'/repos?per_page=100&sort=updated');
+      repos = (pub||[]).filter(r=>!r.private).map(r=>({ name:r.name, owner:OWNER, default_branch:r.default_branch||'main', private:false, language:r.language||'', description:r.description||'', stargazers_count:r.stargazers_count||0 }));
+    }
+    if(!repos.length){ $('repoList').innerHTML='<div class="note" style="padding:8px">표시할 레포가 없습니다.</div>'; return; }
+    const privN = repos.filter(r=>r.private).length;
+    const head = authed ? '<div class="note" style="padding:4px 8px">공개+비공개 '+repos.length+'개 (🔒 '+privN+')</div>' : '<div class="note" style="padding:4px 8px">공개 '+repos.length+'개 (토큰 설정 시 비공개도 표시)</div>';
+    $('repoList').innerHTML = head + repos.map(r=>{
+      const badge = r.private ? '<span class="repo-badge priv">🔒 비공개</span>' : '<span class="repo-badge pub">🌐 공개</span>';
+      return '<div class="repo" data-name="'+esc(r.name)+'" data-owner="'+esc(r.owner||OWNER)+'" data-branch="'+esc(r.default_branch||'main')+'" data-private="'+(r.private?1:0)+'">'
+        + '<div class="t">'+esc(r.name)+' '+badge+'</div>'
+        + '<div class="m">'+esc(r.language||'')+(r.stargazers_count?(' · ★'+r.stargazers_count):'')+(r.description?(' · '+esc(r.description)):'')+'</div></div>';
+    }).join('');
+    $('repoList').querySelectorAll('.repo').forEach(el=>el.addEventListener('click',()=>openRepo(el.dataset.name, el.dataset.branch, el, el.dataset.owner, el.dataset.private==='1')));
   }catch(e){ $('repoList').innerHTML='<div class="err" style="padding:8px">'+esc(e.message)+'</div>'; }
 }
 
 // ── 레포 열기 → 루트 트리 ──
-async function openRepo(name, branch, el){
-  curRepo = { name, default_branch: branch||'main' };
+async function openRepo(name, branch, el, owner, isPrivate){
+  curRepo = { name, default_branch: branch||'main', owner: owner||OWNER, private: !!isPrivate };
   document.querySelectorAll('.repo').forEach(x=>x.classList.remove('active'));
   if(el) el.classList.add('active');
   $('treeTitle').style.display='';
@@ -153,8 +171,16 @@ async function openRepo(name, branch, el){
 }
 
 async function loadDir(path){
-  const items = await ghApi('/repos/'+OWNER+'/'+curRepo.name+'/contents/'+path.split('/').map(encodeURIComponent).join('/'));
-  return H.sortContents(Array.isArray(items)?items:[]);
+  try{
+    const u='/api/github?action=contents&owner='+encodeURIComponent(curRepo.owner)+'&repo='+encodeURIComponent(curRepo.name)+'&path='+encodeURIComponent(path)+'&ref='+encodeURIComponent(curRepo.default_branch);
+    const d=await (await fetch(u)).json();
+    if(d && d.ok && d.type==='dir') return H.sortContents(d.items||[]);
+    throw new Error((d&&d.message)||'contents 로드 실패');
+  }catch(err){
+    if(curRepo.private) throw err; // 비공개는 비인증 폴백 불가
+    const items = await ghApi('/repos/'+curRepo.owner+'/'+curRepo.name+'/contents/'+path.split('/').map(encodeURIComponent).join('/'));
+    return H.sortContents(Array.isArray(items)?items:[]);
+  }
 }
 
 function renderNodes(host, items, parentPath){
@@ -189,13 +215,31 @@ function renderNodes(host, items, parentPath){
 // ── 파일 미리보기/다운로드 ──
 async function openFile(it){
   const branch=curRepo.default_branch;
-  const raw=H.rawUrl(OWNER, curRepo.name, branch, it.path);
   $('pvPath').textContent=curRepo.name+'/'+it.path;
-  const dl=$('dlBtn'); dl.style.display=''; dl.href=raw; dl.setAttribute('download', it.name);
   const kind=H.classify(it.name);
+  const dl=$('dlBtn');
+  if(curRepo.private){
+    // 비공개: 서버 프록시(토큰)로 base64 받아 미리보기/다운로드 (raw URL은 비공개 접근 불가)
+    $('pvBody').innerHTML='<div class="note">불러오는 중… <span class="spin"></span></div>';
+    try{
+      const u='/api/github?action=contents&owner='+encodeURIComponent(curRepo.owner)+'&repo='+encodeURIComponent(curRepo.name)+'&path='+encodeURIComponent(it.path)+'&ref='+encodeURIComponent(branch);
+      const d=await (await fetch(u)).json();
+      if(!d.ok || d.type!=='file') throw new Error((d&&d.message)||'파일 로드 실패');
+      const bytes=Uint8Array.from(atob((d.content||'').replace(/\s/g,'')), c=>c.charCodeAt(0));
+      const url=URL.createObjectURL(new Blob([bytes]));
+      dl.style.display=''; dl.href=url; dl.setAttribute('download', it.name);
+      if(kind==='image'){ $('pvBody').innerHTML='<img class="pv-img" alt="'+esc(it.name)+'" src="'+url+'">'; return; }
+      if(kind==='binary'){ $('pvBody').innerHTML='<div class="empty">바이너리 파일입니다.<br>「⬇ 다운로드」로 내려받으세요.</div>'; return; }
+      const txt=new TextDecoder('utf-8').decode(bytes);
+      $('pvBody').innerHTML='<pre class="code">'+esc(txt)+'</pre>';
+    }catch(e){ $('pvBody').innerHTML='<div class="err">미리보기 실패: '+esc(e.message)+'</div>'; }
+    return;
+  }
+  // 공개: 기존 raw 방식
+  const raw=H.rawUrl(curRepo.owner, curRepo.name, branch, it.path);
+  dl.style.display=''; dl.href=raw; dl.setAttribute('download', it.name);
   if(kind==='image'){ $('pvBody').innerHTML='<img class="pv-img" alt="'+esc(it.name)+'" src="'+esc(raw)+'">'; return; }
   if(kind==='binary'){ $('pvBody').innerHTML='<div class="empty">바이너리 파일입니다. <br>「⬇ 다운로드」로 내려받으세요.<br><span class="note">'+esc(it.name)+(it.size?(' · '+Math.round(it.size/1024)+'KB'):'')+'</span></div>'; return; }
-  // 텍스트: raw 본문 로드
   $('pvBody').innerHTML='<div class="note">불러오는 중… <span class="spin"></span></div>';
   try{
     const r=await fetch(raw); const txt=await r.text();
