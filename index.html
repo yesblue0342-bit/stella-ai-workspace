@@ -1050,7 +1050,8 @@ function renderAnswer(el,text){try{const stamp=new Date().toISOString().replace(
 window.addEventListener('resize',syncSidebarLayout);
 window.addEventListener('DOMContentLoaded',()=>{ensureModelOptions();initEvents();initAuth();syncSidebarLayout()});
 </script>
-<script>if('serviceWorker' in navigator){navigator.serviceWorker.register('/sw.js').catch(function(){});}window.addEventListener('appinstalled',function(){});</script></body>
+<script src="/js/stella-memory.js"></script>
+<script>if('serviceWorker' in navigator){navigator.serviceWorker.register('/sw.js').catch(function(){});}window.addEventListener('appinstalled',function(){});try{if(window.StellaMemory&&window.user&&user.id)StellaMemory.setUser(user.id);}catch(e){}</script></body>
 </html>
 
 

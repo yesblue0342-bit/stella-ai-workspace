@@ -1,5 +1,6 @@
 import { detectSmartIntent, getSmartContextForMessage } from "../lib/place-weather-utils.js";
 import { saveJsonToDrive, readJsonFromDrive, listJsonFromDrive, buildDriveContextForChat } from "../lib/drive-utils.js";
+import { buildMemoryContext, saveMemory as saveMemoryAzure } from "../lib/memory-db.mjs";
 
 // 이미지 base64 전송을 위해 body 크기 제한 상향
 export const config = {
@@ -382,8 +383,12 @@ export default async function handler(req, res) {
     // - 그 외엔 기본 파일만 빠르게 로드 (폴더 스캔 없음)
     const needsFullMemory = history.length === 0
       || /기억|메모리|이전|내 정보|나에 대해|알고 있|히스토리/.test(msg);
-    const memory = await loadMemory(userId, needsFullMemory);
-    const memoryPrompt = memoryToPrompt(memory);
+    // 메모리: Azure SQL 우선 → 실패/빈값이면 기존 Drive 메모리로 폴백(데이터 유실 방지, soft 전환)
+    let memoryPrompt = await buildMemoryContext(userId);
+    if (!memoryPrompt) {
+      const memory = await loadMemory(userId, needsFullMemory);
+      memoryPrompt = memoryToPrompt(memory);
+    }
     const prompt = buildSystemPrompt(
       (memoryPrompt ? memoryPrompt + "\n\n" : "") + system,
       searchContext,
@@ -409,7 +414,17 @@ export default async function handler(req, res) {
           model, history, message: aiMessage, answer, isClaudeModel
         });
         if (newItems && Object.values(newItems).some(a => Array.isArray(a) && a.length > 0)) {
-          await updateMemory(userId, newItems, isClaudeModel);
+          await updateMemory(userId, newItems, isClaudeModel); // Drive(폴백 보존)
+          // Azure SQL에도 기록(우선 백엔드). 각 항목을 메모리 행으로 dedupe 저장. graceful.
+          try {
+            for (const [cat, arr] of Object.entries(newItems)) {
+              if (!Array.isArray(arr)) continue;
+              for (const item of arr) {
+                const t = typeof item === "string" ? item : (item && (item.text || item.memory_text));
+                if (t && String(t).trim()) await saveMemoryAzure(userId, { memory_text: String(t).trim(), category: cat, source: "ai_inferred" });
+              }
+            }
+          } catch (e2) {}
         }
       } catch(e) { console.warn("[Memory] 업데이트 실패:", e.message); }
     });
