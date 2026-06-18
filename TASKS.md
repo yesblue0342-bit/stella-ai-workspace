@@ -24,8 +24,10 @@
 - 메모: api/user-search.js 존재(아이디 검색 토대).
 
 ## PART C. 버그
-- [ ] C1 동영상 재생/다운로드 (대용량 ~21MB) — 근본원인: drive-upload bodyParser 10mb 한도 →
-  base64 21MB(≈28MB) 초과로 실패. 해결: drive-upload-url.js(서명 URL/resumable) 경로로 전환 필요.
+- [~] C1 동영상 — **재생/다운로드 구현**: serverMsgToLocal이 mp4/webm/mov 등을 type 'video'로 감지,
+  렌더가 <video controls> 인라인 재생 + 다운로드 링크(로드 실패 시 링크 폴백). 동영상 첨부를 Drive 업로드
+  경로로 라우팅. (jsdom 6/6)
+  [남음] 대용량(>~4.5MB Vercel payload 한도) 업로드는 서명URL/resumable(drive-upload-url.js) 전환 필요 — 후속.
 - [~] C2 진동/무음 — `setNotifyMode('vibrate')`+`navigator.vibrate([120,60,120])`(talk.html:1192) 존재.
   [코드존재/실기기검증대기] (Android Chrome는 사용자 제스처 필요)
 - [x] C3 방 나가기 영구 반영 + 부활 방지 — **완료**:
@@ -44,8 +46,8 @@
   jsdom 테스트로 검증됨(test 이력). [검증완료]
 
 ## PART D. 알림음/PWA
-- [ ] D1 알림음 옵션 추가(가족 음성) + mp3 배치 경로 안내
-- [ ] D2 웹→PWA 설치 유도(manifest/SW 점검)
+- [x] D1 알림음 옵션 추가 — '👑 앵쥬 왕비님~'(queen) 보이스 추가(TALK_VOICES+UI), mp3 슬롯+sounds/README.md 안내. (jsdom 4/4)
+- [x] D2 PWA 설치 유도 — beforeinstallprompt 캡처 → 설정의 '📲 앱 설치' 버튼 노출, prompt() 호출, appinstalled 처리. iOS는 수동 안내. (jsdom 2/2)
 
 ## PART E. 첨부 Drive 보관 (KST 날짜별)  ← 이번 반복
 - [x] E: KST 날짜 유틸 `lib/kst-date.js` + 단위테스트(자정/연월 경계) — 7/7 PASS
