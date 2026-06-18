@@ -378,6 +378,10 @@ body.theme-dark .theme-btn.active{background:#1e3a5f}
     <button class="hbtn" onclick="openSoundSettings()">🔔 알림음</button>
     </div>
     <div class="sp-section">앱</div>
+    <div class="sp-row" id="installRow" style="display:none">
+      <label>홈 화면에 설치</label>
+      <button class="hbtn" onclick="installTalkApp()" style="background:#16a34a;color:#fff;font-weight:700">📲 앱 설치</button>
+    </div>
     <div class="sp-row">
       <label>최신 버전 받기</label>
       <button class="hbtn" onclick="forceUpdate()" style="background:var(--accent);color:#fff;font-weight:700">🔄 강제 업데이트</button>
@@ -402,6 +406,7 @@ body.theme-dark .theme-btn.active{background:#1e3a5f}
       <button class="sound-opt" onclick="previewSound('byeolping')" data-key="byeolping">💫 우리 별핑~</button>
       <button class="sound-opt" onclick="previewSound('gongju')" data-key="gongju">👸 별하 공주님~</button>
       <button class="sound-opt" onclick="previewSound('byeolha')" data-key="byeolha">🌟 김별하~</button>
+      <button class="sound-opt" onclick="previewSound('queen')" data-key="queen">👑 앵쥬 왕비님~</button>
     </div>
     <button class="btn-primary" onclick="closeModal('soundSettingsModal');toast('알림 설정이 저장되었습니다')">확인</button>
   </div>
@@ -897,6 +902,8 @@ function serverMsgToLocal(m){
       || /(jpg|jpeg|png|gif|webp)$/i.test(fName)
       || /^image\//.test(fMime)){
       msgType = 'image';
+    } else if(/(mp4|webm|mov|m4v|ogv)$/i.test(fName) || /^video\//.test(fMime)){
+      msgType = 'video';   // C1: 동영상 인라인 재생/다운로드
     } else {
       msgType = 'file';
     }
@@ -1084,12 +1091,16 @@ var TALK_VOICES = {
   's2':        {emoji:'✨', label:'스텔라~톡',    phrase:'스텔라 톡',  rate:1.08, pitch:1.70},
   'byeolping': {emoji:'💫', label:'우리 별핑~',   phrase:'우리 별핑',  rate:1.05, pitch:1.80},
   'gongju':    {emoji:'👸', label:'별하 공주님~', phrase:'별하 공주님',rate:1.02, pitch:1.65},
-  'byeolha':   {emoji:'🌟', label:'김별하~',      phrase:'김별하',     rate:1.05, pitch:1.72}
+  'byeolha':   {emoji:'🌟', label:'김별하~',      phrase:'김별하',     rate:1.05, pitch:1.72},
+  'queen':     {emoji:'👑', label:'앵쥬 왕비님~', phrase:'앵쥬 왕비님',rate:1.0,  pitch:1.55} // D1: 가족 음성 옵션
 };
 // FIX-LOCK [2] 실제 녹음(mp3) 교체 지점 — key별 mp3 경로를 넣으면 TTS 대신 우선 재생.
-// 예: { s1:'/sounds/stella.mp3', ... }. 파일이 없으면(로드 실패) 자동으로 TTS 폴백.
+// 예: { s1:'/sounds/stella.mp3', queen:'/sounds/queen.mp3', ... }. 파일 없으면 TTS 폴백.
+// D1: 가족이 녹음한 음성 파일은 public 루트의 /sounds/ 에 두고 아래 경로를 채우면 됨.
+//     (예: 저장소 루트에 sounds/queen.mp3 추가 → Vercel이 /sounds/queen.mp3 로 서빙)
 var TALK_VOICE_MP3 = {
-  's1': null, 's2': null, 'byeolping': null, 'gongju': null, 'byeolha': null
+  's1': null, 's2': null, 'byeolping': null, 'gongju': null, 'byeolha': null,
+  'queen': null  // /sounds/queen.mp3 배치 시 경로 입력
 };
 var _voiceAudioCache = {};
 
@@ -1383,6 +1394,23 @@ function buildMsgRow(m, myId){
       else{window.open(imgSrc,'_blank');}
     };
     wrap.appendChild(img);
+    col.appendChild(wrap);
+  } else if(m.type==='video'){
+    // C1: 동영상 인라인 재생 + 다운로드 (카톡식)
+    const vSrc = m.data || m.fileUrl || '';
+    const wrap=document.createElement('div');wrap.className='msg-video-wrap';wrap.style.cssText='display:flex;flex-direction:column;gap:4px';
+    const vid=document.createElement('video');vid.src=vSrc;vid.controls=true;vid.preload='metadata';vid.playsInline=true;
+    vid.style.cssText='max-width:240px;max-height:320px;border-radius:12px;display:block;background:#000';
+    vid.onerror=function(){
+      const lnk=document.createElement('a');lnk.href=vSrc;lnk.target='_blank';lnk.rel='noopener';
+      lnk.style.cssText='display:inline-flex;align-items:center;gap:6px;padding:8px 12px;background:var(--bg3);border-radius:10px;color:var(--text);font-size:.85rem;text-decoration:none';
+      lnk.textContent='🎬 '+esc(m.fileName||'동영상 열기');
+      wrap.innerHTML='';wrap.appendChild(lnk);
+    };
+    const dl=document.createElement('a');dl.href=vSrc;dl.download=m.fileName||'video.mp4';dl.target='_blank';dl.rel='noopener';
+    dl.style.cssText='font-size:.78rem;color:var(--accent);text-decoration:none';
+    dl.textContent='⬇ '+esc(m.fileName||'동영상')+' 다운로드';
+    wrap.appendChild(vid);wrap.appendChild(dl);
     col.appendChild(wrap);
   } else if(m.type==='file'){
     const a=document.createElement('a');a.className='msg-file';a.href=m.data;a.download=m.fileName||'file';
@@ -1758,8 +1786,9 @@ async function sendMsg(){
   // ③ 파일/이미지 전송
   for(const f of _attachFiles){
     const isImg = f.type.startsWith('image/') || /\.(png|jpg|jpeg|gif|webp)$/i.test(f.name);
-    if(isImg){
-      // 이미지: 서버 업로드 → Drive URL
+    const isVideo = f.type.startsWith('video/') || /\.(mp4|webm|mov|m4v|ogv)$/i.test(f.name); // C1
+    if(isImg || isVideo){
+      // 이미지/동영상: 서버 업로드 → Drive URL (인라인 재생/다운로드 가능)
       const sendBtn = document.getElementById('sendBtn');
       const origTxt = sendBtn ? sendBtn.textContent : '';
       if(sendBtn){ sendBtn.disabled=true; sendBtn.textContent='업로드 중...'; }
@@ -1989,6 +2018,31 @@ function fmtTime(ts){if(!ts)return'';return new Date(ts).toLocaleTimeString('ko-
 function fmtSize(b){if(!b)return'';const n=Number(b);if(n<1024)return n+'B';if(n<1048576)return(n/1024).toFixed(1)+'KB';return(n/1048576).toFixed(1)+'MB';}
 
 // ── 알림 ──
+// ── D2: PWA 설치 유도 ──
+var _deferredInstallPrompt = null;
+window.addEventListener('beforeinstallprompt', function(e){
+  e.preventDefault();              // 기본 미니 인포바 억제 → 우리가 버튼으로 유도
+  _deferredInstallPrompt = e;
+  var row=document.getElementById('installRow'); if(row) row.style.display='';
+});
+window.addEventListener('appinstalled', function(){
+  _deferredInstallPrompt=null;
+  var row=document.getElementById('installRow'); if(row) row.style.display='none';
+  try{ toast('앱이 설치되었습니다'); }catch(e){}
+});
+function installTalkApp(){
+  if(!_deferredInstallPrompt){
+    // iOS Safari 등 beforeinstallprompt 미지원: 수동 안내
+    alert('설치: 브라우저 메뉴에서 "홈 화면에 추가"를 선택하세요.\n(iOS Safari: 공유 → 홈 화면에 추가)');
+    return;
+  }
+  _deferredInstallPrompt.prompt();
+  _deferredInstallPrompt.userChoice.finally(function(){
+    _deferredInstallPrompt=null;
+    var row=document.getElementById('installRow'); if(row) row.style.display='none';
+  });
+}
+
 // ── 강제 업데이트 (캐시 삭제 + 새로고침) ──
 function forceUpdate(){
   if(!confirm('최신 버전을 받기 위해 앱을 새로고침합니다.\n계속할까요?')) return;

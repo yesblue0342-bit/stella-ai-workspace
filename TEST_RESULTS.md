@@ -132,3 +132,14 @@ jsdom 5/5: setBgOpacity(0.55) 인라인 적용·라벨·저장, setBgBlur(5) 인
 - 수신 시 `playNotifySound`→mode 'vibrate'→`navigator.vibrate([120,60,120])`. 로직 정상, 실기기 검증만 대기.
 
 > 남은: B 친구, C1 동영상(대용량), D 알림음/PWA, E·C2 실환경 검증. 다음 반복.
+
+---
+
+# Stella Talk 백로그 — 4차 반복 (C1 동영상 · D1 알림음 · D2 PWA)
+
+`npm test` 25/25 유지 + jsdom 통합 **12/12**:
+- **C1**: serverMsgToLocal mp4/webm→type video, pdf→file; 렌더 `<video controls>`+다운로드 링크.
+- **D1**: 👑 앵쥬 왕비님~(queen) 보이스 등록/선택/미리듣기, mp3 슬롯(sounds/README.md 안내).
+- **D2**: beforeinstallprompt→설치 버튼 노출, installTalkApp이 prompt() 호출.
+
+C1 남음: >~4.5MB 대용량 동영상 업로드는 서명URL/resumable 전환 필요(후속).
