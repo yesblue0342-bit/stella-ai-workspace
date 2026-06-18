@@ -81,3 +81,26 @@ SKIP: CC_BASE_URL 미설정 — 배포 환경에서 실행하세요.
 - `lib/cc-db.mjs`: `cc_sessions.github_url` 컬럼 ALTER 추가 + `setSessionGithubUrl`.
 - `cc.html`: 세션 완료 시 자동 저장(best-effort) + '💾 GitHub에 저장' 수동 버튼.
 - 실제 커밋/Managed Agents 수집은 GITHUB_TOKEN·ANTHROPIC_API_KEY 등 배포 환경 필요 → 배포 후 실세션 검증.
+
+---
+
+# Stella Workspace 확장 — Code 아이콘 + Stella Hub + 업데이트 버튼
+
+`npm test` → **# tests 48  # pass 48  # fail 0** (hub-utils 6 신규) + jsdom 통합 **13/13**.
+
+## 작업 A — Code 탭 아이콘
+- index.html 사이드바 바로가기: 🌐 Stella Hub 링크 추가(Code는 기존 🛠 유지).
+- cc.html 크로스앱 탭에 아이콘: 🤖 GPT · 💬 Talk · 🗄 DB · 🛠 Code · 🌐 Hub.
+
+## 작업 B — Stella Hub (hub.html, GitHub 브라우저)
+- lib/hub-utils.js(순수) 단위 6/6: classify(text/image/binary), rawUrl(+한글), rfc5987, filterFiles, sortContents(폴더 먼저), isRateLimited.
+- jsdom 6/6: 공개 레포만 나열(private 제외), 레포→트리(📁/📄), 텍스트 미리보기(raw), 다운로드 버튼, 토큰필요 버튼 비활성+안내.
+- 비인증 GitHub API(`/users/:o/repos`, `/repos/:o/:r/contents/:path`), 다크/라이트(Stella DB 토큰·stella_db_theme), 모바일 사이드바 토글, 새로고침/검색.
+- vercel.json `/hub`,`/stella-hub` rewrite 추가.
+
+## 작업 C — 업데이트 버튼 (캐시 전체 삭제)
+- index.html 사이드바 최하단 '🔄 업데이트' → clearAllCaches(): SW 전부 unregister + caches 전부 삭제 + 강제 reload(localStorage 보존).
+- jsdom 3/3: unregister 2건/캐시 삭제 2건/reload 호출.
+
+## 공통
+- sw.js 캐시 stella-v14 → v15. node --check: hub-utils.js, sw.js, index 메인 스크립트, hub.html 스크립트 통과.
