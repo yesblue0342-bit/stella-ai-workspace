@@ -1,0 +1,29 @@
+================================================================================
+ Text Elements / Selection Texts — ZAQMR0080
+ (SE38 → Goto → Text Elements 에 등록)
+================================================================================
+
+[Text Symbols]
+ 001  검사 그룹 자재 할당 조건
+ m01  [QM] Material Assignment for Inspection Group
+ e01  작업계획타입은 'Q'(검사계획) 만 허용됩니다.
+ e02  저장 중 오류가 발생했습니다.
+ i01  조회된 데이터가 없습니다.
+ i02  처리할 항목을 선택하세요.
+ w01  Group Counter와 단위 규칙을 점검하세요. 1=KG, 2=G, 3=L, 4=EA, 5=Other.
+
+[Selection Texts]
+ P_PLNTY  작업계획타입
+ S_WERKS  플랜트
+ S_MATNR  자재번호
+ S_PLNNR  Inspection Group
+ S_PLNAL  Inspection Group Counter
+ S_PLNME  단위
+ P_VARI   ALV 레이아웃
+
+[GUI Status / Titlebar — SE51/SE41 (Screen 0100)]
+ PF-STATUS '0100' : 표준 BACK/EXIT/CANC + 사용자 'SAVE'(저장), 'ASSIGN','CHANGE','DELETE'
+ TITLEBAR  '0100' : &  (text-m01 사용)
+ Screen 0100      : Custom Container 화면(빈 화면 + OK_CODE = GV_OKCODE),
+                    PBO MODULE status_0100 / create_alv,
+                    PAI MODULE exit_0100(AT EXIT-COMMAND) / user_command_0100

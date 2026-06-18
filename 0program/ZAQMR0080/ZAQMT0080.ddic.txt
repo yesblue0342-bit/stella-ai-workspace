@@ -1,0 +1,37 @@
+================================================================================
+ DDIC 정의 : Transparent Table  ZAQMT0080
+ Description : Assignment of Material with Inspection Group (History)
+ Dev Class  : ZCQMD     Delivery Class: A     Maintenance: Display/Maintenance
+ (스펙 시트 "2.Table Definition" — Table ZAQMT** 기준)
+================================================================================
+
+[Key 및 필드]  (Key = X)
+
+ Field    Key  Data Element   Type   Len  Dec  Short Description
+ -------  ---  -------------  -----  ---  ---  ----------------------------------
+ MANDT    X    MANDT          CLNT     3        Client
+ WERKS    X    WERKS_D        CHAR     4        Plant
+ MATNR    X    MATNR          CHAR    40        Material
+ PLNNR    X    PLNNR          CHAR     8        Inspection Group (Group)
+ PLNAL    X    PLNAL          CHAR     2        Inspection Group Counter
+ PLNME         MEINS          UNIT     3        Task List Unit of Measure
+ ERNAM         ERNAM          CHAR    12        Created By
+ ERDAT         ERDAT          DATS     8        Created On
+ ERZET         ERZET          TIMS     6        Created Time
+ AENAM         AENAM          CHAR    12        Changed By
+ AEDAT         AEDAT          DATS     8        Changed On
+ AEZET         AEZET          TIMS     6        Changed Time
+ ZERNAM        ERNAM          CHAR    12        Name of Person Responsible (CBO)
+ LOEKZ         LOEKZ          CHAR     1        Deletion Indicator (Soft Delete)
+
+ 주)
+ - 스펙의 "Task List Unit" (CHAR3) 은 표준 단위 도메인과 정합을 위해
+   데이터요소 MEINS(UNIT 3) 로 정의(필드명 PLNME 유지).
+ - LOEKZ(소프트 삭제)는 프로그램의 "Mass Delete(복원 가능)" 요구사항을 위해 추가.
+   (스펙 본문의 변경이력/복원 요건 반영)
+ - 키: WERKS + MATNR + PLNNR + PLNAL (자재-검사그룹-그룹카운터 단위 할당)
+
+[ADT/SE11 생성 참고]
+ - 테이블 유형: Transparent Table
+ - Technical Settings: Data Class = APPL1, Size Category = 1, Buffering = off
+ - 본 테이블은 검사계획(PLNTY='Q') 할당 이력 전용. 표준 MAPL/PLKO 는 변경하지 않음.
