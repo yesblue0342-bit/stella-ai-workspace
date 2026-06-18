@@ -374,6 +374,14 @@ function renderFiles(){
       acts.appendChild(uzBtn);
     }
 
+    // 다운로드 버튼 (폴더 제외, 모든 파일)
+    if(!f.isFolder){
+      const dlBtn=document.createElement('button');
+      dlBtn.className='act';dlBtn.textContent='⬇';dlBtn.title='다운로드';
+      dlBtn.onclick=function(e){e.stopPropagation();downloadFile(f.id,f.name);};
+      acts.appendChild(dlBtn);
+    }
+
     // 이름 변경 버튼
     const rnBtn=document.createElement('button');
     rnBtn.className='act';rnBtn.textContent='✏️';
@@ -453,6 +461,44 @@ function updateSelBar(){
   const bar=document.getElementById('selBar');
   document.getElementById('selCount').textContent=_sel.size+'개 선택';
   bar.classList.toggle('show',_sel.size>0);
+}
+
+// ── 파일 다운로드 (서버가 attachment 스트리밍 → same-origin 앵커 클릭) ──
+function downloadFile(fileId, name){
+  const url = '/api/download?fileId=' + encodeURIComponent(fileId);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = name || '';
+  a.rel = 'noopener';
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+}
+
+// ── zip 파일명 한글(CP949) 깨짐 처리 (브라우저 네이티브, 의존성 0) ──
+// 서버 unzip이 복구하지만, 클라이언트에서 이름을 다룰 경우를 대비해 동일 로직 제공.
+var __ZN_HANGUL = /[가-힣㄰-㆏]/;
+var __ZN_HIGH = /[\x80-\xFF]/;
+function decodeZipName(rawBytes, isUtf8Flag){
+  var u8 = rawBytes instanceof Uint8Array ? rawBytes : Uint8Array.from(rawBytes);
+  if(isUtf8Flag) return new TextDecoder('utf-8').decode(u8);
+  try{
+    var asUtf8 = new TextDecoder('utf-8', {fatal:true}).decode(u8);
+    if(__ZN_HANGUL.test(asUtf8) || !__ZN_HIGH.test(asUtf8)) return asUtf8;
+  }catch(_){}
+  try{ return new TextDecoder('euc-kr').decode(u8); }catch(_){ return new TextDecoder('utf-8').decode(u8); }
+}
+function repairMojibakeName(name){
+  var s = String(name||'');
+  if(__ZN_HANGUL.test(s)) return s;
+  if(!__ZN_HIGH.test(s)) return s;
+  var bytes = Uint8Array.from(s, function(c){ return c.charCodeAt(0) & 0xff; });
+  var fixed;
+  try{ fixed = new TextDecoder('euc-kr').decode(bytes); }catch(_){ return s; }
+  return __ZN_HANGUL.test(fixed) ? fixed : s;
+}
+function repairMojibakePath(path){
+  return String(path||'').split('/').map(repairMojibakeName).join('/');
 }
 
 // ── 압축 풀기 ──
