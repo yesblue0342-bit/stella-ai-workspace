@@ -1973,26 +1973,26 @@ function forceUpdate(){
     if(navigator.serviceWorker && navigator.serviceWorker.controller){
       navigator.serviceWorker.controller.postMessage('clearCache');
     }
-    // 모든 캐시 직접 삭제
+    // 캐시 전부 삭제 → SW 등록 해제(완료까지 대기) → 새로고침
     if(window.caches){
       caches.keys().then(function(keys){
         return Promise.all(keys.map(function(k){ return caches.delete(k); }));
       }).then(function(){
-        // SW 등록 해제 후 강력 새로고침
         if(navigator.serviceWorker){
-          navigator.serviceWorker.getRegistrations().then(function(regs){
-            regs.forEach(function(r){ r.unregister(); });
-            location.reload(true);
+          return navigator.serviceWorker.getRegistrations().then(function(regs){
+            return Promise.all(regs.map(function(r){ return r.unregister(); }));
           });
-        } else {
-          location.reload(true);
         }
+      }).then(function(){
+        location.reload();
+      }).catch(function(){
+        location.reload();
       });
     } else {
-      location.reload(true);
+      location.reload();
     }
   }catch(e){
-    location.reload(true);
+    location.reload();
   }
 }
 
