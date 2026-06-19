@@ -461,7 +461,7 @@ async function syncToServer(){
     console.log('[Sync] 서버 저장 완료 - 채팅:'+meaningfulRooms.length+' 노트:'+posts.length+' 프로젝트:'+projects.length);
   }catch(e){ console.warn('[Sync] 서버 저장 실패:', e.message); }
 }
-async function handleAuth(e){e.preventDefault();users=allUsers();$('#authMsg').textContent='';const id=$('#authId').value.trim();const pw=$('#authPassword').value;if(!id||!pw){$('#authMsg').textContent='아이디 또는 이메일과 비밀번호를 입력해 주세요.';return}try{let res,data,loginEmail=id;if(authMode==='signup'){const name=$('#authName').value.trim();const email=$('#authEmail').value.trim().toLowerCase();const birth=$('#authBirth').value.trim();loginEmail=email||id;if(!name||!loginEmail){$('#authMsg').textContent='이름과 이메일을 입력해 주세요.';return}res=await fetch('/api/signup',{method:'POST',headers:{'Content-Type':'application/json','Cache-Control':'no-store'},body:JSON.stringify({id,email:loginEmail,password:pw,name,birth})});}else{res=await fetch('/api/login',{method:'POST',headers:{'Content-Type':'application/json','Cache-Control':'no-store'},body:JSON.stringify({id,email:id,password:pw})});}const raw=await res.text();try{data=JSON.parse(raw)}catch{data={message:raw}}if(!res.ok||data.ok===false){$('#authMsg').textContent=data.message||data.error||'로그인/회원가입 처리 실패';return}const apiUser=data.user||{};const email=String(apiUser.email||loginEmail||id).toLowerCase();const localUser={id:String(apiUser.id||id),name:apiUser.name||email||id,email,birth:apiUser.birth||$('#authBirth').value.trim()||'',passwordHash:'',role:(ADMIN_EMAILS.includes(email)||ADMIN_EMAILS.includes(String(apiUser.id||id))||ADMIN_EMAILS.includes(String(apiUser.name||'')))?'admin':'user',createdAt:apiUser.created_at||new Date().toISOString()};users=allUsers().filter(u=>u.id!==localUser.id&&String(u.email||'').toLowerCase()!==email);users.push(localUser);saveUsers();user=localUser;saveSessionUser(user);showApp();}catch(err){$('#authMsg').textContent='회원 API 연결 오류: '+(err.message||err)}}
+async function handleAuth(e){e.preventDefault();users=allUsers();$('#authMsg').textContent='';const id=$('#authId').value.trim();const pw=$('#authPassword').value;if(!id||!pw){$('#authMsg').textContent='아이디 또는 이메일과 비밀번호를 입력해 주세요.';return}try{let res,data,loginEmail=id;if(authMode==='signup'){const name=$('#authName').value.trim();const email=$('#authEmail').value.trim().toLowerCase();const birth=$('#authBirth').value.trim();loginEmail=email||id;if(!name||!loginEmail){$('#authMsg').textContent='이름과 이메일을 입력해 주세요.';return}res=await fetch('/api/signup',{method:'POST',headers:{'Content-Type':'application/json','Cache-Control':'no-store'},body:JSON.stringify({id,email:loginEmail,password:pw,name,birth})});}else{res=await fetch('/api/login',{method:'POST',headers:{'Content-Type':'application/json','Cache-Control':'no-store'},body:JSON.stringify({id,email:id,password:pw})});}const raw=await res.text();try{data=JSON.parse(raw)}catch{data={message:raw}}if(!res.ok||data.ok===false){$('#authMsg').textContent=data.message||data.error||'로그인/회원가입 처리 실패';return}if(authMode==='signup'&&data.pending){$('#authMsg').textContent=data.message||'관리자 승인 후 로그인할 수 있습니다.';$('#authPassword').value='';setAuthMode('login');return}const apiUser=data.user||{};const email=String(apiUser.email||loginEmail||id).toLowerCase();const localUser={id:String(apiUser.id||id),name:apiUser.name||email||id,email,birth:apiUser.birth||$('#authBirth').value.trim()||'',passwordHash:'',role:(ADMIN_EMAILS.includes(email)||ADMIN_EMAILS.includes(String(apiUser.id||id))||ADMIN_EMAILS.includes(String(apiUser.name||'')))?'admin':'user',createdAt:apiUser.created_at||new Date().toISOString()};users=allUsers().filter(u=>u.id!==localUser.id&&String(u.email||'').toLowerCase()!==email);users.push(localUser);saveUsers();user=localUser;saveSessionUser(user);showApp();}catch(err){$('#authMsg').textContent='회원 API 연결 오류: '+(err.message||err)}}
 function forgotPassword(){users=allUsers();const id=prompt('아이디를 입력하세요.');if(!id)return;const u=users.find(x=>x.id===id.trim());if(!u)return alert('사용자를 찾을 수 없습니다. 관리자에게 문의하세요.\n관리자: yesblue0342@naver.com / yesblue0342@gmail.com');const name=prompt('가입자 이름'),email=prompt('가입 이메일'),birth=prompt('생년월일 예: 1982-04-30');if((name||'').trim()===u.name&&(email||'').trim().toLowerCase()===u.email&&(birth||'').trim()===u.birth){const np=prompt('새 비밀번호');if(np){u.passwordHash=hash(np);saveUsers();alert('비밀번호가 변경되었습니다.')}}else alert('본인 확인 정보가 맞지 않습니다. 관리자에게 문의하세요.')}function logout(){localStorage.removeItem(K.session);location.reload()}
 function activeRoom(){return rooms.find(r=>r.id===activeRoomId)}function projectName(pid){return projects.find(p=>p.id===pid)?.name||'미분류'}function projectRooms(pid){return rooms.filter(r=>r.projectId===pid)}
 function createRoom(name='새 채팅',select=true){const r={id:'r_'+uid(),owner:user.id,projectId:activeProjectId&&projects.some(p=>p.id===activeProjectId)?activeProjectId:null,name,messages:[{role:'ai',text:'안녕하세요. Stella입니다. 무엇이든 물어보세요.'}],createdAt:new Date().toISOString()};rooms.unshift(r);if(select){activeRoomId=r.id;activeView='chat'}saveRooms();renderAll();closeSidebar()}
@@ -1081,7 +1081,91 @@ window.addEventListener('resize',syncSidebarLayout);
 window.addEventListener('DOMContentLoaded',()=>{ensureModelOptions();initEvents();initAuth();syncSidebarLayout()});
 </script>
 <script src="/js/stella-memory.js"></script>
-<script>if('serviceWorker' in navigator){navigator.serviceWorker.register('/sw.js').catch(function(){});}window.addEventListener('appinstalled',function(){});try{if(window.StellaMemory&&window.user&&user.id)StellaMemory.setUser(user.id);}catch(e){}</script></body>
+<script>if('serviceWorker' in navigator){navigator.serviceWorker.register('/sw.js').catch(function(){});}window.addEventListener('appinstalled',function(){});try{if(window.StellaMemory&&window.user&&user.id)StellaMemory.setUser(user.id);}catch(e){}</script>
+<script>
+/* stella-approval-admin-ui : ADMIN_IDS 로그인 시에만 보이는 가입 승인 패널 */
+(function(){
+  var __adminCred=null;
+  function isAdminUser(){ try{ return !!(typeof user!=='undefined' && user && user.role==='admin'); }catch(e){ return false; } }
+  function toast(m){ try{ if(typeof stellaShowToast==='function'){ stellaShowToast(m); return; } }catch(e){} alert(m); }
+  function ensureCred(cb){
+    if(__adminCred){ cb(); return; }
+    var id=(typeof user!=='undefined'&&user&&user.id)||prompt('관리자 아이디','');
+    if(!id) return;
+    var pw=prompt('관리자 비밀번호를 입력하세요 (승인 작업 인증용)','');
+    if(pw===null) return;
+    __adminCred={id:id,pw:pw}; cb();
+  }
+  function api(body){
+    return fetch('/api/admin-approvals',{method:'POST',headers:{'Content-Type':'application/json','Cache-Control':'no-store'},body:JSON.stringify(Object.assign({adminId:__adminCred.id,adminPassword:__adminCred.pw},body))})
+      .then(function(r){ return r.text().then(function(t){ var d; try{d=JSON.parse(t)}catch(e){d={message:t}} return {ok:r.ok,status:r.status,data:d}; }); });
+  }
+  function esc(s){ return String(s==null?'':s).replace(/[&<>"']/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;'}[c];}); }
+  function ensureModal(){
+    var m=document.getElementById('approvalModal'); if(m) return m;
+    m=document.createElement('div'); m.id='approvalModal';
+    m.style.cssText='display:none;position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:100000;align-items:center;justify-content:center';
+    m.innerHTML='<div style="background:var(--card,#fff);color:var(--ink,#111827);width:min(560px,92vw);max-height:84vh;overflow:auto;border-radius:16px;padding:20px;box-shadow:0 20px 60px rgba(0,0,0,.35)">'
+      +'<div style="display:flex;align-items:center;gap:8px;margin-bottom:12px"><b style="font-size:1.05rem">가입 승인 대기 목록</b>'
+      +'<button id="approvalRefresh" type="button" style="margin-left:auto;border:1px solid #d1d5db;background:transparent;border-radius:8px;padding:5px 12px;cursor:pointer">새로고침</button>'
+      +'<button id="approvalClose" type="button" style="border:none;background:transparent;font-size:1.2rem;cursor:pointer">✕</button></div>'
+      +'<div id="approvalList">불러오는 중...</div></div>';
+    document.body.appendChild(m);
+    m.addEventListener('click',function(e){ if(e.target===m) m.style.display='none'; });
+    m.querySelector('#approvalClose').onclick=function(){ m.style.display='none'; };
+    m.querySelector('#approvalRefresh').onclick=function(){ load(); };
+    return m;
+  }
+  function render(list){
+    var box=document.getElementById('approvalList'); if(!box) return;
+    if(!list||!list.length){ box.innerHTML='<div style="padding:18px;text-align:center;color:#6b7280">승인 대기 중인 가입 신청이 없습니다.</div>'; return; }
+    box.innerHTML=list.map(function(u){
+      var when=u.requestedAt?new Date(u.requestedAt).toLocaleString():'';
+      return '<div style="display:flex;align-items:center;gap:10px;padding:10px 8px;border-bottom:1px solid var(--line,#e5e7eb)">'
+        +'<div style="flex:1;min-width:0"><div style="font-weight:700">'+esc(u.name||u.id)+'</div>'
+        +'<div style="font-size:.8rem;color:#6b7280">'+esc(u.id)+(u.email?(' · '+esc(u.email)):'')+'</div>'
+        +'<div style="font-size:.72rem;color:#9ca3af">신청: '+esc(when)+'</div></div>'
+        +'<button type="button" data-act="approve" data-key="'+esc(u.key)+'" data-id="'+esc(u.id)+'" style="background:#059669;color:#fff;border:none;border-radius:8px;padding:6px 12px;cursor:pointer;font-weight:700">승인</button>'
+        +'<button type="button" data-act="reject" data-key="'+esc(u.key)+'" data-id="'+esc(u.id)+'" style="background:#dc2626;color:#fff;border:none;border-radius:8px;padding:6px 12px;cursor:pointer;font-weight:700">거절</button>'
+        +'</div>';
+    }).join('');
+    Array.prototype.forEach.call(box.querySelectorAll('button[data-act]'),function(b){
+      b.onclick=function(){ act(b.getAttribute('data-act'),b.getAttribute('data-key'),b.getAttribute('data-id')); };
+    });
+  }
+  function load(){
+    var box=document.getElementById('approvalList'); if(box) box.innerHTML='불러오는 중...';
+    api({action:'list'}).then(function(r){
+      if(!r.ok||r.data.ok===false){ if(r.status===401||r.status===403) __adminCred=null; toast(r.data.message||'목록을 불러오지 못했습니다.'); if(box) box.innerHTML='<div style="padding:18px;color:#dc2626">'+esc(r.data.message||'오류')+'</div>'; return; }
+      render(r.data.pending||[]);
+    });
+  }
+  function act(action,key,id){
+    if(action==='reject'&&!confirm('이 가입 신청을 거절하시겠습니까?\n'+id)) return;
+    api({action:action,key:key,targetId:id}).then(function(r){
+      if(!r.ok||r.data.ok===false){ toast(r.data.message||'처리 실패'); return; }
+      toast(r.data.message||(action==='approve'?'승인되었습니다.':'거절되었습니다.')); load();
+    });
+  }
+  function open(){ ensureModal().style.display='flex'; ensureCred(load); }
+  function ensureBtn(){
+    var btn=document.getElementById('approvalFab');
+    if(isAdminUser()){
+      if(!btn){
+        btn=document.createElement('button'); btn.id='approvalFab'; btn.type='button'; btn.textContent='가입 승인';
+        btn.style.cssText='position:fixed;right:16px;bottom:90px;z-index:99998;background:#111827;color:#fff;border:none;border-radius:999px;padding:10px 16px;font-weight:800;cursor:pointer;box-shadow:0 8px 24px rgba(0,0,0,.25)';
+        btn.onclick=open; document.body.appendChild(btn);
+      }
+      btn.style.display='block';
+    }else if(btn){ btn.style.display='none'; }
+  }
+  window.stellaOpenApproval=open; window.stellaEnsureApprovalUI=ensureBtn;
+  try{ if(typeof showApp==='function'){ var _o=showApp; showApp=function(){ var r=_o.apply(this,arguments); try{ ensureBtn(); }catch(e){} return r; }; } }catch(e){}
+  try{ if(typeof user!=='undefined'&&user) ensureBtn(); }catch(e){}
+})();
+/* /stella-approval-admin-ui */
+</script>
+</body>
 </html>
 
 
