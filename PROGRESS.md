@@ -40,3 +40,34 @@ STATUS: IN_PROGRESS
   (2) 로드 시 Drive pull→mergeById→캐시갱신→render, (3) 삭제를 markDeleted(tombstone)로,
   (4) syncToServer의 count-guard 제거하고 tombstone 포함 전체를 push.
 - 그 다음 서버 api/workspace가 tombstone을 보존/병합하도록 수정.
+
+---
+
+## [abap.html] Failed to fetch 수정 + 응답형식 유연화 + Mermaid (backup: backup-abap-20260619-021528)
+
+### (a) "Failed to fetch" 원인·조치
+- 진단: abap.html send()의 `fetch(API_URL=/api/chat)` 호출은 index.html(정상)과 **구조 동일**
+  (POST, body={model,message,history,system,userId,images,...getSearchConfig()}).
+- 인라인 JS 4블록 **문법 정상**(new Function 검증), send 참조 헬퍼(formatDriveSources/formatSearchReferences/
+  getSearchConfig/isRefusalOrEmpty/addMessage) **모두 정의됨**.
+- sw.js는 `/api/`를 이미 network 우회(`if(url.pathname.startsWith('/api/')) return;`) → SW 원인 아님.
+- vercel.json `/abap`·`/api/chat`(api/chat.js) 라우트 존재 → 라우팅 원인 아님.
+- 결론: 코드 경로상 결함 없음(샌드박스는 배포보호 403으로 실호출 검증 불가). 재발 시 진짜 원인 파악을 위해
+  **catch 블록 개선**: err.name/err.message 콘솔 로깅 + TypeError('Failed to fetch')일 때 네트워크 실패
+  안내문 표시(서버 미응답/오프라인/CORS/CSP 가능성). HTTP 에러는 기존대로 status+본문 노출.
+
+### (b) [응답 형식] 교체
+- 시스템 프롬프트(템플릿 리터럴) [응답 형식] 섹션을 ChatGPT/Claude식 서술형으로 교체
+  (정해진 틀 강제 금지, 서술식 우선, 표·불릿은 도움될 때만, 클래식/모던 권장안).
+
+### (c) Mermaid 적용
+- head에 mermaid@11 CDN 추가. initMermaidOnce(startOnLoad:false, securityLevel:'loose',
+  theme: 다크면 dark/아니면 neutral).
+- renderMarkdownLite 코드블록 루프에서 language==='mermaid' 가로채 renderMermaidBlock 호출
+  (응답 완료 후 1회 렌더). SVG를 overflow-x:auto·max-width:100% 래퍼에 삽입. try/catch 실패 시
+  원본 코드(pre.codeblock) 폴백 → 앱 안 죽음.
+- 시스템 프롬프트에 [다이어그램] 섹션 추가(상황별 타입 선택, 보조 수단).
+- sw 캐시 stella-v21 → v22.
+
+### 검증
+- node --check(인라인 4블록) 통과 · npm test 54/54 · jsdom mermaid 4/4(렌더/폴백/일반코드/스크롤래퍼).
