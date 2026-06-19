@@ -2,7 +2,7 @@
 // 회원정보는 Drive auth/users/{id}.json 에 저장, Azure는 부가 인덱스만(실패 무시)
 import crypto from "crypto";
 import { saveJsonToDrive, readJsonFromDrive } from "../lib/drive-utils.js";
-import { isAdmin, canLogin, loginDenialMessage } from "../lib/approval.js";
+import { isAdmin, canLogin, loginDenialMessage, effectiveStatus } from "../lib/approval.js";
 
 function clean(v){ return String(v || "").trim(); }
 function lower(v){ return clean(v).toLowerCase(); }
@@ -23,7 +23,9 @@ function verify(secret, stored){
 }
 function publicUser(u){
   const id = u.user_id || u.id || u.email;
-  return { id, email: u.email || id, name: u.name || id, birth: u.birth || "", created_at: u.created_at || new Date().toISOString() };
+  // status/approvedAt 포함: 클라이언트가 "승인됨" 알림을 1회 표시할 수 있도록 노출.
+  return { id, email: u.email || id, name: u.name || id, birth: u.birth || "", created_at: u.created_at || new Date().toISOString(),
+    status: effectiveStatus(u), approvedAt: u.approvedAt || null };
 }
 
 // Drive에서 사용자 읽기 (id 또는 email 키 둘 다 시도)
@@ -42,13 +44,28 @@ async function indexToAzure(user){
   try{
     const { getPool, sql } = await import("../lib/db.js");
     const pool = await getPool();
-    await pool.request().query(`IF OBJECT_ID('dbo.users','U') IS NULL CREATE TABLE dbo.users(id INT IDENTITY(1,1) PRIMARY KEY,user_id NVARCHAR(100) NULL,email NVARCHAR(255) NULL,password_hash NVARCHAR(255) NULL,name NVARCHAR(100) NULL,birth NVARCHAR(30) NULL,created_at DATETIME2 NOT NULL DEFAULT SYSUTCDATETIME(),updated_at DATETIME2 NULL)`);
+    await pool.request().query(`IF OBJECT_ID('dbo.users','U') IS NULL CREATE TABLE dbo.users(id INT IDENTITY(1,1) PRIMARY KEY,user_id NVARCHAR(100) NULL,email NVARCHAR(255) NULL,password_hash NVARCHAR(255) NULL,name NVARCHAR(100) NULL,birth NVARCHAR(30) NULL,status NVARCHAR(16) NULL,created_at DATETIME2 NOT NULL DEFAULT SYSUTCDATETIME(),updated_at DATETIME2 NULL); IF COL_LENGTH('dbo.users','status') IS NULL ALTER TABLE dbo.users ADD status NVARCHAR(16) NULL;`);
     await pool.request()
       .input("uid", sql.NVarChar(100), user.user_id||user.id)
       .input("email", sql.NVarChar(255), user.email||"")
       .input("name", sql.NVarChar(100), user.name||"")
       .input("birth", sql.NVarChar(30), user.birth||null)
-      .query(`IF NOT EXISTS(SELECT 1 FROM dbo.users WHERE LOWER(ISNULL(user_id,''))=LOWER(@uid) OR LOWER(ISNULL(email,''))=LOWER(@email)) INSERT INTO dbo.users(user_id,email,name,birth) VALUES(@uid,@email,@name,@birth)`);
+      .input("status", sql.NVarChar(16), user.status||"pending")
+      .query(`IF NOT EXISTS(SELECT 1 FROM dbo.users WHERE LOWER(ISNULL(user_id,''))=LOWER(@uid) OR LOWER(ISNULL(email,''))=LOWER(@email)) INSERT INTO dbo.users(user_id,email,name,birth,status) VALUES(@uid,@email,@name,@birth,@status)`);
+  }catch{}
+}
+
+// Azure 인덱스의 승인 상태 갱신 (부가 기록, 실패 무시). 승인/거절 시 호출.
+export async function updateAzureStatus(userId, email, status){
+  try{
+    const { getPool, sql } = await import("../lib/db.js");
+    const pool = await getPool();
+    await pool.request().query(`IF OBJECT_ID('dbo.users','U') IS NOT NULL AND COL_LENGTH('dbo.users','status') IS NULL ALTER TABLE dbo.users ADD status NVARCHAR(16) NULL;`);
+    await pool.request()
+      .input("uid", sql.NVarChar(100), userId||"")
+      .input("email", sql.NVarChar(255), email||"")
+      .input("status", sql.NVarChar(16), status)
+      .query(`UPDATE dbo.users SET status=@status, updated_at=SYSUTCDATETIME() WHERE LOWER(ISNULL(user_id,''))=LOWER(@uid) OR (LEN(@email)>0 AND LOWER(ISNULL(email,''))=LOWER(@email))`);
   }catch{}
 }
 
@@ -70,7 +87,7 @@ export default async function handler(req, res){
 
     // admin/admin 무조건 통과 (관리자는 항상 승인 상태)
     if(lower(rawId) === "admin" && password === "admin"){
-      return res.status(200).json({ ok:true, message:"관리자 로그인", user:{ id:"admin", email:"admin@stella.local", name:"관리자", birth:"", created_at:new Date().toISOString() } });
+      return res.status(200).json({ ok:true, message:"관리자 로그인", user:{ id:"admin", email:"admin@stella.local", name:"관리자", birth:"", created_at:new Date().toISOString(), status:"approved", approvedAt:null } });
     }
 
     // ===== 로그인 =====

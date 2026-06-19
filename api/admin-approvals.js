@@ -78,10 +78,18 @@ async function setStatus({ targetId, targetKey, status, adminId }){
   const updated = {
     ...data,
     status,
-    approvedAt: nowIso,
+    // approvedAt 은 승인 시에만 갱신(거절은 기존 값 유지). rejectedAt 으로 거절 시각 별도 기록.
+    approvedAt: status === "approved" ? nowIso : (data.approvedAt || null),
+    rejectedAt: status === "rejected" ? nowIso : (data.rejectedAt || null),
     approvedBy: adminId
   };
   await saveJsonToDrive({ folderPath:["auth","users"], fileName: key, data: updated });
+
+  // Azure 인덱스에도 승인 상태 기록 (부가, 실패 무시) — pending/approved/rejected DB 저장 보강
+  try{
+    const { updateAzureStatus } = await import("./auth.js");
+    updateAzureStatus(updated.user_id || updated.id || key, updated.email || "", status).catch(()=>{});
+  }catch(_){}
 
   // 이메일 alias 파일도 동기화 (이메일로 로그인해도 승인 상태 반영)
   const emailKey = updated.email ? safeKey(updated.email) : "";

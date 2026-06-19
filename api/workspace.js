@@ -1,4 +1,4 @@
-import { getPool, sql } from "../lib/db.js";
+import { getPool, sql, withRetry } from "../lib/db.js";
 
 function clean(value) {
   return String(value || "").trim();
@@ -46,9 +46,11 @@ export default async function handler(req, res) {
     await ensureWorkspaceTables(pool);
 
     if (req.method === "GET") {
-      const result = await pool.request()
+      // 콜드 스타트 대응: 읽기 쿼리는 멱등하므로 3회까지 재시도.
+      const result = await withRetry(() => pool.request()
         .input("owner_id", sql.NVarChar(255), ownerId)
-        .query(`SELECT TOP 1 owner_id, rooms_json, projects_json, posts_json, member_json, drive_index_json, updated_at FROM dbo.workspace_state WHERE owner_id = @owner_id`);
+        .query(`SELECT TOP 1 owner_id, rooms_json, projects_json, posts_json, member_json, drive_index_json, updated_at FROM dbo.workspace_state WHERE owner_id = @owner_id`),
+        { retries: 3, baseDelay: 400 });
       const row = result.recordset[0];
       return res.status(200).json({
         ok: true,

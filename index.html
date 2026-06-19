@@ -161,6 +161,8 @@ body.dark .user-box *{color:#e6edf3!important}
 </style>
 </head>
 <body class="dark">
+<!-- 크로스-디바이스 동기화 엔진 (타임스탬프 LWW 병합). 메인 앱 스크립트보다 먼저 로드. -->
+<script src="/lib/sync-engine.js"></script>
 <script>
 // 다크모드 강제 마이그레이션 (v2): 기존 light 저장값 → dark로 리셋
 (function(){
@@ -241,6 +243,40 @@ const read=(k,d)=>{try{return JSON.parse(localStorage.getItem(k)||JSON.stringify
 
 /* persistent-login-fix */
 function nowMs(){return Date.now()}
+// ── 콜드 스타트 대응 fetch: 타임아웃(AbortController) + 자동 재시도 ──
+// Azure SQL 서버리스 첫 호출이 느려 목록이 간헐적으로 안 뜨는 문제 완화.
+async function fetchWithRetry(url, opts, retries, timeoutMs){
+  retries = retries || 3; timeoutMs = timeoutMs || 12000;
+  var lastErr;
+  for(var attempt=1; attempt<=retries; attempt++){
+    var ctrl = (typeof AbortController!=='undefined') ? new AbortController() : null;
+    var timer = ctrl ? setTimeout(function(){ try{ctrl.abort();}catch(e){} }, timeoutMs) : null;
+    try{
+      var res = await fetch(url, Object.assign({}, opts||{}, ctrl?{signal:ctrl.signal}:{}));
+      if(timer) clearTimeout(timer);
+      // 5xx(서버/콜드 스타트 오류)면 재시도, 그 외 응답은 그대로 반환
+      if(res.status>=500 && attempt<retries){ lastErr=new Error('HTTP '+res.status); }
+      else { return res; }
+    }catch(e){
+      if(timer) clearTimeout(timer);
+      lastErr = e;
+    }
+    // 지수 백오프: 500ms, 1000ms ... (마지막 시도 뒤에는 대기하지 않음)
+    if(attempt<retries){ await new Promise(function(r){ setTimeout(r, 500*Math.pow(2, attempt-1)); }); }
+  }
+  throw lastErr || new Error('fetchWithRetry 실패: '+url);
+}
+// 앱 로드 시 1회 워밍업 핑 (SELECT 1). 멱등·논블로킹. 중복 호출 방지.
+var _stellaWarmed=false;
+function warmupDb(){
+  if(_stellaWarmed) return Promise.resolve();
+  _stellaWarmed=true;
+  try{
+    return fetchWithRetry('/api/warmup',{cache:'no-store'},3,12000)
+      .then(function(){ console.log('[Warmup] Azure SQL 예열 완료'); })
+      .catch(function(e){ console.warn('[Warmup] 예열 실패(무시):', e&&e.message); _stellaWarmed=false; });
+  }catch(e){ _stellaWarmed=false; return Promise.resolve(); }
+}
 function saveSessionUser(u){write(K.session,{id:u.id,user:u,savedAt:nowMs()})}
 function loadSessionUser(){const ss=read(K.session,null);if(!ss||!ss.id)return null;const list=allUsers();return list.find(u=>u.id===ss.id)||ss.user||null}
 /* /persistent-login-fix */
@@ -301,6 +337,8 @@ function showApp(){
 
 async function restoreAllData(){
   _restoreCompleted = false; // 복원 중에는 저장 차단
+  // 0단계: Azure SQL 콜드 스타트 예열 (SELECT 1) — 목록 로딩 전에 미리 깨운다.
+  await warmupDb();
   // 1단계: Azure SQL workspace_state 복원
   await syncFromServer();
   // 2단계: Drive 채팅 이력 복원
@@ -338,7 +376,7 @@ async function syncFromServer(){
     if(String(user.id).includes('@')) candidates.push(String(user.id).split('@')[0]);
     let d = null;
     for(const owner of candidates){
-      const r = await fetch('/api/workspace?owner='+encodeURIComponent(owner), {cache:'no-store'});
+      const r = await fetchWithRetry('/api/workspace?owner='+encodeURIComponent(owner), {cache:'no-store'}, 3, 12000);
       if(!r.ok) continue;
       const tmp = await r.json();
       if(tmp.ok && ((tmp.rooms&&tmp.rooms.length)||(tmp.posts&&tmp.posts.length)||(tmp.projects&&tmp.projects.length))){
@@ -356,71 +394,74 @@ async function syncFromServer(){
     };
 
     let changed = false;
+    // StellaSync(LWW 타임스탬프 병합) 사용 가능 여부. 없으면 기존 "없는 것만 추가" 폴백.
+    const _hasSync = (typeof StellaSync!=='undefined' && StellaSync && typeof StellaSync.mergeById==='function');
 
-    // ① 프로젝트 - 서버 데이터를 기준으로 병합
+    // ① 프로젝트 - id 기준 LWW 병합 (디바이스 간 최신 우선)
     if(Array.isArray(d.projects) && d.projects.length){
-      const localIds = new Set((projects||[]).map(p=>p.id));
-      d.projects.forEach(function(sp){
-        if(sp.id && !localIds.has(sp.id)){
-          projects.push({id:sp.id, owner:user.id, name:sp.name||sp.id, createdAt:sp.createdAt||new Date().toISOString()});
-          changed = true;
-        }
-      });
-      if(changed){ saveProjects(); }
-    }
-
-    // ② 채팅방 - 서버 데이터 우선 복원
-    if(Array.isArray(d.rooms) && d.rooms.length){
-      const localIds = new Set((rooms||[]).map(r=>r.id));
-      const localMeaningful = rooms.filter(r=>r.name!=='새 채팅'||(r.messages||[]).length>1);
-      d.rooms.forEach(function(sr){
-        if(!sr.id) return;
-        if(localIds.has(sr.id)){
-          const local = rooms.find(r=>r.id===sr.id);
-          if(local && Array.isArray(sr.messages) && sr.messages.length > (local.messages||[]).length){
-            Object.assign(local, {messages: sr.messages, name: sr.name||local.name});
-            changed = true;
-          }
-        } else {
-          rooms.push({id:sr.id, owner:user.id, name:sr.name||'복원된 채팅',
-            messages: Array.isArray(sr.messages)?sr.messages:[],
-            projectId: sr.projectId||'',
-            createdAt: sr.createdAt||new Date().toISOString()});
-          changed = true;
-        }
-      });
-      // 로컬에 의미없는 빈 채팅(새 채팅)이 있으면 서버 복원 후 제거
-      if(changed){
-        rooms = rooms.filter(r=>r.name!=='새 채팅'||(r.messages||[]).length>1||d.rooms.some(sr=>sr.id===r.id));
-        saveRooms();
+      if(_hasSync){
+        const before = projects.length;
+        const srv = d.projects.map(sp=>({id:sp.id, owner:user.id, name:sp.name||sp.id,
+          createdAt:sp.createdAt||new Date().toISOString(), updatedAt:sp.updatedAt||sp.createdAt||new Date().toISOString()}));
+        const loc = (projects||[]).map(p=>Object.assign({updatedAt:p.updatedAt||p.createdAt}, p));
+        projects = StellaSync.visible(StellaSync.mergeById(loc, srv)).map(p=>(p.owner=user.id, p));
+        if(projects.length!==before || JSON.stringify(projects)!==JSON.stringify(loc)){ changed = true; saveProjects(); }
+      } else {
+        const localIds = new Set((projects||[]).map(p=>p.id));
+        d.projects.forEach(function(sp){ if(sp.id && !localIds.has(sp.id)){ projects.push({id:sp.id, owner:user.id, name:sp.name||sp.id, createdAt:sp.createdAt||new Date().toISOString()}); changed = true; } });
+        if(changed){ saveProjects(); }
       }
     }
 
-    // ③ 노트/게시글 - workspace_state의 posts_json에서 복원
-    if(Array.isArray(d.posts) && d.posts.length){
-      const localIds = new Set((posts||[]).map(p=>p.id||p.postId));
-      d.posts.forEach(function(sp){
-        const id = sp.id||sp.postId;
-        if(!id || sp.deleted) return;
-        if(!localIds.has(id)){
-          posts.unshift({
-            id: id,
-            owner: user.id,
-            title: sp.title||'(제목없음)',
-            body: sp.body||sp.content||'',
-            category: sp.category||'노트',
-            createdAt: sp.createdAt||new Date().toISOString(),
-            updatedAt: sp.updatedAt||sp.createdAt||new Date().toISOString()
-          });
-          changed = true;
-          localIds.add(id);
-        }
-      });
-      if(changed){ savePosts(); }
+    // ② 채팅방 - id 기준 LWW 병합. updatedAt(또는 마지막 메시지/생성시각) 최신본이 이김.
+    if(Array.isArray(d.rooms) && d.rooms.length){
+      if(_hasSync){
+        const srv = d.rooms.filter(sr=>sr.id).map(sr=>({id:sr.id, owner:user.id, name:sr.name||'복원된 채팅',
+          messages: Array.isArray(sr.messages)?sr.messages:[], projectId: sr.projectId||'',
+          createdAt: sr.createdAt||new Date().toISOString(), updatedAt: _roomStamp(sr), deleted: !!sr.deleted, deletedAt: sr.deletedAt}));
+        const loc = (rooms||[]).map(r=>Object.assign({}, r, {updatedAt:_roomStamp(r)}));
+        let merged = StellaSync.mergeById(loc, srv);
+        // tombstone 제외(렌더), 의미없는 빈 "새 채팅"은 서버에도 없으면 제거
+        merged = StellaSync.visible(merged).filter(r=>r.name!=='새 채팅'||(r.messages||[]).length>1||d.rooms.some(sr=>sr.id===r.id));
+        rooms = merged.map(r=>(r.owner=user.id, r));
+        changed = true; saveRooms();
+      } else {
+        const localIds = new Set((rooms||[]).map(r=>r.id));
+        d.rooms.forEach(function(sr){ if(!sr.id) return; if(localIds.has(sr.id)){ const local = rooms.find(r=>r.id===sr.id); if(local && Array.isArray(sr.messages) && sr.messages.length > (local.messages||[]).length){ Object.assign(local, {messages: sr.messages, name: sr.name||local.name}); changed = true; } } else { rooms.push({id:sr.id, owner:user.id, name:sr.name||'복원된 채팅', messages: Array.isArray(sr.messages)?sr.messages:[], projectId: sr.projectId||'', createdAt: sr.createdAt||new Date().toISOString()}); changed = true; } });
+        if(changed){ rooms = rooms.filter(r=>r.name!=='새 채팅'||(r.messages||[]).length>1||d.rooms.some(sr=>sr.id===r.id)); saveRooms(); }
+      }
     }
 
-    if(changed){ renderAll(); console.log('[Sync] 서버에서 동기화 완료 (채팅+프로젝트+노트)'); }
+    // ③ 노트/게시글 - id 기준 LWW 병합 (tombstone-aware: 삭제도 전파)
+    if(Array.isArray(d.posts) && d.posts.length){
+      if(_hasSync){
+        const srv = d.posts.filter(sp=>(sp.id||sp.postId)).map(sp=>({id:sp.id||sp.postId, owner:user.id,
+          title:sp.title||'(제목없음)', body:sp.body||sp.content||'', category:sp.category||'노트',
+          createdAt:sp.createdAt||new Date().toISOString(), updatedAt:sp.updatedAt||sp.createdAt||new Date().toISOString(),
+          deleted: !!sp.deleted, deletedAt: sp.deletedAt}));
+        const loc = (posts||[]).map(p=>Object.assign({}, p, {id:p.id||p.postId, updatedAt:p.updatedAt||p.createdAt}));
+        // 보관(저장)은 tombstone 포함, 렌더 배열(posts)은 visible 만 유지
+        const mergedAll = StellaSync.mergeById(loc, srv);
+        posts = StellaSync.visible(mergedAll).map(p=>(p.owner=user.id, p));
+        changed = true; savePosts();
+      } else {
+        const localIds = new Set((posts||[]).map(p=>p.id||p.postId));
+        d.posts.forEach(function(sp){ const id = sp.id||sp.postId; if(!id || sp.deleted) return; if(!localIds.has(id)){ posts.unshift({id: id, owner: user.id, title: sp.title||'(제목없음)', body: sp.body||sp.content||'', category: sp.category||'노트', createdAt: sp.createdAt||new Date().toISOString(), updatedAt: sp.updatedAt||sp.createdAt||new Date().toISOString()}); changed = true; localIds.add(id); } });
+        if(changed){ savePosts(); }
+      }
+    }
+
+    if(changed){ renderAll(); console.log('[Sync] 서버에서 동기화 완료 (채팅+프로젝트+노트, LWW='+_hasSync+')'); }
   }catch(e){ console.warn('[Sync] 서버 동기화 실패:', e.message); }
+}
+
+// 채팅방의 "마지막 쓰기" 시각 (LWW 비교 기준): updatedAt > 마지막 메시지 시각 > createdAt
+function _roomStamp(r){
+  if(!r) return 0;
+  if(r.updatedAt) return r.updatedAt;
+  var msgs = r.messages||[];
+  for(var i=msgs.length-1;i>=0;i--){ var m=msgs[i]; if(m && (m.createdAt||m.at||m.time)) return m.createdAt||m.at||m.time; }
+  return r.createdAt||0;
 }
 
 // ── 서버에 현재 상태 저장 (모든 기기에서 로그아웃/재로그인 시 복원) ──
@@ -451,9 +492,9 @@ async function syncToServer(){
       headers:{'Content-Type':'application/json'},
       body:JSON.stringify({
         owner: user.id,
-        rooms: rooms.map(r=>({id:r.id,name:r.name,messages:r.messages||[],projectId:r.projectId||'',createdAt:r.createdAt})),
-        projects: projects.map(p=>({id:p.id,name:p.name,createdAt:p.createdAt})),
-        posts: posts.map(p=>({id:p.id,title:p.title,body:p.body,category:p.category,createdAt:p.createdAt,updatedAt:p.updatedAt}))
+        rooms: rooms.map(r=>({id:r.id,name:r.name,messages:r.messages||[],projectId:r.projectId||'',createdAt:r.createdAt,updatedAt:_roomStamp(r)})),
+        projects: projects.map(p=>({id:p.id,name:p.name,createdAt:p.createdAt,updatedAt:p.updatedAt||p.createdAt})),
+        posts: posts.map(p=>({id:p.id,title:p.title,body:p.body,category:p.category,createdAt:p.createdAt,updatedAt:p.updatedAt||p.createdAt}))
       })
     });
     // 저장 성공 시 스냅샷 갱신
@@ -461,11 +502,11 @@ async function syncToServer(){
     console.log('[Sync] 서버 저장 완료 - 채팅:'+meaningfulRooms.length+' 노트:'+posts.length+' 프로젝트:'+projects.length);
   }catch(e){ console.warn('[Sync] 서버 저장 실패:', e.message); }
 }
-async function handleAuth(e){e.preventDefault();users=allUsers();$('#authMsg').textContent='';const id=$('#authId').value.trim();const pw=$('#authPassword').value;if(!id||!pw){$('#authMsg').textContent='아이디 또는 이메일과 비밀번호를 입력해 주세요.';return}try{let res,data,loginEmail=id;if(authMode==='signup'){const name=$('#authName').value.trim();const email=$('#authEmail').value.trim().toLowerCase();const birth=$('#authBirth').value.trim();loginEmail=email||id;if(!name||!loginEmail){$('#authMsg').textContent='이름과 이메일을 입력해 주세요.';return}res=await fetch('/api/signup',{method:'POST',headers:{'Content-Type':'application/json','Cache-Control':'no-store'},body:JSON.stringify({id,email:loginEmail,password:pw,name,birth})});}else{res=await fetch('/api/login',{method:'POST',headers:{'Content-Type':'application/json','Cache-Control':'no-store'},body:JSON.stringify({id,email:id,password:pw})});}const raw=await res.text();try{data=JSON.parse(raw)}catch{data={message:raw}}if(!res.ok||data.ok===false){$('#authMsg').textContent=data.message||data.error||'로그인/회원가입 처리 실패';return}if(authMode==='signup'&&data.pending){$('#authMsg').textContent=data.message||'관리자 승인 후 로그인할 수 있습니다.';$('#authPassword').value='';setAuthMode('login');return}const apiUser=data.user||{};const email=String(apiUser.email||loginEmail||id).toLowerCase();const localUser={id:String(apiUser.id||id),name:apiUser.name||email||id,email,birth:apiUser.birth||$('#authBirth').value.trim()||'',passwordHash:'',role:(ADMIN_EMAILS.includes(email)||ADMIN_EMAILS.includes(String(apiUser.id||id))||ADMIN_EMAILS.includes(String(apiUser.name||'')))?'admin':'user',createdAt:apiUser.created_at||new Date().toISOString()};users=allUsers().filter(u=>u.id!==localUser.id&&String(u.email||'').toLowerCase()!==email);users.push(localUser);saveUsers();user=localUser;saveSessionUser(user);showApp();}catch(err){$('#authMsg').textContent='회원 API 연결 오류: '+(err.message||err)}}
+async function handleAuth(e){e.preventDefault();users=allUsers();$('#authMsg').textContent='';const id=$('#authId').value.trim();const pw=$('#authPassword').value;if(!id||!pw){$('#authMsg').textContent='아이디 또는 이메일과 비밀번호를 입력해 주세요.';return}try{let res,data,loginEmail=id;if(authMode==='signup'){const name=$('#authName').value.trim();const email=$('#authEmail').value.trim().toLowerCase();const birth=$('#authBirth').value.trim();loginEmail=email||id;if(!name||!loginEmail){$('#authMsg').textContent='이름과 이메일을 입력해 주세요.';return}res=await fetch('/api/signup',{method:'POST',headers:{'Content-Type':'application/json','Cache-Control':'no-store'},body:JSON.stringify({id,email:loginEmail,password:pw,name,birth})});}else{res=await fetch('/api/login',{method:'POST',headers:{'Content-Type':'application/json','Cache-Control':'no-store'},body:JSON.stringify({id,email:id,password:pw})});}const raw=await res.text();try{data=JSON.parse(raw)}catch{data={message:raw}}if(!res.ok||data.ok===false){$('#authMsg').textContent=data.message||data.error||'로그인/회원가입 처리 실패';return}if(authMode==='signup'&&data.pending){$('#authMsg').textContent=data.message||'관리자 승인 후 로그인할 수 있습니다.';$('#authPassword').value='';setAuthMode('login');return}const apiUser=data.user||{};const email=String(apiUser.email||loginEmail||id).toLowerCase();const localUser={id:String(apiUser.id||id),name:apiUser.name||email||id,email,birth:apiUser.birth||$('#authBirth').value.trim()||'',passwordHash:'',role:(ADMIN_EMAILS.includes(email)||ADMIN_EMAILS.includes(String(apiUser.id||id))||ADMIN_EMAILS.includes(String(apiUser.name||'')))?'admin':'user',createdAt:apiUser.created_at||new Date().toISOString()};users=allUsers().filter(u=>u.id!==localUser.id&&String(u.email||'').toLowerCase()!==email);users.push(localUser);saveUsers();user=localUser;saveSessionUser(user);showApp();/* 승인 후 사용자 알림(앱 내, approvedAt 기준 1회) */try{var _st=apiUser.status,_aa=apiUser.approvedAt;if(_st==='approved'&&_aa){var _seenKey='stella_approval_seen_'+localUser.id;if(localStorage.getItem(_seenKey)!==String(_aa)){localStorage.setItem(_seenKey,String(_aa));setTimeout(function(){try{stellaShowToast('✅ 가입이 승인되었습니다. 환영합니다!');}catch(e){try{alert('가입이 승인되었습니다. 환영합니다!');}catch(_){}}},600);}}}catch(e){}}catch(err){$('#authMsg').textContent='회원 API 연결 오류: '+(err.message||err)}}
 function forgotPassword(){users=allUsers();const id=prompt('아이디를 입력하세요.');if(!id)return;const u=users.find(x=>x.id===id.trim());if(!u)return alert('사용자를 찾을 수 없습니다. 관리자에게 문의하세요.\n관리자: yesblue0342@naver.com / yesblue0342@gmail.com');const name=prompt('가입자 이름'),email=prompt('가입 이메일'),birth=prompt('생년월일 예: 1982-04-30');if((name||'').trim()===u.name&&(email||'').trim().toLowerCase()===u.email&&(birth||'').trim()===u.birth){const np=prompt('새 비밀번호');if(np){u.passwordHash=hash(np);saveUsers();alert('비밀번호가 변경되었습니다.')}}else alert('본인 확인 정보가 맞지 않습니다. 관리자에게 문의하세요.')}function logout(){localStorage.removeItem(K.session);location.reload()}
 function activeRoom(){return rooms.find(r=>r.id===activeRoomId)}function projectName(pid){return projects.find(p=>p.id===pid)?.name||'미분류'}function projectRooms(pid){return rooms.filter(r=>r.projectId===pid)}
-function createRoom(name='새 채팅',select=true){const r={id:'r_'+uid(),owner:user.id,projectId:activeProjectId&&projects.some(p=>p.id===activeProjectId)?activeProjectId:null,name,messages:[{role:'ai',text:'안녕하세요. Stella입니다. 무엇이든 물어보세요.'}],createdAt:new Date().toISOString()};rooms.unshift(r);if(select){activeRoomId=r.id;activeView='chat'}saveRooms();renderAll();closeSidebar()}
-function createProject(){const name=prompt('새 프로젝트 카테고리명');if(!name?.trim())return;const _k=projKey(name);const _ex=projects.find(function(p){return projKey(p.name)===_k;});if(_ex){activeProjectId=_ex.id;const s2=exp();s2.add(_ex.id);saveExp(s2);renderAll();return;}const p={id:'p_'+uid(),owner:user.id,name:name.trim(),createdAt:new Date().toISOString()};projects.unshift(p);activeProjectId=p.id;const s=exp();s.add(p.id);saveExp(s);saveProjects();renderAll()}
+function createRoom(name='새 채팅',select=true){const _now=new Date().toISOString();const r={id:'r_'+uid(),owner:user.id,projectId:activeProjectId&&projects.some(p=>p.id===activeProjectId)?activeProjectId:null,name,messages:[{role:'ai',text:'안녕하세요. Stella입니다. 무엇이든 물어보세요.'}],createdAt:_now,updatedAt:_now};rooms.unshift(r);if(select){activeRoomId=r.id;activeView='chat'}saveRooms();renderAll();closeSidebar()}
+function createProject(){const name=prompt('새 프로젝트 카테고리명');if(!name?.trim())return;const _k=projKey(name);const _ex=projects.find(function(p){return projKey(p.name)===_k;});if(_ex){activeProjectId=_ex.id;const s2=exp();s2.add(_ex.id);saveExp(s2);renderAll();return;}const _pn=new Date().toISOString();const p={id:'p_'+uid(),owner:user.id,name:name.trim(),createdAt:_pn,updatedAt:_pn};projects.unshift(p);activeProjectId=p.id;const s=exp();s.add(p.id);saveExp(s);saveProjects();renderAll()}
 function createBoardCategory(){const name=prompt('새 게시글 카테고리명');if(!name?.trim())return;posts.unshift({id:'post_'+uid(),owner:user.id,category:name.trim(),title:'새 게시글',body:'내용을 입력하세요.',createdAt:new Date().toISOString()});const s=bexp();s.add(name.trim());saveBexp(s);savePosts();renderAll();openBoard()}
 function renderAll(){renderHeader();renderProjectTree();renderChatTree();renderBoardTree();renderNoteList();renderMessages();renderPostSelect();renderPosts();renderChips();renderManage();$('#userName').textContent=user?.name||'사용자';$('#userEmail').textContent=user?.email||user?.id||''}
 function renderHeader(){const r=activeRoom();$('#activeTitle').textContent=r?.name||'새 채팅';$('#activeSub').textContent=r?`${r.messages.length}개 메시지 · ${projectName(r.projectId)}`:'개인 작업공간'}
@@ -832,9 +873,9 @@ function targetFromBoard(el){const post=el.closest?.('[data-post]');if(post){con
 function openMenu(title,items){const mb=$('#menuBackdrop'),m=$('#bottomMenu');m.innerHTML=`<div class="menu-title">${esc(title)}</div>`+items.map((it,i)=>`<button class="menu-item ${it.danger?'danger':''}" data-mi="${i}">${esc(it.label)}</button>`).join('')+`<button class="menu-item" data-cancel>취소</button>`;m.querySelectorAll('[data-mi]').forEach(b=>b.onclick=()=>{mb.classList.remove('active');items[Number(b.dataset.mi)].action()});m.querySelector('[data-cancel]').onclick=()=>mb.classList.remove('active');mb.classList.add('active')}
 function bindLongPress(root,resolver){if(!root||root.dataset.lp==='1')return;root.dataset.lp='1';let t=null,info=null,sx=0,sy=0;const clear=()=>{if(t)clearTimeout(t);t=null;info=null};root.addEventListener('pointerdown',e=>{info=resolver(e.target);if(!info)return;sx=e.clientX;sy=e.clientY;t=setTimeout(()=>{openAction(info);clear()},620)},true);root.addEventListener('pointermove',e=>{if(t&&(Math.abs(e.clientX-sx)>12||Math.abs(e.clientY-sy)>12))clear()},true);['pointerup','pointercancel','pointerleave'].forEach(ev=>root.addEventListener(ev,clear,true));root.addEventListener('contextmenu',e=>{const i=resolver(e.target);if(!i)return;e.preventDefault();openAction(i)},true)}
 function openAction(i){if(i.type==='room')openMenu(i.title,[{label:'채팅방 이름 변경',action:()=>renameRoom(i.id)},{label:'프로젝트로 이동',action:()=>moveRoom(i.id)},{label:'프로젝트로 복사',action:()=>copyRoom(i.id)},{label:'채팅방 삭제',danger:true,action:()=>deleteRoom(i.id)}]);if(i.type==='project')openMenu(i.title,[{label:'프로젝트 이름 변경',action:()=>renameProject(i.id)},{label:'프로젝트 삭제',danger:true,action:()=>deleteProject(i.id)}]);if(i.type==='post')openMenu(i.title,[{label:'게시글 이름 변경',action:()=>renamePost(i.id)},{label:'게시글 삭제',danger:true,action:()=>deletePost(i.id)}]);if(i.type==='cat')openMenu(i.title,[{label:'노트 추가',action:()=>{openBoard();if(typeof openNoteNew==='function')openNoteNew();}},{label:'카테고리 이름 변경',action:()=>renameCategory(i.id)},{label:'카테고리 삭제',danger:true,action:()=>deleteCategory(i.id)}])}
-function renameProject(pid){const p=projects.find(x=>x.id===pid);if(!p)return;const n=prompt('프로젝트 이름 변경',p.name);if(n?.trim()){p.name=n.trim();saveProjects();renderAll()}}function deleteProject(pid){const p=projects.find(x=>x.id===pid);if(!p)return;if(!confirm(`"${p.name}" 프로젝트를 삭제할까요?\n채팅은 미분류로 이동됩니다.`))return;rooms.forEach(r=>{if(r.projectId===pid)r.projectId=null});projects=projects.filter(x=>x.id!==pid);activeProjectId='all';saveProjects();saveRooms();renderAll()}function renameRoom(rid){const r=rooms.find(x=>x.id===rid);if(!r)return;const n=prompt('채팅방 이름 변경',r.name);if(n?.trim()){r.name=n.trim();saveRooms();renderAll()}}function pickProject(){const list=['0. 미분류',...projects.map((p,i)=>`${i+1}. ${p.name}`)].join('\n');const v=prompt('프로젝트 번호 선택\n\n'+list,'0');if(v===null)return undefined;const n=Number(v);if(!Number.isInteger(n)||n<0||n>projects.length)return undefined;return n===0?null:projects[n-1].id}function moveRoom(rid){const r=rooms.find(x=>x.id===rid);const p=pickProject();if(!r||p===undefined)return;r.projectId=p;activeProjectId=p||'none';saveRooms();renderAll()}function copyRoom(rid){const r=rooms.find(x=>x.id===rid);const p=pickProject();if(!r||p===undefined)return;const c={...r,id:'r_'+uid(),projectId:p,name:r.name+' 복사본',messages:r.messages.map(m=>({...m}))};rooms.unshift(c);activeRoomId=c.id;activeProjectId=p||'none';saveRooms();renderAll()}function deleteRoom(rid){const r=rooms.find(x=>x.id===rid);if(!r)return;if(!confirm(`"${r.name}" 채팅방을 삭제할까요?`))return;rooms=rooms.filter(x=>x.id!==rid);if(activeRoomId===rid)activeRoomId=rooms[0]?.id||null;saveRooms();renderAll()}
+function renameProject(pid){const p=projects.find(x=>x.id===pid);if(!p)return;const n=prompt('프로젝트 이름 변경',p.name);if(n?.trim()){p.name=n.trim();saveProjects();renderAll()}}function deleteProject(pid){const p=projects.find(x=>x.id===pid);if(!p)return;if(!confirm(`"${p.name}" 프로젝트를 삭제할까요?\n채팅은 미분류로 이동됩니다.`))return;rooms.forEach(r=>{if(r.projectId===pid)r.projectId=null});projects=projects.filter(x=>x.id!==pid);activeProjectId='all';saveProjects();saveRooms();renderAll()}function renameRoom(rid){const r=rooms.find(x=>x.id===rid);if(!r)return;const n=prompt('채팅방 이름 변경',r.name);if(n?.trim()){r.name=n.trim();r.updatedAt=new Date().toISOString();saveRooms();renderAll()}}function pickProject(){const list=['0. 미분류',...projects.map((p,i)=>`${i+1}. ${p.name}`)].join('\n');const v=prompt('프로젝트 번호 선택\n\n'+list,'0');if(v===null)return undefined;const n=Number(v);if(!Number.isInteger(n)||n<0||n>projects.length)return undefined;return n===0?null:projects[n-1].id}function moveRoom(rid){const r=rooms.find(x=>x.id===rid);const p=pickProject();if(!r||p===undefined)return;r.projectId=p;r.updatedAt=new Date().toISOString();activeProjectId=p||'none';saveRooms();renderAll()}function copyRoom(rid){const r=rooms.find(x=>x.id===rid);const p=pickProject();if(!r||p===undefined)return;const c={...r,id:'r_'+uid(),projectId:p,name:r.name+' 복사본',messages:r.messages.map(m=>({...m}))};rooms.unshift(c);activeRoomId=c.id;activeProjectId=p||'none';saveRooms();renderAll()}function deleteRoom(rid){const r=rooms.find(x=>x.id===rid);if(!r)return;if(!confirm(`"${r.name}" 채팅방을 삭제할까요?`))return;rooms=rooms.filter(x=>x.id!==rid);if(activeRoomId===rid)activeRoomId=rooms[0]?.id||null;saveRooms();renderAll()}
 function renamePost(pid){const p=posts.find(x=>x.id===pid);if(!p)return;const n=prompt('게시글 제목 변경',p.title);if(n?.trim()){p.title=n.trim();savePosts();renderAll()}}function deletePost(pid){const p=posts.find(x=>x.id===pid);if(!p)return;if(confirm(`"${p.title}" 게시글을 삭제할까요?`)){posts=posts.filter(x=>x.id!==pid);savePosts();renderAll()}}function renameCategory(c){const n=prompt('카테고리 이름 변경',c);if(n?.trim()){posts.forEach(p=>{if((p.category||'기본')===c)p.category=n.trim()});savePosts();renderAll()}}function deleteCategory(c){if(confirm(`"${c}" 카테고리와 게시글을 삭제할까요?`)){posts=posts.filter(p=>(p.category||'기본')!==c);savePosts();renderAll()}}
-function renderMessages(){const r=activeRoom(),box=$('#messages');box.innerHTML='';(r?.messages||[]).forEach(m=>addMessage(m.role,m.text,false));box.scrollTop=box.scrollHeight;renderHeader()}function addMessage(role,text,persist=true,meta={}){const box=$('#messages'),row=document.createElement('div');row.className='row '+role;if(role==='ai'){const av=document.createElement('div');av.className='avatar';av.textContent='S';row.appendChild(av)}const b=document.createElement('div');b.className='bubble';role==='ai'?renderAnswer(b,text):b.textContent=text;if(role==='user'&&meta.attachments?.length){const d=document.createElement('div');d.style.marginTop='8px';d.style.color='#6b7280';d.textContent=meta.attachments.map(f=>'첨부 '+f.name).join(', ');b.appendChild(d)}row.appendChild(b);box.appendChild(row);box.scrollTop=box.scrollHeight;if(persist){const r=activeRoom();r.messages.push({role,text});if(role==='user'&&(r.name==='새 채팅'||!r.name))r.name=text.slice(0,28)||'첨부 파일 분석';saveRooms();renderHeader();renderProjectTree();renderChatTree()}}
+function renderMessages(){const r=activeRoom(),box=$('#messages');box.innerHTML='';(r?.messages||[]).forEach(m=>addMessage(m.role,m.text,false));box.scrollTop=box.scrollHeight;renderHeader()}function addMessage(role,text,persist=true,meta={}){const box=$('#messages'),row=document.createElement('div');row.className='row '+role;if(role==='ai'){const av=document.createElement('div');av.className='avatar';av.textContent='S';row.appendChild(av)}const b=document.createElement('div');b.className='bubble';role==='ai'?renderAnswer(b,text):b.textContent=text;if(role==='user'&&meta.attachments?.length){const d=document.createElement('div');d.style.marginTop='8px';d.style.color='#6b7280';d.textContent=meta.attachments.map(f=>'첨부 '+f.name).join(', ');b.appendChild(d)}row.appendChild(b);box.appendChild(row);box.scrollTop=box.scrollHeight;if(persist){const r=activeRoom();r.messages.push({role,text,createdAt:new Date().toISOString()});r.updatedAt=new Date().toISOString();if(role==='user'&&(r.name==='새 채팅'||!r.name))r.name=text.slice(0,28)||'첨부 파일 분석';saveRooms();renderHeader();renderProjectTree();renderChatTree()}}
 function renderAnswer(el,text){const tools=document.createElement('div');tools.className='download-tools';const stamp=new Date().toISOString().replace(/[:.]/g,'-').slice(0,19);tools.append(btn('TXT 다운로드',()=>downloadText(`stella-answer-${stamp}.txt`,text,'text/plain;charset=utf-8')));tools.append(btn('Markdown 다운로드',()=>downloadText(`stella-answer-${stamp}.md`,text,'text/markdown;charset=utf-8')));el.appendChild(tools);String(text||'').split(/\n{2,}/).map(x=>x.trim()).filter(Boolean).forEach(t=>{const pp=document.createElement('p');pp.textContent=t;el.appendChild(pp)})}
 function btn(t,fn){const b=document.createElement('button');b.className='download-btn';b.type='button';b.textContent=t;b.onclick=fn;return b}function downloadText(name,content,mime){const blob=new Blob([content],{type:mime});const url=URL.createObjectURL(blob);const a=document.createElement('a');a.href=url;a.download=name;document.body.appendChild(a);a.click();setTimeout(()=>{a.remove();URL.revokeObjectURL(url)},1000)}function roomText(r=activeRoom()){return (r?.messages||[]).map(m=>`${m.role==='ai'?'Stella':'나'}:\n${m.text}`).join('\n\n---\n\n')}
 async function extractFile(file){const name=file.name||'file',lower=name.toLowerCase(),type=file.type||'';try{if(type.startsWith('image/')||/\.(png|jpe?g|webp|bmp)$/i.test(lower)){const rawUrl=await readData(file);const dataUrl=await resizeImageDataUrl(rawUrl,1568,0.85);let text=`[이미지 첨부: ${name}]`;if(window.Tesseract){try{const res=await Promise.race([Tesseract.recognize(dataUrl,'kor+eng'),new Promise((_,rej)=>setTimeout(()=>rej(new Error('OCR 시간초과(이미지는 첨부됨)')),20000))]);text+='\n\n[OCR 추출 텍스트]\n'+(res?.data?.text?.trim()||'추출된 텍스트 없음')}catch(e){text+='\n\n[OCR 오류] '+(e.message||e)}}return{name,type:'image/jpeg',size:file.size,dataUrl,text}}if(lower.endsWith('.pdf')&&window.pdfjsLib){const pdf=await pdfjsLib.getDocument({data:await file.arrayBuffer()}).promise;let pages=[];for(let p=1;p<=Math.min(pdf.numPages,30);p++){const page=await pdf.getPage(p),tc=await page.getTextContent();pages.push(`[PDF ${p}페이지]\n`+tc.items.map(i=>i.str).join(' '))}return{name,type,size:file.size,text:pages.join('\n\n')}}if(/\.docx$/i.test(lower)&&window.mammoth){const r=await mammoth.extractRawText({arrayBuffer:await file.arrayBuffer()});return{name,type,size:file.size,text:r.value||''}}if(/\.(xlsx|xls|csv)$/i.test(lower)&&window.XLSX){const wb=XLSX.read(await file.arrayBuffer(),{type:'array'});return{name,type,size:file.size,text:wb.SheetNames.map(sn=>`[시트: ${sn}]\n`+XLSX.utils.sheet_to_csv(wb.Sheets[sn])).join('\n\n')}}return{name,type,size:file.size,text:await file.text()}}catch(e){return{name,type,size:file.size,text:`파일 읽기 오류: ${e.message||e}`}}}function readData(file){return new Promise((res,rej)=>{const r=new FileReader();r.onload=()=>res(String(r.result||''));r.onerror=()=>rej(r.error);r.readAsDataURL(file)})}
@@ -919,7 +960,7 @@ function formatSearchReferences(results){if(!Array.isArray(results)||!results.le
 // 채팅 히스토리 Drive에서 로드 (새로 접속 시)
 async function loadChatHistoryFromDrive(){
   try{
-    const r=await fetch('/api/hybrid-chat-list?userId='+encodeURIComponent(user.id),{cache:'no-store'});
+    const r=await fetchWithRetry('/api/hybrid-chat-list?userId='+encodeURIComponent(user.id),{cache:'no-store'},3,12000);
     if(!r.ok)return;
     const d=await r.json();
     // hybrid-chat-list는 items 반환, 호환 처리
@@ -952,7 +993,7 @@ async function loadNotesFromDrive(){
   if(!user||!user.id) return;
   try{
     // /api/note 전용 API 사용 (Drive users/{userId}/notes/ 구조, deleted 제외)
-    const r=await fetch('/api/note?action=list&userId='+encodeURIComponent(user.id),{cache:'no-store'});
+    const r=await fetchWithRetry('/api/note?action=list&userId='+encodeURIComponent(user.id),{cache:'no-store'},3,12000);
     if(!r.ok) return;
     const d=await r.json();
     if(!d.ok) return;
@@ -1078,7 +1119,7 @@ function downloadPptFromText(name,text){const html='<!doctype html><html><head><
 function renderAnswer(el,text){try{const stamp=new Date().toISOString().replace(/[:.]/g,'-').slice(0,19);const hasTable=tableRowsFromText(text).length>0;if(wantsDownload()||hasTable){const tools=document.createElement('div');tools.className='download-tools';try{const xl=xlsxUrlFromText(text);if(xl&&xl.url)tools.append(makeDownloadLink('📥 Excel 파일 다운로드','stella-answer-'+stamp+'.'+xl.ext,xl.url));}catch(e){}if(wantsDownload()){try{tools.append(makeDownloadLink('TXT 다운로드','stella-answer-'+stamp+'.txt',blobUrl(text,'text/plain;charset=utf-8')));tools.append(btn('Word 다운로드',function(){downloadDocFromText('stella-answer-'+stamp+'.doc',text)}));tools.append(btn('PPT 다운로드',function(){downloadPptFromText('stella-answer-'+stamp+'.ppt',text)}));tools.append(makeDownloadLink('Markdown 다운로드','stella-answer-'+stamp+'.md',blobUrl(text,'text/markdown;charset=utf-8')))}catch(e){}}if(tools.childNodes.length)el.appendChild(tools)}}catch(e){}renderMarkdownLite(el,text)}
 /* /stella-rich-answer-download-override */
 window.addEventListener('resize',syncSidebarLayout);
-window.addEventListener('DOMContentLoaded',()=>{ensureModelOptions();initEvents();initAuth();syncSidebarLayout()});
+window.addEventListener('DOMContentLoaded',()=>{ensureModelOptions();initEvents();initAuth();syncSidebarLayout();try{warmupDb();}catch(e){}});
 </script>
 <script src="/js/stella-memory.js"></script>
 <script>if('serviceWorker' in navigator){navigator.serviceWorker.register('/sw.js').catch(function(){});}window.addEventListener('appinstalled',function(){});try{if(window.StellaMemory&&window.user&&user.id)StellaMemory.setUser(user.id);}catch(e){}</script>
@@ -1133,11 +1174,31 @@ window.addEventListener('DOMContentLoaded',()=>{ensureModelOptions();initEvents(
       b.onclick=function(){ act(b.getAttribute('data-act'),b.getAttribute('data-key'),b.getAttribute('data-id')); };
     });
   }
+  function setBadge(n){
+    var b=document.getElementById('approvalFab'); if(!b) return;
+    var badge=document.getElementById('approvalBadge');
+    if(!badge){ badge=document.createElement('span'); badge.id='approvalBadge';
+      badge.style.cssText='display:none;position:absolute;top:-6px;right:-6px;min-width:18px;height:18px;padding:0 5px;border-radius:999px;background:#dc2626;color:#fff;font-size:.72rem;line-height:18px;text-align:center;font-weight:800;box-shadow:0 2px 6px rgba(0,0,0,.3)';
+      b.style.position='relative'; b.appendChild(badge); }
+    n=Number(n)||0;
+    if(n>0){ badge.textContent=n>99?'99+':String(n); badge.style.display='block'; }
+    else { badge.style.display='none'; }
+  }
+  // 승인 대기 수를 조용히 조회해 배지 갱신 (관리자 인증 캐시가 있을 때만 - 알림용)
+  function refreshBadge(){
+    if(!__adminCred) return;
+    api({action:'list'}).then(function(r){
+      if(r.ok && r.data && r.data.ok!==false){ setBadge((r.data.pending||[]).length); }
+      else if(r.status===401||r.status===403){ __adminCred=null; setBadge(0); }
+    }).catch(function(){});
+  }
   function load(){
     var box=document.getElementById('approvalList'); if(box) box.innerHTML='불러오는 중...';
     api({action:'list'}).then(function(r){
       if(!r.ok||r.data.ok===false){ if(r.status===401||r.status===403) __adminCred=null; toast(r.data.message||'목록을 불러오지 못했습니다.'); if(box) box.innerHTML='<div style="padding:18px;color:#dc2626">'+esc(r.data.message||'오류')+'</div>'; return; }
-      render(r.data.pending||[]);
+      var pending=r.data.pending||[];
+      setBadge(pending.length);
+      render(pending);
     });
   }
   function act(action,key,id){
@@ -1157,6 +1218,7 @@ window.addEventListener('DOMContentLoaded',()=>{ensureModelOptions();initEvents(
         btn.onclick=open; document.body.appendChild(btn);
       }
       btn.style.display='block';
+      refreshBadge(); // 인증 캐시가 있으면 대기 건수 배지 갱신(관리자 알림)
     }else if(btn){ btn.style.display='none'; }
   }
   window.stellaOpenApproval=open; window.stellaEnsureApprovalUI=ensureBtn;

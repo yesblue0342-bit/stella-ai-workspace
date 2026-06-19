@@ -143,3 +143,27 @@ test("통합: id 없는 레거시 데이터도 결정적 id 부여 후 디바이
   const merged = S.mergeById(A, B);
   assert.equal(merged.length, 1, "동일 id → 중복 아님");
 });
+
+test("크로스-디바이스: PC에서 채팅 수정(최신 updatedAt)이 휴대폰의 오래된 사본을 이김 (LWW)", () => {
+  const t0 = T0, t1 = T0 + 60_000;
+  // 휴대폰: 오래된 메시지 1개. PC: 같은 방을 더 늦게 수정(메시지 2개).
+  const phone = [room("r1", "회의록", t0, { messages: [{ role: "user", text: "초안" }] })];
+  const pc    = [room("r1", "회의록(수정)", t1, { messages: [{ role: "user", text: "초안" }, { role: "ai", text: "정리본" }] })];
+  const merged = S.mergeById(phone, pc);
+  assert.equal(merged.length, 1, "같은 id → 1개로 수렴");
+  assert.equal(merged[0].updatedAt, t1, "더 최신(updatedAt) 사본 채택");
+  assert.equal(merged[0].messages.length, 2, "PC의 최신 메시지 유지");
+  // 순서를 바꿔도(휴대폰이 나중에 pull) 결과 동일 — 결정적 수렴
+  const merged2 = S.mergeById(pc, phone);
+  assert.equal(merged2[0].updatedAt, t1);
+  assert.equal(merged2[0].messages.length, 2);
+});
+
+test("크로스-디바이스: 휴대폰의 더 최신 수정이 PC 사본을 이김 (반대 방향 LWW)", () => {
+  const t0 = T0, t2 = T0 + 120_000;
+  const pc    = [room("r2", "메모", t0, { messages: [{ role: "user", text: "a" }] })];
+  const phone = [room("r2", "메모2", t2, { messages: [{ role: "user", text: "a" }, { role: "user", text: "b" }] })];
+  const merged = S.mergeById(pc, phone);
+  assert.equal(merged[0].updatedAt, t2, "휴대폰 최신본 채택");
+  assert.equal(merged[0].name, "메모2");
+});

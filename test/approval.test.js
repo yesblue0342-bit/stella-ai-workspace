@@ -1,7 +1,7 @@
 // Phase 6 단위 테스트: 승인 로직 (node --test 불필요, 순수 assert)
 import assert from "assert";
 import {
-  isAdmin, effectiveStatus, canLogin, loginDenialMessage, isValidTransition, ADMIN_IDS
+  isAdmin, effectiveStatus, canLogin, loginDenialMessage, isValidTransition, ADMIN_IDS, approvalNotice
 } from "../lib/approval.js";
 
 let pass = 0, fail = 0;
@@ -52,6 +52,23 @@ function approvalGate(callerId) { return isAdmin(callerId); }
 t("비관리자 호출 → 차단", () => assert.strictEqual(approvalGate("randombot"), false));
 t("관리자 호출 → 허용", () => assert.strictEqual(approvalGate("yesblue0342"), true));
 t("대문자 관리자 호출 → 허용", () => assert.strictEqual(approvalGate("Admin"), true));
+
+console.log("[7] 승인 후 사용자 알림 (approvalNotice, approvedAt 기준 1회)");
+t("approved + approvedAt + 미열람 → 환영 메시지", () =>
+  assert.strictEqual(approvalNotice({ id: "u", status: "approved", approvedAt: "2026-06-20T00:00:00Z" }, null),
+    "가입이 승인되었습니다. 환영합니다!"));
+t("approved + approvedAt + 이미 본 동일 시각 → null (중복 알림 방지)", () =>
+  assert.strictEqual(approvalNotice({ id: "u", status: "approved", approvedAt: "2026-06-20T00:00:00Z" }, "2026-06-20T00:00:00Z"), null));
+t("approved + approvedAt + 다른(이전) 열람시각 → 재알림", () =>
+  assert.strictEqual(approvalNotice({ id: "u", status: "approved", approvedAt: "2026-06-21T00:00:00Z" }, "2026-06-20T00:00:00Z"),
+    "가입이 승인되었습니다. 환영합니다!"));
+t("pending → 알림 없음", () =>
+  assert.strictEqual(approvalNotice({ id: "u", status: "pending", approvedAt: null }, null), null));
+t("rejected → 알림 없음", () =>
+  assert.strictEqual(approvalNotice({ id: "u", status: "rejected", approvedAt: "2026-06-20T00:00:00Z" }, null), null));
+t("approvedAt 없음(하위호환/관리자) → 알림 없음", () =>
+  assert.strictEqual(approvalNotice({ id: "u", status: "approved" }, null), null));
+t("user null → null", () => assert.strictEqual(approvalNotice(null, null), null));
 
 console.log("\n결과: " + pass + " PASS / " + fail + " FAIL  (총 " + (pass + fail) + ")");
 console.log("ADMIN_IDS = " + JSON.stringify(ADMIN_IDS));
