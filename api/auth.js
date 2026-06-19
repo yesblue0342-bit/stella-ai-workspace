@@ -2,6 +2,7 @@
 // 회원정보는 Drive auth/users/{id}.json 에 저장, Azure는 부가 인덱스만(실패 무시)
 import crypto from "crypto";
 import { saveJsonToDrive, readJsonFromDrive } from "../lib/drive-utils.js";
+import { isAdmin, canLogin, loginDenialMessage } from "../lib/approval.js";
 
 function clean(v){ return String(v || "").trim(); }
 function lower(v){ return clean(v).toLowerCase(); }
@@ -67,7 +68,7 @@ export default async function handler(req, res){
     if(!rawId && !email) return res.status(400).json({ ok:false, message:"아이디 또는 이메일을 입력하세요." });
     if(!password) return res.status(400).json({ ok:false, message:"비밀번호를 입력하세요." });
 
-    // admin/admin 무조건 통과
+    // admin/admin 무조건 통과 (관리자는 항상 승인 상태)
     if(lower(rawId) === "admin" && password === "admin"){
       return res.status(200).json({ ok:true, message:"관리자 로그인", user:{ id:"admin", email:"admin@stella.local", name:"관리자", birth:"", created_at:new Date().toISOString() } });
     }
@@ -77,6 +78,10 @@ export default async function handler(req, res){
       const u = await readUser(idKey, emailKey);
       if(!u) return res.status(401).json({ ok:false, message:"가입 정보가 없습니다. 회원가입 후 로그인하세요." });
       if(!verify(password, u.password_hash)) return res.status(401).json({ ok:false, message:"비밀번호가 올바르지 않습니다." });
+      // 승인 상태 판정 (서버측에서만 신뢰) — 관리자/하위호환은 approval 로직이 처리
+      if(!canLogin(u)){
+        return res.status(403).json({ ok:false, status:u.status||"", message: loginDenialMessage(u) || "로그인할 수 없는 계정입니다." });
+      }
       return res.status(200).json({ ok:true, message:"로그인 성공", user:publicUser(u) });
     }
 
@@ -87,12 +92,18 @@ export default async function handler(req, res){
     const existing = await readUser(idKey, emailKey);
     if(existing){
       if(verify(password, existing.password_hash)){
+        // 비밀번호가 맞아도 승인 상태를 반드시 확인 (pending 계정 자동 로그인 우회 방지)
+        if(!canLogin(existing)){
+          return res.status(403).json({ ok:false, status:existing.status||"", message: loginDenialMessage(existing) || "로그인할 수 없는 계정입니다." });
+        }
         return res.status(200).json({ ok:true, message:"이미 가입된 계정입니다. 자동 로그인합니다.", user:publicUser(existing) });
       }
       return res.status(409).json({ ok:false, message:"이미 가입된 아이디 또는 이메일입니다. 로그인 탭에서 로그인하세요." });
     }
 
-    // Drive에 저장 (핵심 - 이게 성공하면 가입 완료)
+    // 신규 가입: status=pending 으로 저장 (관리자 승인 전 로그인 불가).
+    // 단, 관리자 ID로 가입하면 approval 로직이 항상 approved 취급하므로 잠기지 않음.
+    const nowIso = new Date().toISOString();
     const userData = {
       type:"stella_member",
       id: rawId || email,
@@ -100,7 +111,11 @@ export default async function handler(req, res){
       email: email || rawId,
       name, birth,
       password_hash: makeHash(password),
-      created_at: new Date().toISOString()
+      status: "pending",
+      requestedAt: nowIso,
+      approvedAt: null,
+      approvedBy: null,
+      created_at: nowIso
     };
     try{
       await saveJsonToDrive({ folderPath:["auth","users"], fileName: idKey, data: userData });
@@ -114,7 +129,15 @@ export default async function handler(req, res){
     // Azure 인덱스는 부가 (실패해도 가입 성공)
     indexToAzure(userData).catch(()=>{});
 
-    return res.status(201).json({ ok:true, message:"회원가입 성공", user:publicUser(userData) });
+    // 관리자 ID는 즉시 로그인 가능, 일반 사용자는 승인 대기
+    if(isAdmin(rawId || email)){
+      return res.status(201).json({ ok:true, pending:false, status:"approved", message:"회원가입 성공 (관리자 계정)", user:publicUser(userData) });
+    }
+    return res.status(201).json({
+      ok:true, pending:true, status:"pending",
+      message:"회원가입 신청이 완료되었습니다. 관리자 승인 후 로그인할 수 있습니다.",
+      user:publicUser(userData)
+    });
   }catch(e){
     return res.status(500).json({ ok:false, message:"인증 처리 실패", error:e.message });
   }
