@@ -123,6 +123,107 @@ async function readContents(owner, repo, path, ref) {
   return { type: "file", name: data.name, path: data.path, sha: data.sha, size: data.size || 0, encoding: data.encoding, content: data.content || "", download_url: data.download_url || null };
 }
 
+// ── 임의 레포 쓰기(파일관리자) 헬퍼 — 토큰 필수, 토큰은 헤더에만 ──
+function writeHeaders(token) {
+  return { "Accept": "application/vnd.github+json", "X-GitHub-Api-Version": "2022-11-28", "Authorization": `Bearer ${token}`, "User-Agent": "stella-hub" };
+}
+function contentsUrl(owner, repo, path) {
+  const p = String(path || "").split("/").filter(Boolean).map(encodeURIComponent).join("/");
+  return `https://api.github.com/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}/contents/${p}`;
+}
+// 파일 1개의 sha + base64 content 조회 (없으면 404 throw)
+async function ghFileMeta(owner, repo, path, ref, token) {
+  let url = contentsUrl(owner, repo, path);
+  if (ref) url += `?ref=${encodeURIComponent(ref)}`;
+  const d = await ghGet(url, token);
+  if (Array.isArray(d)) { const e = new Error("폴더는 이 작업을 지원하지 않습니다 (파일 단위만)"); e.status = 400; throw e; }
+  return { sha: d.sha, content: d.content || "", encoding: d.encoding };
+}
+async function ghPutRaw(owner, repo, path, { contentB64, message, branch, sha }, token) {
+  const r = await fetch(contentsUrl(owner, repo, path), {
+    method: "PUT", headers: { ...writeHeaders(token), "Content-Type": "application/json" },
+    body: JSON.stringify(sha ? { message, content: contentB64, branch, sha } : { message, content: contentB64, branch }),
+  });
+  const t = await r.text(); let d; try { d = t ? JSON.parse(t) : {}; } catch { d = { raw: t }; }
+  if (!r.ok) { const e = new Error(d.message || `GitHub PUT ${r.status}`); e.status = r.status; throw e; }
+  return d;
+}
+async function ghDeleteRaw(owner, repo, path, { sha, message, branch }, token) {
+  const r = await fetch(contentsUrl(owner, repo, path), {
+    method: "DELETE", headers: { ...writeHeaders(token), "Content-Type": "application/json" },
+    body: JSON.stringify({ message, sha, branch }),
+  });
+  const t = await r.text(); let d; try { d = t ? JSON.parse(t) : {}; } catch { d = { raw: t }; }
+  if (!r.ok) { const e = new Error(d.message || `GitHub DELETE ${r.status}`); e.status = r.status; throw e; }
+  return d;
+}
+// sha 미제공 시 조회해서 채움
+async function resolveSha(owner, repo, path, branch, sha, token) {
+  if (sha) return sha;
+  const m = await ghFileMeta(owner, repo, path, branch, token);
+  return m.sha;
+}
+// 단일 쓰기 작업 디스패치 — 임의 owner/repo/branch 대상
+async function doWriteAction(action, body, token) {
+  const owner = clean(body.owner), repo = clean(body.repo);
+  const branch = clean(body.branch) || "main";
+  if (!owner || !repo) { const e = new Error("owner, repo required"); e.status = 400; throw e; }
+
+  if (action === "upload") {
+    const path = assertSafePath(body.path);
+    // content는 base64(바이너리-safe). raw=true면 평문으로 보고 인코딩.
+    const contentB64 = body.raw ? encodeContent(body.content) : String(body.content || "");
+    let sha = null;
+    try { sha = (await ghFileMeta(owner, repo, path, branch, token)).sha; } catch (e) { if (e.status !== 404) throw e; }
+    const r = await ghPutRaw(owner, repo, path, { contentB64, message: clean(body.message) || `Upload ${path}`, branch, sha }, token);
+    return { path, html_url: r.content?.html_url || null, commit_sha: r.commit?.sha || null };
+  }
+  if (action === "mkdir") {
+    const dir = assertSafePath(body.path);
+    const path = dir.replace(/\/+$/, "") + "/.gitkeep";
+    const r = await ghPutRaw(owner, repo, path, { contentB64: encodeContent(""), message: `Create folder ${dir}`, branch }, token);
+    return { path, html_url: r.content?.html_url || null };
+  }
+  if (action === "delete") {
+    const path = assertSafePath(body.path);
+    const sha = await resolveSha(owner, repo, path, branch, clean(body.sha), token);
+    await ghDeleteRaw(owner, repo, path, { sha, message: clean(body.message) || `Delete ${path}`, branch }, token);
+    return { path, deleted: true };
+  }
+  if (action === "copy" || action === "move" || action === "rename") {
+    const src = assertSafePath(body.path);
+    const dest = assertSafePath(body.dest);
+    if (src === dest) { const e = new Error("원본과 대상 경로가 같습니다"); e.status = 400; throw e; }
+    const meta = await ghFileMeta(owner, repo, src, branch, token); // base64 content + sha
+    const contentB64 = String(meta.content || "").replace(/\s/g, "");
+    // 대상이 이미 있으면 sha 필요
+    let destSha = null;
+    try { destSha = (await ghFileMeta(owner, repo, dest, branch, token)).sha; } catch (e) { if (e.status !== 404) throw e; }
+    const put = await ghPutRaw(owner, repo, dest, { contentB64, message: `${action} ${src} -> ${dest}`, branch, sha: destSha }, token);
+    if (action === "copy") return { src, dest, html_url: put.content?.html_url || null };
+    // move/rename: dest 생성 성공 후 src 삭제 (실패 시 롤백 불가하면 둘 다 남김 보고)
+    try {
+      await ghDeleteRaw(owner, repo, src, { sha: meta.sha, message: `${action} cleanup ${src}`, branch }, token);
+    } catch (e) {
+      return { src, dest, moved: false, warning: `대상은 생성됐지만 원본 삭제 실패(둘 다 존재): ${e.message}` };
+    }
+    return { src, dest, moved: true, html_url: put.content?.html_url || null };
+  }
+  if (action === "batch") {
+    const op = clean(body.op); // delete|copy|move
+    const items = Array.isArray(body.items) ? body.items : [];
+    const done = [], errors = [];
+    for (const it of items) {
+      try {
+        const sub = await doWriteAction(op, { owner, repo, branch, path: it.path, sha: it.sha, dest: it.dest }, token);
+        done.push(sub);
+      } catch (e) { errors.push({ path: it.path, error: String(e.message || e) }); }
+    }
+    return { batch: op, done: done.length, total: items.length, results: done, errors: errors.length ? errors : undefined };
+  }
+  const e = new Error("알 수 없는 쓰기 액션: " + action); e.status = 400; throw e;
+}
+
 export default async function handler(req, res) {
   try {
     // 토큰 선택적 액션(공개는 토큰 없이, 비공개는 토큰 있을 때) — getConfig(토큰 필수)보다 먼저
@@ -133,6 +234,16 @@ export default async function handler(req, res) {
       const owner = clean(req.query?.owner), repo = clean(req.query?.repo);
       if (!owner || !repo) return res.status(400).json({ ok: false, message: "owner, repo required" });
       return res.status(200).json({ ok: true, ...(await readContents(owner, repo, clean(req.query?.path), clean(req.query?.ref))) });
+    }
+
+    // 임의 레포 쓰기 액션(파일관리자) — 토큰 필수. 레거시 단일 레포 PUT보다 먼저 처리.
+    const WRITE_ACTIONS = ["upload", "mkdir", "delete", "copy", "move", "rename", "batch"];
+    const writeAction = clean(req.body?.action);
+    if (req.method === "POST" && WRITE_ACTIONS.includes(writeAction)) {
+      const token = ghToken();
+      if (!token) return res.status(400).json({ ok: false, message: "GitHub 토큰이 없습니다. GITHUB_TOKEN 환경변수를 등록하세요." });
+      const result = await doWriteAction(writeAction, req.body || {}, token);
+      return res.status(200).json({ ok: true, action: writeAction, ...result });
     }
 
     const config = getConfig();
