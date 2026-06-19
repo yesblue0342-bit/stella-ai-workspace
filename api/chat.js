@@ -279,7 +279,7 @@ export default async function handler(req, res) {
     let aiMessage = message;
     let actualDriveContext = null;
     const history = Array.isArray(body.history) ? body.history : [];
-    const model = body.model || "gpt-4o-mini";
+    const model = body.model || "gpt-4.1-mini";
     const system = body.system || STELLA_SYSTEM_PROMPT;
     const images = Array.isArray(body.images) ? body.images.slice(0, 4) : [];
     const userId = String(body.userId || body.user_id || "").trim() || "anonymous";
