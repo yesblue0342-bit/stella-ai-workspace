@@ -56,3 +56,23 @@ PASS  contents owner/repo 누락 → 400
 - vercel.json JSON.parse 통과 · CSP에 unsafe-eval/unsafe-inline 단언 6/6.
 - node --check sw.js 통과.
 - 배포 후: /hub 콘솔 CSP eval 에러 사라짐 + 비공개 레포(api/github.js 프록시) 표시 + 미리보기는 실환경(Vercel 헤더)에서 확인.
+
+---
+
+# Stella Hub eval 제거 + CSP 보안 강화
+
+`npm test` → **# tests 54  # pass 54  # fail 0** + jsdom 렌더 5/5.
+
+## 진단
+- hub.html에 **eval() 0건**(이미 esc()/textContent로 안전). 제거할 eval 없음 → 안전 렌더 강화 + CSP 하드닝으로 목표 달성.
+
+## 변경
+- hub.html: renderText(name,content) 추가 — JSON(JSON.parse+stringify pretty), 코드(highlight.js, 출력 이스케이프됨→XSS 안전), 폴백 textContent(평문). 미리보기 2곳(공개/비공개)을 renderText 경유로 통일.
+- highlight.js CDN + 자체 토큰 CSS(테마 무관, 외부 CSS 불필요).
+- vercel.json CSP: **script-src에서 'unsafe-eval' 제거**('unsafe-inline'은 유지 — 인라인 script/onclick/style 보존).
+- sw stella-v20 → v21.
+
+## 검증
+- grep "eval(" hub.html = 0 · hub 인라인 JS new Function 검증 통과.
+- csp.test.js: unsafe-eval 없음 + unsafe-inline 있음 단언.
+- jsdom 5/5: JSON pretty, 코드 highlight, <script> 미실행(이스케이프), eval 미사용.

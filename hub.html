@@ -6,6 +6,8 @@
 <title>Stella Hub</title>
 <meta name="theme-color" content="#0d1117">
 <script src="/lib/hub-utils.js"></script>
+<!-- 문법 강조: highlight.js (eval 미사용, 출력은 HTML 이스케이프됨 → XSS 안전). 실패 시 평문 폴백 -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
 <style>
 /* ── 테마 토큰 (Stella DB와 동일: :root 다크 / body.light 라이트, stella_db_theme 키) ── */
 :root{--bg:#0d1117;--bg2:#161b22;--bg3:#21262d;--border:#30363d;--text:#e6edf3;--text2:#8b949e;--text3:#c9d1d9;--accent:#e6edf3;--danger:#f85149;--primary:#1f6feb}
@@ -49,6 +51,20 @@ body.light .repo-badge.pub{background:#dcfce7;color:#166534}
 .btn[disabled],.btn.disabled{opacity:.5;cursor:not-allowed}
 .pv-body{flex:1;overflow:auto;padding:14px}
 pre.code{background:var(--bg2);border:1px solid var(--border);border-radius:10px;padding:12px;overflow:auto;font-family:ui-monospace,Consolas,monospace;font-size:.82rem;line-height:1.55;white-space:pre;color:var(--text3)}
+pre.code code{background:none;padding:0;font:inherit;color:inherit}
+/* highlight.js 토큰 색 (테마 무관 자체 정의 — 외부 CSS 불필요) */
+.hljs-keyword,.hljs-selector-tag,.hljs-built_in,.hljs-doctag{color:#ff7b72}
+.hljs-string,.hljs-attr,.hljs-meta-string{color:#a5d6ff}
+.hljs-comment,.hljs-quote{color:#8b949e;font-style:italic}
+.hljs-number,.hljs-literal,.hljs-bullet{color:#79c0ff}
+.hljs-title,.hljs-section,.hljs-function .hljs-title{color:#d2a8ff}
+.hljs-name,.hljs-tag,.hljs-selector-id,.hljs-selector-class{color:#7ee787}
+.hljs-meta,.hljs-symbol,.hljs-type{color:#8b949e}
+body.light .hljs-keyword,body.light .hljs-selector-tag,body.light .hljs-built_in,body.light .hljs-doctag{color:#cf222e}
+body.light .hljs-string,body.light .hljs-attr{color:#0a3069}
+body.light .hljs-number,body.light .hljs-literal,body.light .hljs-bullet{color:#0550ae}
+body.light .hljs-title,body.light .hljs-section{color:#8250df}
+body.light .hljs-name,body.light .hljs-tag,body.light .hljs-selector-class{color:#116329}
 .pv-img{max-width:100%;border-radius:10px;border:1px solid var(--border)}
 .empty{color:var(--text2);text-align:center;margin:auto;font-size:.9rem;padding:30px}
 .spin{display:inline-block;width:14px;height:14px;border:2px solid var(--text2);border-top-color:transparent;border-radius:50%;animation:sp .7s linear infinite;vertical-align:middle}
@@ -242,6 +258,28 @@ function renderNodes(host, items, parentPath){
   });
 }
 
+// ── 안전한 텍스트/코드/JSON 렌더 (eval 미사용) ──
+// JSON: JSON.parse+stringify(pretty). 코드: highlight.js(출력 이스케이프됨). 폴백: textContent(평문).
+var HUB_LANG={js:'javascript',mjs:'javascript',cjs:'javascript',jsx:'javascript',ts:'typescript',tsx:'typescript',py:'python',java:'java',c:'c',h:'cpp',cpp:'cpp',go:'go',sh:'bash',rb:'ruby',php:'php',rs:'rust',kt:'kotlin',swift:'swift',html:'xml',htm:'xml',xml:'xml',css:'css',scss:'scss',json:'json',md:'markdown',markdown:'markdown',sql:'sql',yml:'yaml',yaml:'yaml',toml:'ini',ini:'ini',abap:'abap'};
+function renderText(name, content){
+  var body=$('pvBody');
+  var ext=H.ext(name);
+  if(ext==='json'){ try{ content=JSON.stringify(JSON.parse(content), null, 2); }catch(e){} }
+  var lang=HUB_LANG[ext];
+  if(window.hljs && lang && hljs.getLanguage && hljs.getLanguage(lang)){
+    try{
+      var out=hljs.highlight(content, {language:lang, ignoreIllegals:true}).value; // HTML 이스케이프된 안전 문자열
+      body.innerHTML='<pre class="code"><code class="hljs">'+out+'</code></pre>';
+      return;
+    }catch(e){}
+  }
+  // 폴백: textContent(이스케이프) — eval/innerHTML(원문) 미사용
+  body.innerHTML='';
+  var pre=document.createElement('pre'); pre.className='code';
+  pre.textContent=content;
+  body.appendChild(pre);
+}
+
 // ── 파일 미리보기/다운로드 ──
 async function openFile(it){
   const branch=curRepo.default_branch;
@@ -261,7 +299,7 @@ async function openFile(it){
       if(kind==='image'){ $('pvBody').innerHTML='<img class="pv-img" alt="'+esc(it.name)+'" src="'+url+'">'; return; }
       if(kind==='binary'){ $('pvBody').innerHTML='<div class="empty">바이너리 파일입니다.<br>「⬇ 다운로드」로 내려받으세요.</div>'; return; }
       const txt=new TextDecoder('utf-8').decode(bytes);
-      $('pvBody').innerHTML='<pre class="code">'+esc(txt)+'</pre>';
+      renderText(it.name, txt);
     }catch(e){ $('pvBody').innerHTML='<div class="err">미리보기 실패: '+esc(e.message)+'</div>'; }
     return;
   }
@@ -273,7 +311,7 @@ async function openFile(it){
   $('pvBody').innerHTML='<div class="note">불러오는 중… <span class="spin"></span></div>';
   try{
     const r=await fetch(raw); const txt=await r.text();
-    $('pvBody').innerHTML='<pre class="code">'+esc(txt)+'</pre>';
+    renderText(it.name, txt);
   }catch(e){ $('pvBody').innerHTML='<div class="err">미리보기 실패: '+esc(e.message)+'</div>'; }
 }
 
