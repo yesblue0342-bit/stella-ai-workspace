@@ -201,6 +201,37 @@ function getIcon(f){if(f.isFolder)return'📁';const n=String(f.name||'');if(n.e
 function status(t){document.getElementById('statusBar').textContent=t;}
 function sleep(ms){return new Promise(r=>setTimeout(r,ms));}
 
+// ── 공통: 타임아웃 fetch · 방어적 JSON 파싱 · 에러 surface (작업 A·B·C 공유) ──
+function fetchWithTimeout(url,opts,ms){
+  opts=opts||{};
+  var ctrl=new AbortController();
+  var t=setTimeout(function(){try{ctrl.abort();}catch(_){}} ,ms||30000);
+  var merged={};for(var k in opts){merged[k]=opts[k];}merged.signal=ctrl.signal;
+  return fetch(url,merged).finally(function(){clearTimeout(t);});
+}
+// 에러 응답이 HTML/plain text여도 res.json()이 터지지 않게 방어
+async function parseJsonSafe(res){
+  var txt='';
+  try{txt=await res.text();}catch(e){return{data:null,raw:'',parseError:true};}
+  try{return{data:JSON.parse(txt),raw:txt};}
+  catch(e){return{data:null,raw:txt,parseError:true};}
+}
+function isAbortError(e){return e&&(e.name==='AbortError'||/abort/i.test(String((e&&e.message)||'')));}
+// 파일 목록 영역을 에러 메시지 + [재시도]로 교체 — "로딩 중..." 무한 멈춤 방지
+function renderListError(msg,retryFn){
+  var el=document.getElementById('fileList');
+  el.innerHTML='';
+  var box=document.createElement('div');box.className='empty';
+  var p=document.createElement('div');
+  p.style.cssText='color:var(--danger);margin-bottom:12px;white-space:pre-wrap;word-break:break-word';
+  p.textContent=msg;box.appendChild(p);
+  if(retryFn){
+    var b=document.createElement('button');b.className='btn';b.textContent='↻ 재시도';
+    b.onclick=retryFn;box.appendChild(b);
+  }
+  el.appendChild(box);
+}
+
 // ── 테마 ──
 function toggleTheme(){
   _theme=_theme==='dark'?'light':'dark';
@@ -254,15 +285,35 @@ function dbLogout(){localStorage.removeItem(SK);location.reload();}
 // ── 폴더 탐색 ──
 async function loadFolder(folderId,name){
   status('로딩 중...');
-  document.getElementById('fileList').innerHTML='';
+  document.getElementById('fileList').innerHTML='<div class="empty">⏳ 로딩 중...</div>';
   clearSel();
   _curId=folderId||'';
+  // folderId 없으면 루트, 있으면 해당 폴더(0download 등)
+  const url='/api/drive-list'+(folderId?'?folderId='+encodeURIComponent(folderId):'');
   try{
-    // folderId 없으면 루트, 있으면 해당 폴더
-    const url='/api/drive-list'+(folderId?'?folderId='+encodeURIComponent(folderId):'');
-    const r=await fetch(url,{cache:'no-store'});
-    const d=await r.json();
-    if(!d.ok){status('오류: '+(d.message||'로드 실패'));return;}
+    // 타임아웃 30초 — 응답이 없어도 멈추지 않고 에러로 전환
+    const r=await fetchWithTimeout(url,{cache:'no-store'},30000);
+    // 토큰 만료(401) → 재로그인 안내
+    if(r.status===401){
+      status('로그인이 만료됐습니다.');
+      renderListError('로그인이 만료됐습니다. 다시 로그인하세요.',function(){dbLogout();});
+      return;
+    }
+    // 응답 파싱 방어(에러 시 HTML/plain text가 와도 JSON.parse 안 터짐)
+    const parsed=await parseJsonSafe(r);
+    if(parsed.parseError){
+      status('오류: 응답 파싱 실패 (HTTP '+r.status+')');
+      renderListError('서버 응답을 해석할 수 없습니다 (HTTP '+r.status+').\n'+String(parsed.raw||'').slice(0,200),function(){loadFolder(folderId,name);});
+      return;
+    }
+    const d=parsed.data;
+    if(!r.ok||!d||!d.ok){
+      // 0download 폴더 ID 해석 실패 등도 여기서 에러로 surface (빈 채/멈춘 채 방지)
+      const em=(d&&(d.message||d.error))||('HTTP '+r.status);
+      status('오류: '+em);
+      renderListError('폴더를 불러오지 못했습니다.\n'+em,function(){loadFolder(folderId,name);});
+      return;
+    }
     _files=Array.isArray(d.files)?d.files:[];
     const cid=folderId||'ROOT';
     // 스택: 같은 위치면 중복 추가 안 함
@@ -270,8 +321,17 @@ async function loadFolder(folderId,name){
       _stack.push({id:cid,name:name||folderId||'내 드라이브'});
     }
     renderBreadcrumb();renderFiles();
-    status('📁 '+(_stack[_stack.length-1]?.name||'내 드라이브')+' — '+_files.length+'개 항목');
-  }catch(e){status('오류: '+e.message);}
+    const cur=_stack[_stack.length-1];
+    status('📁 '+((cur&&cur.name)||'내 드라이브')+' — '+_files.length+'개 항목');
+  }catch(e){
+    if(isAbortError(e)){
+      status('오류: 시간 초과(30초)');
+      renderListError('응답이 30초 내에 오지 않았습니다. 네트워크를 확인하고 재시도하세요.',function(){loadFolder(folderId,name);});
+    }else{
+      status('오류: '+e.message);
+      renderListError('폴더 로딩 오류: '+e.message,function(){loadFolder(folderId,name);});
+    }
+  }
 }
 
 // ── 브레드크럼 + 경로복사 ──
@@ -411,43 +471,97 @@ function openItem(id,name,isFolder){
   openFilePreview(f||{id:id,name:name});
 }
 
-function openFilePreview(f){
+// 미리보기 콘텐츠는 서버 OAuth(/api/download)로 인증 fetch → blob → objectURL.
+// 공개 공유가 안 된 비공개 Drive 파일도 표시됨(과거 drive.google.com 공개 URL은 비공개 파일에서 실패→빈 화면).
+var _fpObjUrl=null;
+function _fpRevoke(){if(_fpObjUrl){try{URL.revokeObjectURL(_fpObjUrl);}catch(_){}_fpObjUrl=null;}}
+function _fpError(body,msg,name,id){
+  body.innerHTML='';
+  var w=document.createElement('div');w.style.cssText='padding:30px;text-align:center;color:var(--text2)';
+  var m=document.createElement('div');
+  m.style.cssText='color:var(--danger);margin-bottom:14px;white-space:pre-wrap;word-break:break-word';
+  m.textContent=msg;
+  var b=document.createElement('button');b.className='btn';b.textContent='⬇ 다운로드';
+  b.onclick=function(){downloadFile(id,name);};
+  w.appendChild(m);w.appendChild(b);body.appendChild(w);
+}
+async function openFilePreview(f){
   const name=f.name||'파일';
   const id=f.id;
   const lower=name.toLowerCase();
-  const isImg=/\.(png|jpg|jpeg|gif|webp|bmp|svg)$/.test(lower);
-  const isPdf=/\.pdf$/.test(lower);
-  const isVid=/\.(mp4|webm|mov)$/.test(lower);
-  // Google Drive 미리보기/다운로드 URL
-  const previewUrl='https://drive.google.com/file/d/'+id+'/preview';
-  const downloadUrl='https://drive.google.com/uc?export=download&id='+id;
-  const imgUrl='https://drive.google.com/thumbnail?id='+id+'&sz=w1000';
-
-  let bodyHtml='';
-  if(isImg){
-    bodyHtml='<img id="fpImg" src="'+imgUrl+'" style="max-width:100%;max-height:60vh;border-radius:10px;display:block;margin:0 auto">';
-  } else if(isPdf||isVid){
-    bodyHtml='<iframe src="'+previewUrl+'" style="width:100%;height:60vh;border:0;border-radius:10px"></iframe>';
-  } else {
-    bodyHtml='<div style="padding:40px;text-align:center;color:var(--text2)"><div style="font-size:3rem;margin-bottom:10px">'+getIcon(f)+'</div><div>미리보기를 지원하지 않는 형식입니다.</div></div>';
-  }
+  const mime=String(f.mimeType||'').toLowerCase();
+  // mimeType 우선, 누락/오류 시 확장자로 폴백
+  const isImg=/^image\//.test(mime)||/\.(png|jpg|jpeg|gif|webp|bmp|svg)$/.test(lower);
+  const isPdf=mime==='application/pdf'||/\.pdf$/.test(lower);
+  const isVid=/^video\//.test(mime)||/\.(mp4|webm|mov|m4v)$/.test(lower);
+  const isAudio=/^audio\//.test(mime)||/\.(mp3|wav|ogg|m4a|aac)$/.test(lower);
+  const isText=/^text\//.test(mime)||/\.(txt|json|js|css|html|md|csv|xml|log|yml|yaml)$/.test(lower);
+  const contentUrl='/api/download?fileId='+encodeURIComponent(id);
+  const driveView=f.link||('https://drive.google.com/file/d/'+id+'/view');
 
   const modal=document.getElementById('filePreviewModal');
+  const body=document.getElementById('fpBody');
   document.getElementById('fpTitle').textContent=name;
-  document.getElementById('fpBody').innerHTML=bodyHtml;
-  // 이미지 로드 실패 시 iframe으로 폴백
-  if(isImg){
-    const img=document.getElementById('fpImg');
-    if(img) img.onerror=function(){
-      document.getElementById('fpBody').innerHTML='<iframe src="'+previewUrl+'" style="width:100%;height:60vh;border:0;border-radius:10px"></iframe>';
-    };
-  }
-  document.getElementById('fpDownload').onclick=function(){window.open(downloadUrl,'_blank');};
-  document.getElementById('fpOpen').onclick=function(){window.open(f.link||('https://drive.google.com/file/d/'+id+'/view'),'_blank');};
+  // 다운로드는 same-origin 인증 스트리밍(/api/download) 재사용
+  document.getElementById('fpDownload').onclick=function(){downloadFile(id,name);};
+  document.getElementById('fpOpen').onclick=function(){window.open(driveView,'_blank');};
   document.getElementById('fpCopyName').onclick=function(){navigator.clipboard.writeText(name).catch(function(){});status('📋 복사됨: '+name);};
   modal.style.display='flex';
+
+  _fpRevoke();
+  body.innerHTML='<div style="padding:40px;text-align:center;color:var(--text2)">⏳ 불러오는 중...</div>';
+
+  const previewable=isImg||isPdf||isVid||isAudio||isText;
+  if(!previewable){
+    body.innerHTML='<div style="padding:40px;text-align:center;color:var(--text2)"><div style="font-size:3rem;margin-bottom:10px">'+esc(getIcon(f))+'</div><div>미리보기를 지원하지 않는 형식입니다.</div><div style="margin-top:8px;font-size:.8rem">아래 다운로드 버튼을 사용하세요.</div></div>';
+    return;
+  }
+
+  try{
+    const r=await fetchWithTimeout(contentUrl,{cache:'no-store'},45000);
+    if(r.status===401){_fpError(body,'로그인이 만료됐습니다. 다시 로그인 후 시도하세요.',name,id);return;}
+    if(!r.ok){
+      // 에러 본문이 JSON이면 메시지 추출(빈 화면 대신 사유 표시)
+      let em='HTTP '+r.status;
+      try{const t=await r.clone().text();const j=JSON.parse(t);em=j.error||j.message||em;}catch(_){}
+      _fpError(body,'미리보기를 불러오지 못했습니다 ('+em+').',name,id);
+      return;
+    }
+    const blob=await r.blob();
+    if(isText){
+      const txt=await blob.text();
+      body.innerHTML='';
+      const pre=document.createElement('pre');
+      pre.style.cssText='white-space:pre-wrap;word-break:break-word;font-size:.8rem;color:var(--text);max-height:62vh;overflow:auto;margin:0';
+      pre.textContent=txt.slice(0,200000);
+      body.appendChild(pre);
+      return;
+    }
+    _fpRevoke();
+    _fpObjUrl=URL.createObjectURL(blob);
+    body.innerHTML='';
+    if(isImg){
+      const img=document.createElement('img');img.src=_fpObjUrl;
+      img.style.cssText='max-width:100%;max-height:62vh;border-radius:10px;display:block;margin:0 auto';
+      img.onerror=function(){_fpError(body,'이미지를 표시할 수 없습니다.',name,id);};
+      body.appendChild(img);
+    } else if(isPdf){
+      const fr=document.createElement('iframe');fr.src=_fpObjUrl;
+      fr.style.cssText='width:100%;height:62vh;border:0;border-radius:10px';
+      body.appendChild(fr);
+    } else if(isVid){
+      const v=document.createElement('video');v.src=_fpObjUrl;v.controls=true;
+      v.style.cssText='max-width:100%;max-height:62vh;border-radius:10px;display:block;margin:0 auto';
+      body.appendChild(v);
+    } else if(isAudio){
+      const a=document.createElement('audio');a.src=_fpObjUrl;a.controls=true;a.style.cssText='width:100%';
+      body.appendChild(a);
+    }
+  }catch(e){
+    _fpError(body,isAbortError(e)?'시간 초과로 미리보기를 불러오지 못했습니다.':('오류: '+((e&&e.message)||e)),name,id);
+  }
 }
-function closeFilePreview(){document.getElementById('filePreviewModal').style.display='none';document.getElementById('fpBody').innerHTML='';}
+function closeFilePreview(){document.getElementById('filePreviewModal').style.display='none';document.getElementById('fpBody').innerHTML='';_fpRevoke();}
 
 // ── 선택 ──
 function toggleSel(id){
@@ -585,8 +699,72 @@ async function mkdirPrompt(){
   else alert('폴더 생성 실패: '+(d.error||d.message));
 }
 
-// ── 파일 업로드 ──
-// ── 파일 업로드 (Resumable - 용량 무제한) ──
+// ── 파일 업로드 (Resumable — 브라우저→Drive 직접, Vercel 미경유 = 용량 무제한) ──
+// 세션 URI 진행 위치 조회: Content-Range: bytes */total → 308이면 수신 바이트, 200/201이면 이미 완료
+async function queryResumeOffset(uploadUrl,total){
+  const r=await fetchWithTimeout(uploadUrl,{method:'PUT',headers:{'Content-Range':'bytes */'+total}},60000);
+  if(r.status===200||r.status===201){const fin=await parseJsonSafe(r);return{done:true,fileId:(fin.data&&fin.data.id)||null};}
+  if(r.status===308){
+    const range=r.headers.get('Range');
+    if(range){const m=/-(\d+)\s*$/.exec(range);if(m)return{done:false,offset:parseInt(m[1],10)+1};}
+    return{done:false,offset:0};
+  }
+  return{done:false,offset:null,status:r.status};
+}
+// 단일 파일 resumable 업로드. 청크 256KB 배수, 308=중간성공, 200/201=완료, 청크당 3회 재시도.
+async function uploadResumable(uploadUrl,file,onProgress){
+  const CHUNK=5*1024*1024; // 5MB = 256KB(262144)의 정수배 — Drive 요건 충족(마지막 청크 제외 256KB 배수)
+  const total=file.size;
+  let offset=0;
+  if(total===0){
+    // 0바이트 파일: 빈 본문 단일 PUT로 마무리
+    const r=await fetchWithTimeout(uploadUrl,{method:'PUT',headers:{'Content-Range':'bytes 0-0/0'},body:new Blob([])},60000).catch(function(){return null;});
+    if(r&&(r.status===200||r.status===201)){const fin=await parseJsonSafe(r);return{ok:true,fileId:(fin.data&&fin.data.id)||null};}
+    return{ok:true,fileId:null};
+  }
+  while(offset<total){
+    const end=Math.min(offset+CHUNK,total);
+    const chunk=file.slice(offset,end); // Blob 슬라이스 — 전체를 메모리에 안 올림(대용량 OOM 방지)
+    if(onProgress)onProgress(Math.round(end/total*100),end,total);
+    let advanced=false,lastErr=null;
+    for(let attempt=1;attempt<=3&&!advanced;attempt++){
+      try{
+        const res=await fetchWithTimeout(uploadUrl,{
+          method:'PUT',
+          headers:{'Content-Range':'bytes '+offset+'-'+(end-1)+'/'+total},
+          body:chunk
+        },120000);
+        if(res.status===200||res.status===201){
+          const fin=await parseJsonSafe(res);
+          return{ok:true,fileId:(fin.data&&fin.data.id)||null}; // 마지막 청크만 완료 처리
+        }
+        if(res.status===308){
+          // 중간 청크 성공(Resume Incomplete) — 실패로 보지 말 것(여기서 멈추면 파일이 잘림)
+          const range=res.headers.get('Range');
+          let next=end;
+          if(range){const m=/-(\d+)\s*$/.exec(range);if(m)next=parseInt(m[1],10)+1;}
+          offset=next;advanced=true;break;
+        }
+        // 그 외 상태 → 재시도 대상. 실패 청크 번호+status+Drive 본문 표면화
+        const bodyTxt=await res.text();
+        lastErr=new Error('청크 실패 HTTP '+res.status+' (offset '+offset+'): '+String(bodyTxt).slice(0,160));
+      }catch(e){
+        lastErr=isAbortError(e)?new Error('청크 시간초과 (offset '+offset+')'):e;
+      }
+      // 재시도 전: 세션에 수신된 바이트를 재확인하고 그 지점부터 이어서
+      if(!advanced&&attempt<3){
+        await sleep(800*attempt);
+        try{
+          const q=await queryResumeOffset(uploadUrl,total);
+          if(q.done)return{ok:true,fileId:q.fileId};
+          if(q.offset!=null)offset=q.offset;
+        }catch(_){}
+      }
+    }
+    if(!advanced)return{ok:false,error:(lastErr&&lastErr.message)||'청크 업로드 실패'};
+  }
+  return{ok:true,fileId:null};
+}
 async function uploadFiles(fileList){
   if(!fileList||!fileList.length)return;
   if(!_curId){alert('업로드할 폴더 안으로 이동하세요.');return;}
@@ -597,68 +775,38 @@ async function uploadFiles(fileList){
     const file=fileList[i];
     const label='('+(i+1)+'/'+fileList.length+') '+file.name;
     try{
-      pr.textContent=label+' — 준비 중...';
+      pr.textContent=label+' — 세션 준비 중...';
       const mt=file.type||'application/octet-stream';
 
-      // 1) 서버에서 Resumable Upload 세션 URL 발급
-      const sessRes=await fetch('/api/drive-manage?action=upload-session',{
+      // 1) 서버는 세션만 개시(메타데이터 POST) → Location 세션 URI 반환
+      const sessRes=await fetchWithTimeout('/api/drive-manage?action=upload-session',{
         method:'POST',
         headers:{'Content-Type':'application/json'},
         body:JSON.stringify({parentId:_curId,fileName:file.name,mimeType:mt,fileSize:file.size})
+      },30000);
+      const sp=await parseJsonSafe(sessRes);
+      const sessData=sp.data;
+      if(!sessRes.ok||!sessData||!sessData.ok||!sessData.uploadUrl){
+        const em=(sessData&&(sessData.error||sessData.message))||(sp.parseError?('응답 파싱 실패 HTTP '+sessRes.status):('HTTP '+sessRes.status));
+        pr.textContent='❌ '+file.name+': 세션 발급 실패 — '+em;
+        await sleep(1800);continue;
+      }
+
+      // 2) 세션 URI로 브라우저가 청크를 Drive에 직접 PUT (재시도/재개 포함)
+      const r=await uploadResumable(sessData.uploadUrl,file,function(pct,end,tot){
+        pr.textContent=label+' — '+pct+'% ('+fmtSize(end)+'/'+fmtSize(tot)+')';
       });
-      const sessData=await sessRes.json();
-      if(!sessData.ok||!sessData.uploadUrl){
-        pr.textContent='❌ '+file.name+': 세션 발급 실패 '+(sessData.error||sessData.message||'');
-        await sleep(1500);continue;
-      }
-
-      // 2) 브라우저 → Google Drive 직접 업로드 (청크 5MB씩)
-      const CHUNK=5*1024*1024;
-      const total=file.size;
-      let offset=0;
-      let fileId=null;
-
-      while(offset<total){
-        const end=Math.min(offset+CHUNK,total);
-        const chunk=file.slice(offset,end);
-        const pct=Math.round(end/total*100);
-        pr.textContent=label+' — '+pct+'% ('+fmtSize(end)+'/'+fmtSize(total)+')';
-
-        const upRes=await fetch(sessData.uploadUrl,{
-          method:'PUT',
-          headers:{
-            'Content-Range':'bytes '+offset+'-'+(end-1)+'/'+total,
-            'Content-Type':mt
-          },
-          body:chunk
-        });
-
-        if(upRes.status===200||upRes.status===201){
-          const data=await upRes.json();
-          fileId=data.id;
-          break;
-        } else if(upRes.status===308){
-          // 청크 완료, 다음 청크로
-          const range=upRes.headers.get('Range');
-          if(range) offset=parseInt(range.split('-')[1])+1;
-          else offset=end;
-        } else {
-          const errTxt=await upRes.text();
-          throw new Error('업로드 오류('+upRes.status+'): '+errTxt.slice(0,100));
-        }
-      }
-
-      if(fileId){ok++;pr.textContent='✅ '+file.name+' 완료';}
-      else{pr.textContent='⚠️ '+file.name+': 응답 없음';await sleep(1000);}
+      if(r.ok){ok++;pr.textContent='✅ '+file.name+' 완료';}
+      else{pr.textContent='❌ '+file.name+': '+r.error;await sleep(2400);} // 무음 부분파일 금지 — 사유 표시
     }catch(e){
-      pr.textContent='❌ '+file.name+': '+e.message;
-      await sleep(1500);
+      pr.textContent='❌ '+file.name+': '+((e&&e.message)||e);
+      await sleep(1800);
     }
   }
   ov.classList.remove('on');
   document.getElementById('fileUploadIn').value='';
   status('⬆ 업로드 완료: '+ok+'/'+fileList.length+'개');
-  refresh();
+  refresh(); // 완료 후 목록 새로고침
 }
 
 // ── PWA 설치 ──
