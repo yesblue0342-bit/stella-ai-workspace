@@ -73,6 +73,12 @@ body.light .hljs-name,body.light .hljs-tag,body.light .hljs-selector-class{color
 .err{color:var(--danger);font-size:.82rem}
 @media(max-width:760px){.side{position:fixed;inset:48px 0 0 0;width:100%;z-index:20;display:none}.side.open{display:flex}.hamb{display:inline-block!important}}
 .hamb{display:none}
+.node .nck{margin-right:4px;vertical-align:middle;display:none}
+.tree.multi .node .nck{display:inline-block}
+.btn.on{background:var(--primary);border-color:var(--primary);color:#fff}
+.toast{position:fixed;left:50%;bottom:26px;transform:translateX(-50%) translateY(16px);background:#1f6feb;color:#fff;padding:10px 16px;border-radius:10px;font-size:.84rem;font-weight:700;box-shadow:0 6px 20px rgba(0,0,0,.35);opacity:0;pointer-events:none;transition:opacity .2s,transform .2s;z-index:200;max-width:90vw}
+.toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
+.toast.err{background:var(--danger)}
 </style>
 </head>
 <body>
@@ -98,21 +104,34 @@ body.light .hljs-name,body.light .hljs-tag,body.light .hljs-selector-class{color
   <main class="main">
     <div class="pv-head">
       <span class="pv-path" id="pvPath">레포와 파일을 선택하세요</span>
-      <a class="btn" id="dlBtn" style="display:none">⬇ 다운로드</a>
-      <button class="btn disabled" id="upBtn" disabled title="GitHub 쓰기 권한이 필요합니다. 토큰을 Vercel 환경변수(GITHUB_TOKEN)에 추가하세요.">⬆ 업로드</button>
-      <button class="btn disabled" id="mkdirBtn" disabled title="GitHub 쓰기 권한이 필요합니다. 토큰을 Vercel 환경변수(GITHUB_TOKEN)에 추가하세요.">＋ 폴더</button>
-      <button class="btn disabled" id="delBtn" disabled title="GitHub 쓰기 권한이 필요합니다. 토큰을 Vercel 환경변수(GITHUB_TOKEN)에 추가하세요.">🗑 삭제</button>
+      <a class="btn" id="dlBtn" style="display:none" title="원본 그대로 다운로드(프록시)">⬇ 다운로드</a>
+      <button class="btn" id="xlsxBtn" style="display:none" onclick="exportExcel()" title="Excel로 내보내기(안 열릴 때 폴백)">📊 Excel</button>
+      <button class="btn" id="upBtn" onclick="pickUpload()" title="현재 레포에 파일 업로드">⬆ 업로드</button>
+      <button class="btn" id="mkdirBtn" onclick="doMkdir()" title="새 폴더 만들기">＋ 폴더</button>
+      <button class="btn" id="copyBtn" onclick="doCopy()" title="선택 파일 복사">📋 복사</button>
+      <button class="btn" id="moveBtn" onclick="doMove(false)" title="선택 파일 이동">📁 이동</button>
+      <button class="btn" id="renameBtn" onclick="doMove(true)" title="이름 변경">✏️ 이름</button>
+      <button class="btn" id="delBtn" onclick="doDelete()" title="선택 파일 삭제">🗑 삭제</button>
+      <button class="btn" id="selBtn" onclick="toggleMulti()" title="다중 선택 모드">☑ 다중</button>
+      <input type="file" id="uploadInput" style="display:none" onchange="onUploadPick(this)">
     </div>
-    <div class="pv-body" id="pvBody"><div class="empty">왼쪽에서 레포 → 폴더/파일을 선택하면 여기서 미리보기·다운로드할 수 있습니다.<br><span class="note">쓰기 기능(업로드/삭제/폴더)은 GITHUB_TOKEN 설정 시 활성화됩니다.</span></div></div>
+    <div class="pv-body" id="pvBody"><div class="empty">왼쪽에서 레포 → 폴더/파일을 선택하면 여기서 미리보기·다운로드할 수 있습니다.<br><span class="note">업로드/삭제/이동/복사/이름변경/새폴더는 GITHUB_TOKEN(쓰기 권한) 설정 시 동작합니다. 토큰이 없으면 안내 메시지가 표시됩니다.</span></div></div>
   </main>
 </div>
 
+<div class="toast" id="toast"></div>
 <script>
 const H = window.StellaHub;
 const $ = (id) => document.getElementById(id);
 const OWNER = H.OWNER;
 let curRepo = null;        // {name, default_branch}
 let curRepoFiles = [];     // 현재 레포 루트 파일(검색 필터용)
+let curFile = null;        // 현재 선택/미리보기 중인 파일 {path,sha,size,name}
+let multiMode = false;     // 다중 선택 모드
+const selected = new Map();// path -> {path,sha}
+
+let _toastT=null;
+function toast(msg, isErr){ const t=$('toast'); if(!t)return; t.textContent=msg; t.className='toast show'+(isErr?' err':''); clearTimeout(_toastT); _toastT=setTimeout(()=>t.className='toast',2200); }
 
 // ── 테마 (Stella DB와 동일: body.light + stella_db_theme) ──
 function applyTheme(){
@@ -229,30 +248,40 @@ async function loadDir(path){
   }
 }
 
+function nodeLabel(it, open){ return (it.type==='dir'?(open?'📂 ':'📁 '):'📄 ')+it.name; }
+function makeCheckbox(it){
+  const cb=document.createElement('input'); cb.type='checkbox'; cb.className='nck';
+  cb.checked=selected.has(it.path);
+  cb.addEventListener('click', e=>{ e.stopPropagation();
+    if(cb.checked) selected.set(it.path,{path:it.path,sha:it.sha,type:it.type}); else selected.delete(it.path);
+  });
+  return cb;
+}
 function renderNodes(host, items, parentPath){
   items.forEach(it=>{
     const row=document.createElement('div');
     row.className='node '+(it.type==='dir'?'dir':'file');
-    row.textContent=(it.type==='dir'?'📁 ':'📄 ')+it.name;
     row.dataset.path=it.path;
+    const cb=makeCheckbox(it);
+    const lbl=document.createElement('span'); lbl.textContent=nodeLabel(it,false);
+    row.appendChild(cb); row.appendChild(lbl);
     if(it.type==='dir'){
       const kids=document.createElement('div'); kids.className='children'; kids.style.display='none';
       let loaded=false;
       row.addEventListener('click', async (e)=>{
         e.stopPropagation();
         if(kids.style.display==='none'){
-          kids.style.display='';
-          row.textContent='📂 '+it.name;
+          kids.style.display=''; lbl.textContent=nodeLabel(it,true);
           if(!loaded){ loaded=true; kids.innerHTML='<div class="note">…</div>';
             try{ const sub=await loadDir(it.path); kids.innerHTML=''; renderNodes(kids, sub, it.path); }
             catch(err){ kids.innerHTML='<div class="err">'+esc(err.message)+'</div>'; } }
-        }else{ kids.style.display='none'; row.textContent='📁 '+it.name; }
+        }else{ kids.style.display='none'; lbl.textContent=nodeLabel(it,false); }
       });
       host.appendChild(row); host.appendChild(kids);
     }else{
       row.addEventListener('click', (e)=>{ e.stopPropagation();
         document.querySelectorAll('.node.file.sel').forEach(n=>n.classList.remove('sel'));
-        row.classList.add('sel'); openFile(it); });
+        row.classList.add('sel'); curFile={path:it.path,sha:it.sha,size:it.size||0,name:it.name}; openFile(it); });
       host.appendChild(row);
     }
   });
@@ -280,40 +309,123 @@ function renderText(name, content){
   body.appendChild(pre);
 }
 
+// ── 다운로드 프록시 URL (공개·비공개 모두 동작, 항상 열리는 파일) ──
+function proxyUrl(path, disp){
+  return '/api/gh-download?owner='+encodeURIComponent(curRepo.owner)+'&repo='+encodeURIComponent(curRepo.name)
+    +'&path='+encodeURIComponent(path)+'&ref='+encodeURIComponent(curRepo.default_branch)+(disp?('&disp='+disp):'');
+}
+function excelUrl(path){
+  return '/api/gh-export-excel?owner='+encodeURIComponent(curRepo.owner)+'&repo='+encodeURIComponent(curRepo.name)
+    +'&path='+encodeURIComponent(path)+'&ref='+encodeURIComponent(curRepo.default_branch);
+}
+// AbortController 타임아웃 fetch ("Failed to fetch" 방어)
+async function fetchT(url, opts, ms){
+  const ac=new AbortController(); const t=setTimeout(()=>ac.abort(), ms||30000);
+  try{ return await fetch(url, Object.assign({signal:ac.signal}, opts||{})); }
+  finally{ clearTimeout(t); }
+}
+const PREVIEW_MAX = 512*1024; // 512KB 초과는 인라인 미리보기 생략
+
 // ── 파일 미리보기/다운로드 ──
 async function openFile(it){
-  const branch=curRepo.default_branch;
+  curFile={path:it.path,sha:it.sha,size:it.size||0,name:it.name};
   $('pvPath').textContent=curRepo.name+'/'+it.path;
   const kind=H.classify(it.name);
   const dl=$('dlBtn');
-  if(curRepo.private){
-    // 비공개: 서버 프록시(토큰)로 base64 받아 미리보기/다운로드 (raw URL은 비공개 접근 불가)
-    $('pvBody').innerHTML='<div class="note">불러오는 중… <span class="spin"></span></div>';
-    try{
-      const u='/api/github?action=contents&owner='+encodeURIComponent(curRepo.owner)+'&repo='+encodeURIComponent(curRepo.name)+'&path='+encodeURIComponent(it.path)+'&ref='+encodeURIComponent(branch);
-      const d=await safeJson(await fetch(u));
-      if(!d.ok || d.type!=='file') throw new Error((d&&d.message)||'파일 로드 실패');
-      const bytes=Uint8Array.from(atob((d.content||'').replace(/\s/g,'')), c=>c.charCodeAt(0));
-      const url=URL.createObjectURL(new Blob([bytes]));
-      dl.style.display=''; dl.href=url; dl.setAttribute('download', it.name);
-      if(kind==='image'){ $('pvBody').innerHTML='<img class="pv-img" alt="'+esc(it.name)+'" src="'+url+'">'; return; }
-      if(kind==='binary'){ $('pvBody').innerHTML='<div class="empty">바이너리 파일입니다.<br>「⬇ 다운로드」로 내려받으세요.</div>'; return; }
-      const txt=new TextDecoder('utf-8').decode(bytes);
-      renderText(it.name, txt);
-    }catch(e){ $('pvBody').innerHTML='<div class="err">미리보기 실패: '+esc(e.message)+'</div>'; }
+  // 다운로드/엑셀: 항상 프록시(서버가 토큰으로 원본 스트리밍 + 올바른 헤더)
+  dl.style.display=''; dl.href=proxyUrl(it.path,'attachment'); dl.removeAttribute('download');
+  $('xlsxBtn').style.display='';
+  const sizeKB = it.size?Math.round(it.size/1024):0;
+
+  if(kind==='image'){
+    if((it.size||0)>PREVIEW_MAX){ $('pvBody').innerHTML=bigMsg(it,'이미지가 큽니다'); return; }
+    $('pvBody').innerHTML='<img class="pv-img" alt="'+esc(it.name)+'" src="'+esc(proxyUrl(it.path,'inline'))+'" onerror="this.parentNode.innerHTML=\'<div class=&quot;err&quot;>이미지 미리보기 실패 — 다운로드를 이용하세요.</div>\'">';
     return;
   }
-  // 공개: 기존 raw 방식
-  const raw=H.rawUrl(curRepo.owner, curRepo.name, branch, it.path);
-  dl.style.display=''; dl.href=raw; dl.setAttribute('download', it.name);
-  if(kind==='image'){ $('pvBody').innerHTML='<img class="pv-img" alt="'+esc(it.name)+'" src="'+esc(raw)+'">'; return; }
-  if(kind==='binary'){ $('pvBody').innerHTML='<div class="empty">바이너리 파일입니다. <br>「⬇ 다운로드」로 내려받으세요.<br><span class="note">'+esc(it.name)+(it.size?(' · '+Math.round(it.size/1024)+'KB'):'')+'</span></div>'; return; }
+  if(kind==='binary'){ $('pvBody').innerHTML=bigMsg(it,'바이너리 파일입니다'); return; }
+  if((it.size||0)>PREVIEW_MAX){ $('pvBody').innerHTML=bigMsg(it,'텍스트가 큽니다('+sizeKB+'KB)'); return; }
+  // 텍스트: 프록시로 받아 안전 렌더 (공개·비공개 동일 경로 → "Failed to fetch" 방지)
   $('pvBody').innerHTML='<div class="note">불러오는 중… <span class="spin"></span></div>';
   try{
-    const r=await fetch(raw); const txt=await r.text();
+    const r=await fetchT(proxyUrl(it.path,'inline'),{},30000);
+    if(!r.ok){ const d=await safeJson(r); throw new Error(d.message||('미리보기 실패('+r.status+')')); }
+    const txt=await r.text();
     renderText(it.name, txt);
-  }catch(e){ $('pvBody').innerHTML='<div class="err">미리보기 실패: '+esc(e.message)+'</div>'; }
+  }catch(e){
+    const msg = (e.name==='AbortError')?'미리보기 시간 초과 — 다운로드를 이용하세요.':('미리보기 실패: '+(e.message||e));
+    $('pvBody').innerHTML='<div class="err">'+esc(msg)+'</div><div class="note" style="margin-top:8px">「⬇ 다운로드」 또는 「📊 Excel」로 받으세요.</div>';
+  }
 }
+function bigMsg(it, why){
+  return '<div class="empty">'+esc(why)+'.<br><span class="note">'+esc(it.name)+(it.size?(' · '+Math.round(it.size/1024)+'KB'):'')+'</span><br>「⬇ 다운로드」로 원본을, 안 열리면 「📊 Excel」로 받으세요.</div>';
+}
+function exportExcel(){ if(!curFile){toast('파일을 먼저 선택하세요',true);return;} window.open(excelUrl(curFile.path),'_blank'); }
+
+// ── 파일관리자 쓰기 작업 (현재 선택 레포 대상, 토큰은 서버 env) ──
+async function ghWrite(payload){
+  const r=await fetchT('/api/github',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)},45000);
+  const d=await safeJson(r);
+  if(!d.ok) throw new Error(d.message||('요청 실패('+r.status+')'));
+  return d;
+}
+function needRepo(){ if(!curRepo){toast('레포를 먼저 여세요',true);return false;} return true; }
+function curDir(){ if(curFile && curFile.path.includes('/')) return curFile.path.replace(/\/[^/]*$/,''); return ''; }
+function selectedList(){ return Array.from(selected.values()); }
+async function refreshTree(){
+  if(!curRepo) return; selected.clear();
+  $('tree').innerHTML='<div class="note">새로고침… <span class="spin"></span></div>';
+  try{ const items=await loadDir(''); curRepoFiles=items; $('tree').innerHTML=''; renderNodes($('tree'),items,''); $('tree').classList.toggle('multi',multiMode); }
+  catch(e){ $('tree').innerHTML='<div class="err">'+esc(e.message)+'</div>'; }
+}
+function pickUpload(){ if(needRepo()) $('uploadInput').click(); }
+function onUploadPick(input){
+  const f=input.files[0]; if(!f)return;
+  const dir=curDir(); const path=prompt('업로드 경로(레포 기준)', (dir?dir+'/':'')+f.name);
+  if(!path){ input.value=''; return; }
+  const reader=new FileReader();
+  reader.onload=async()=>{
+    try{ const b64=String(reader.result).split(',')[1]||''; // data URL → base64 (바이너리-safe)
+      toast('업로드 중…'); await ghWrite({action:'upload',owner:curRepo.owner,repo:curRepo.name,branch:curRepo.default_branch,path:path,content:b64});
+      toast('업로드 완료'); await refreshTree();
+    }catch(e){ toast('업로드 실패: '+(e.message||e),true); }
+    finally{ input.value=''; }
+  };
+  reader.onerror=()=>{ toast('파일 읽기 실패',true); input.value=''; };
+  reader.readAsDataURL(f);
+}
+async function doMkdir(){
+  if(!needRepo())return;
+  const dir=curDir(); const name=prompt('새 폴더 경로', (dir?dir+'/':'')+'new-folder'); if(!name)return;
+  try{ toast('폴더 생성 중…'); await ghWrite({action:'mkdir',owner:curRepo.owner,repo:curRepo.name,branch:curRepo.default_branch,path:name}); toast('폴더 생성됨'); await refreshTree(); }
+  catch(e){ toast('폴더 생성 실패: '+(e.message||e),true); }
+}
+async function doDelete(){
+  if(!needRepo())return;
+  const list = (multiMode && selected.size) ? selectedList() : (curFile?[{path:curFile.path,sha:curFile.sha}]:[]);
+  if(!list.length){ toast('삭제할 파일을 선택하세요',true); return; }
+  if(!confirm(list.length+'개 항목을 삭제할까요? 되돌릴 수 없습니다.\n\n'+list.map(x=>x.path).join('\n').slice(0,600))) return;
+  try{ toast('삭제 중…');
+    if(list.length===1) await ghWrite({action:'delete',owner:curRepo.owner,repo:curRepo.name,branch:curRepo.default_branch,path:list[0].path,sha:list[0].sha});
+    else { const d=await ghWrite({action:'batch',op:'delete',owner:curRepo.owner,repo:curRepo.name,branch:curRepo.default_branch,items:list});
+      if(d.errors) toast(d.done+'/'+d.total+' 삭제(일부 실패)',true); }
+    toast('삭제 완료'); curFile=null; await refreshTree();
+  }catch(e){ toast('삭제 실패: '+(e.message||e),true); }
+}
+async function doCopy(){
+  if(!needRepo()||!curFile){ toast('복사할 파일을 먼저 선택하세요',true); return; }
+  const dest=prompt('복사 대상 경로', curFile.path.replace(/(\.[^.\/]+)?$/, '_copy$1')); if(!dest)return;
+  try{ toast('복사 중…'); await ghWrite({action:'copy',owner:curRepo.owner,repo:curRepo.name,branch:curRepo.default_branch,path:curFile.path,dest:dest}); toast('복사 완료'); await refreshTree(); }
+  catch(e){ toast('복사 실패: '+(e.message||e),true); }
+}
+async function doMove(isRename){
+  if(!needRepo()||!curFile){ toast((isRename?'이름 변경':'이동')+'할 파일을 선택하세요',true); return; }
+  const dest=prompt(isRename?'새 이름(경로)':'이동 대상 경로', curFile.path); if(!dest||dest===curFile.path)return;
+  if(!confirm((isRename?'이름 변경':'이동')+':\n'+curFile.path+'\n→ '+dest)) return;
+  try{ toast('처리 중…'); const d=await ghWrite({action:'move',owner:curRepo.owner,repo:curRepo.name,branch:curRepo.default_branch,path:curFile.path,dest:dest});
+    toast(d.warning ? d.warning : ((isRename?'이름 변경':'이동')+' 완료'), !!d.warning); curFile=null; await refreshTree();
+  }catch(e){ toast('실패: '+(e.message||e),true); }
+}
+function toggleMulti(){ multiMode=!multiMode; $('selBtn').classList.toggle('on',multiMode); $('tree').classList.toggle('multi',multiMode); if(!multiMode)selected.clear(); toast(multiMode?'다중 선택 ON (체크박스로 선택 후 삭제)':'다중 선택 OFF'); }
 
 // ── 검색(현재 레포 루트 파일명 필터) ──
 $('fileSearch').addEventListener('input', function(){
