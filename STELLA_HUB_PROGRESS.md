@@ -64,3 +64,14 @@ ABAP 프로그램(ZAQMR0080)은 그 레포가 아니라 **`stella-ai-workspace/0
    별도 빈 `0Program` 레포는 권한 밖이라 UX(빈 레포 안내)로 혼선만 제거.
 4. 테마는 Hub에 확실히 적용(스펙 "최소한 Hub"). 타 앱은 각자 테마 체계 보유 — 회귀 위험 피해 미변경.
 5. 푸시 대상 = main(태스크 §0/§5 "main 푸시 → Vercel 자동 배포", 세션 기존 패턴 일치).
+
+## CI 빨강 원인 & 해결 (PR #1 / combined status)
+- **원인:** GitHub Actions 아님(PR 브랜치 Actions run 0개). 같은 레포에 Vercel 프로젝트가 2개
+  연결돼 있었고, 잉여 프로젝트 **`stella-ai-workspace-g1st`(Vercel 팀 `lee-hu-s-projects`)** 의
+  배포 실패가 빨간 commit status(`Vercel – stella-ai-workspace-g1st = failure`)를 찍어 PR 전체가 red.
+  실 프로덕션 **`stella-ai-workspace`(팀 `stella-gpt`)** 는 success(초록).
+  - 실패 추정 원인: 그 중복 프로젝트가 Hobby 플랜으로 보이며 `api/index-chatgpt.js`의
+    `maxDuration:300`(Hobby 상한 60 초과)에서 빌드 거부 가능성(로그 접근 불가, 가설).
+- **해결:** 사용자가 Vercel(lee-hu-s-projects) + GitHub 연동에서 **`stella-ai-workspace-g1st` 완전 삭제**.
+  이후 push부터 Vercel 체크는 프로덕션(`stella-ai-workspace`) 1개만 남음.
+- **코드 영향 없음:** 프로덕션은 처음부터 초록. 코드 수정/플랜 강등 없이 잉여 프로젝트 제거로 정리.
