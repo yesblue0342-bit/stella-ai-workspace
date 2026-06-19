@@ -71,3 +71,39 @@ STATUS: IN_PROGRESS
 
 ### 검증
 - node --check(인라인 4블록) 통과 · npm test 54/54 · jsdom mermaid 4/4(렌더/폴백/일반코드/스크롤래퍼).
+
+---
+
+## [db.html] 목록 멈춤 + 업로드 잘림 + 미리보기 (backup: backup-db-20260619-025857)
+
+공통: 토큰 만료(401) 처리 · 응답 파싱 방어(parseJsonSafe: text→JSON.parse try/catch) ·
+타임아웃 fetch(fetchWithTimeout/AbortController) · 에러 surface 를 A·B·C에 일관 적용. db.html만 수정.
+
+### (A) "로딩 중..." 무한 멈춤 — 원인·조치
+- 원인: loadFolder가 `fetch` 타임아웃 없음 → 응답 지연 시 영원히 "로딩 중...". 실패해도 statusBar만 갱신하고
+  fileList는 빈 채로 남아 멈춘 것처럼 보임. 에러 응답이 HTML/text면 `r.json()`이 터져 메시지도 불명확.
+- 조치: AbortController 30초 타임아웃 + parseJsonSafe(HTML/text 방어) + 401→재로그인 안내 +
+  실패 시 fileList를 **에러 메시지 + [재시도] 버튼**으로 교체(renderListError). 0download 폴더 ID 해석 실패도
+  서버 ok:false/HTTP로 surface. (서버 drive-list는 단일 페이지 pageSize≤200 — 프런트 페이지네이션 루프 없음 → 무한루프 위험 없음. 대량 폴더 초과분은 서버 cap, 별도 사안.)
+
+### (B) 업로드 에러 + 파일 잘림 — 원인·조치
+- 구조는 이미 정상(서버는 upload-session으로 resumable 세션 URI만 발급, 브라우저가 청크를 Drive에 직접 PUT →
+  Vercel 4.5MB 미경유). **잘림의 진짜 원인 = 청크 재시도/재개 부재**: 청크 한 번이라도 실패(일시 네트워크/타임아웃)하면
+  throw 후 중단 → 부분 파일.
+- 조치: uploadResumable로 분리 — 청크당 **3회 재시도**, 실패 시 `Content-Range: bytes */total`로 세션 수신
+  바이트 재조회 후 그 지점부터 재개. **308(Resume Incomplete)=중간성공 처리**(Range 헤더로 다음 offset, 없으면 end 폴백),
+  **200/201만 완료**. 청크=5MB(256KB 정수배). file.slice(Blob)로 잘라 메모리 절약(대용량 OOM 방지).
+  실패 시 실패청크 offset+status+Drive 본문 표시(무음 부분파일 금지). 0바이트 파일 단일 PUT 처리. 완료 후 refresh.
+
+### (C) 미리보기 빈 화면 — 원인·조치
+- 원인: openFilePreview가 `drive.google.com/thumbnail|/preview|/uc` **공개 URL**에 의존 → 비공개 Drive 파일은
+  로그인 페이지/실패 반환 → 빈 이미지/빈 iframe, 에러도 안 뜸.
+- 조치: 콘텐츠를 **서버 OAuth 인증 스트림(/api/download?fileId=)** 으로 fetch → blob → `URL.createObjectURL`로 표시
+  (모달 닫을 때 revokeObjectURL). mimeType(누락 시 확장자 폴백)로 image/pdf/video/audio/text 분기 렌더.
+  401→재로그인, 실패→**빈 화면 대신 에러 + [다운로드] 폴백**. 다운로드도 same-origin /api/download 재사용.
+- C5(바인딩): 동적 행은 renderFiles에서 생성 시 onclick 직접 바인딩(정상 동작) + 우클릭은 document 위임 — 변경 불필요.
+
+### 검증
+- 인라인 JS new Function 문법 통과(1블록 0 bad) · node --check sw.js OK · npm test 54/54 ·
+  jsdom 7/7(A 에러+재시도 렌더·HTML응답 방어 / B 308→200 완료·단일청크·3회재시도후 실패사유 / C blob 이미지·실패폴백).
+- sw 캐시 stella-v22 → v23. 새 API 라우트/키 0(기존 /api/drive-list·drive-manage·download 재사용).
