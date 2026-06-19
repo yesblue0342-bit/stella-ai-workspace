@@ -100,7 +100,7 @@ body.fullscreen-code #fsExit{display:block;position:fixed;top:8px;right:10px;z-i
         <span class="lbl">예산($)</span>
         <input id="budget" type="number" min="0.5" max="50" step="0.5" value="20">
         <label class="lbl" style="display:flex;align-items:center;gap:4px;cursor:pointer" title="oh-my-claudecode 멀티에이전트 부트스트랩"><input type="checkbox" id="omc" style="width:auto"> 🤖 OMC</label>
-        <button type="button" id="saveGhBtn" title="이 세션 산출물을 GitHub에 저장" style="display:none">💾 GitHub에 저장</button>
+        <button type="button" id="saveGhBtn" title="이 세션 산출물을 Google Drive(StellaGPT/0download)에 저장" style="display:none">💾 Drive에 저장</button>
         <span class="status" id="status"></span>
       </div>
       <div class="iorow">
@@ -244,16 +244,16 @@ async function finish(failed){
   loadSessions();
 }
 
-// PART B: 세션 산출물을 GitHub에 커밋 (auto=자동 트리거 / 수동 버튼 공용)
+// PART B: 세션 산출물을 Google Drive(StellaGPT/0download)에 저장 (비공개) — auto/수동 공용
 async function saveToGithub(auto){
   if(!cur || !cur.sessionId){ if(!auto) setStatus('<span class="err">세션이 없습니다</span>'); return; }
   const btn=$('saveGhBtn'); const prev=btn.textContent; btn.disabled=true; btn.textContent='저장 중…';
   try{
-    const r=await fetch('/api/cc/save-github',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({session:cur.sessionId})});
+    const r=await fetch('/api/cc/save-drive',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({session:cur.sessionId})});
     const d=await r.json();
-    if(d.ok){ setStatus('<span class="ok">GitHub 저장 ✓ '+d.committed+'개 파일</span>'+(d.folderUrl?(' · <a href="'+esc(d.folderUrl)+'" target="_blank" rel="noopener">폴더 열기</a>'):'')); }
-    else if(!auto){ setStatus('<span class="err">GitHub 저장 실패: '+esc(d.message||d.error||'')+'</span>'); }
-  }catch(e){ if(!auto) setStatus('<span class="err">GitHub 저장 오류: '+esc(e.message)+'</span>'); }
+    if(d.ok){ setStatus('<span class="ok">Drive 저장 ✓ '+(d.saved||0)+'개 파일</span>'+(d.folderLink?(' · <a href="'+esc(d.folderLink)+'" target="_blank" rel="noopener">폴더 열기</a>'):'')); }
+    else if(!auto){ setStatus('<span class="err">Drive 저장 실패: '+esc(d.message||d.error||'')+'</span>'); }
+  }catch(e){ if(!auto) setStatus('<span class="err">Drive 저장 오류: '+esc(e.message)+'</span>'); }
   finally{ btn.disabled=false; btn.textContent=prev; }
 }
 
