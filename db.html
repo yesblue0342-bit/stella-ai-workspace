@@ -40,6 +40,9 @@ body{font-family:system-ui,'Noto Sans KR',sans-serif;background:var(--bg);color:
 .file-meta{font-size:.72rem;color:var(--text2);margin-top:1px}
 .file-acts{display:flex;gap:4px;flex-shrink:0;opacity:0;transition:opacity .15s}
 .file-row:hover .file-acts{opacity:1}
+.enter-folder{flex:0 0 auto;width:32px;height:32px;border:none;background:transparent;color:var(--text2);font-size:1.5rem;font-weight:800;line-height:1;cursor:pointer;display:flex;align-items:center;justify-content:center;border-radius:8px}
+.enter-folder:hover,.enter-folder:active{background:var(--bg3);color:var(--primary)}
+@media (hover:none){.file-acts{opacity:1}}
 .act{background:var(--bg3);color:var(--text3);border:1px solid var(--border);border-radius:7px;padding:3px 8px;cursor:pointer;font-size:.72rem}
 .act.del{border-color:var(--danger);color:var(--danger)}
 .empty{padding:40px;text-align:center;color:var(--text2);font-size:.88rem}
@@ -422,6 +425,15 @@ function renderFiles(){
     mt.textContent=fmtDate(f.modifiedTime)+(f.size?' · '+fmtSize(f.size):'');
     info.appendChild(nm);info.appendChild(mt);
     row.appendChild(info);
+
+    // 폴더: 하위 폴더 이동(열기) 아이콘 — 항상 표시(모바일 탭 진입 명확화)
+    if(f.isFolder){
+      const enter=document.createElement('button');
+      enter.type='button';enter.className='enter-folder';enter.textContent='›';
+      enter.title='폴더 열기';enter.setAttribute('aria-label','폴더 열기');
+      enter.onclick=function(e){e.stopPropagation();loadFolder(f.id,f.name);};
+      row.appendChild(enter);
+    }
 
     // 액션 버튼
     const acts=document.createElement('div');acts.className='file-acts';
