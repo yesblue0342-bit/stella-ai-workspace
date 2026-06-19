@@ -20,8 +20,8 @@ test("CSP 헤더가 /(.*) 에 존재", () => {
   assert.ok(getCSP().length > 0, "CSP 헤더 정의됨");
 });
 
-test("script-src에 'unsafe-eval' 포함 (작업 목표)", () => {
-  assert.match(directive(getCSP(), "script-src"), /'unsafe-eval'/);
+test("script-src에 'unsafe-eval' 없음 (보안 강화 — hub eval 제거)", () => {
+  assert.doesNotMatch(directive(getCSP(), "script-src"), /'unsafe-eval'/);
 });
 
 test("script-src에 'unsafe-inline' 포함 (인라인 스크립트/onclick 보존 — 사이트 안 깨짐)", () => {
