@@ -34,3 +34,25 @@ PASS  contents owner/repo 누락 → 400
 
 ## 보안
 - GitHub 토큰은 서버 프록시(api/github.js)에서만 사용. 클라이언트 코드/응답에 토큰 비노출. 시크릿 스캔 0.
+
+---
+
+# CSP 헤더 — Stella Hub unsafe-eval 허용
+
+`npm test` → **# tests 54  # pass 54  # fail 0** (csp 6 신규).
+
+## 변경
+- vercel.json `headers[/(.*)]`에 Content-Security-Policy 추가.
+  - **script-src에 'unsafe-eval' 포함**(작업 목표) + **'unsafe-inline'**(인라인 script/onclick 151개 보존).
+  - style-src 'unsafe-inline'(인라인 style), img/media/connect/font: https:·data:·blob: 허용(Drive/GitHub/CDN/업로드 보존).
+- sw.js stella-v19 → v20.
+
+## 안전성(중요)
+- 프롬프트 예시 CSP는 script-src에 'unsafe-inline'이 없어 그대로 적용 시 전 앱(인라인 스크립트+onclick) 마비.
+  → 작업 목표('unsafe-eval')는 충족하되, 사이트가 깨지지 않도록 'unsafe-inline' + https/data/blob 호스트를 포함한 안전한 상위집합으로 적용.
+- 기존 CSP 없음(신규 추가). rewrites/functions 전부 보존.
+
+## 검증
+- vercel.json JSON.parse 통과 · CSP에 unsafe-eval/unsafe-inline 단언 6/6.
+- node --check sw.js 통과.
+- 배포 후: /hub 콘솔 CSP eval 에러 사라짐 + 비공개 레포(api/github.js 프록시) 표시 + 미리보기는 실환경(Vercel 헤더)에서 확인.
