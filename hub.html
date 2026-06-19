@@ -167,30 +167,18 @@ async function safeJson(r){
   }
 }
 
-// ── GitHub 비인증 API ──
-async function ghApi(path){
-  const r = await fetch('https://api.github.com'+path, { headers:{ 'Accept':'application/vnd.github+json' } });
-  let body=null; try{ body=await r.json(); }catch(e){}
-  if(!r.ok){
-    if(H.isRateLimited(r.status, body)) throw new Error('GitHub API 요청 한도 초과(비로그인 시간당 60회). 잠시 후 다시 시도하세요.');
-    throw new Error('GitHub '+r.status+': '+((body&&body.message)||''));
-  }
-  return body;
-}
+// (브라우저의 GitHub 직접 호출 제거 — 모든 접근은 same-origin 프록시 /api/github · /api/gh-list · /api/gh-download 경유)
 
 // ── 레포 목록 (공개+비공개; 토큰 있으면 비공개 포함, 서버 프록시 경유) ──
 async function loadRepos(){
   $('repoList').innerHTML='<div class="note" style="padding:8px">불러오는 중… <span class="spin"></span></div>';
   try{
     let repos, authed=false;
-    try{
+    {
+      // same-origin 프록시만 사용(브라우저는 GitHub 직접 호출 안 함 → 차단망에서도 동작)
       const d = await safeJson(await fetch('/api/github?action=repos'));
       if(d && d.ok && Array.isArray(d.repos)){ repos=d.repos; authed=!!d.authenticated; }
       else throw new Error((d&&d.message)||'repos 로드 실패');
-    }catch(_){
-      // 폴백: 비인증 공개만 (토큰 미설정/프록시 오류 시)
-      const pub = await ghApi('/users/'+OWNER+'/repos?per_page=100&sort=updated');
-      repos = (pub||[]).filter(r=>!r.private).map(r=>({ name:r.name, owner:OWNER, default_branch:r.default_branch||'main', private:false, language:r.language||'', description:r.description||'', stargazers_count:r.stargazers_count||0 }));
     }
     if(!repos.length){ $('repoList').innerHTML='<div class="note" style="padding:8px">표시할 레포가 없습니다.</div>'; return; }
     const privN = repos.filter(r=>r.private).length;
@@ -242,9 +230,11 @@ async function loadDir(path){
     if(d && d.ok && d.type==='dir') return H.sortContents(d.items||[]);
     throw new Error((d&&d.message)||'contents 로드 실패');
   }catch(err){
-    if(curRepo.private) throw err; // 비공개는 비인증 폴백 불가
-    const items = await ghApi('/repos/'+curRepo.owner+'/'+curRepo.name+'/contents/'+path.split('/').map(encodeURIComponent).join('/'));
-    return H.sortContents(Array.isArray(items)?items:[]);
+    // 폴백도 same-origin 프록시(/api/gh-list) — GitHub 직접 호출 금지(차단망 우회)
+    const u2='/api/gh-list?repo='+encodeURIComponent(curRepo.owner+'/'+curRepo.name)+'&path='+encodeURIComponent(path)+'&ref='+encodeURIComponent(curRepo.default_branch);
+    const d2=await safeJson(await fetch(u2));
+    if(d2 && d2.ok && d2.type==='dir') return H.sortContents(d2.items||[]);
+    throw new Error((d2&&d2.message)||err.message||'contents 로드 실패');
   }
 }
 
