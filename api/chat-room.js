@@ -196,13 +196,16 @@ export default async function handler(req, res) {
           const d = r.data;
           // C3: 나간 사람/soft-deleted 방 제외 (재동기화로 부활 방지)
           if (!shouldListRoom(d, userId)) continue;
+          const msgs = d.messages || [];
+          const lastMsg = msgs[msgs.length - 1];
           rooms.push({
             roomId: d.roomId,
             title: d.title,
             members: d.members || [],
             lastMessage: d.lastMessage || "",
             updatedAt: d.updatedAt,
-            messageCount: (d.messages || []).length
+            messageCount: msgs.length,
+            lastMessageFrom: lastMsg ? String(lastMsg.userId || lastMsg.sender || "") : ""
           });
         } catch (e) {}
       }
