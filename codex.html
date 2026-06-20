@@ -1,0 +1,369 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Stella Codex</title>
+<meta name="theme-color" content="#0d1117">
+<style>
+/* ── 테마 토큰 (Stella GPT와 동일한 body.dark 방식 + stella_theme 키 공유) ── */
+:root{
+  --bg:#ffffff; --top-bg:#fbfbfc; --side-bg:#fbfbfc; --card:#f3f4f6; --step-bg:#f6f8fa;
+  --ink:#111827; --muted:#6b7280; --line:#e5e7eb; --accent:#1f6feb;
+  --input-bg:#ffffff; --send:#238636; --cancel:#da3633; --err:#b91c1c; --ok:#1a7f37; --on-accent:#ffffff;
+}
+body.dark{
+  --bg:#0d1117; --top-bg:#161b22; --side-bg:#0d1117; --card:#161b22; --step-bg:#0f1620;
+  --ink:#e6edf3; --muted:#8b949e; --line:#21262d; --accent:#1f6feb;
+  --input-bg:#0d1117; --send:#238636; --cancel:#da3633; --err:#f85149; --ok:#3fb950; --on-accent:#ffffff;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:system-ui,-apple-system,sans-serif;background:var(--bg);color:var(--ink);min-height:100dvh;display:flex;flex-direction:column}
+a{color:var(--accent)}
+.top{display:flex;align-items:center;gap:10px;padding:10px 16px;border-bottom:1px solid var(--line);background:var(--top-bg);position:sticky;top:0;z-index:5}
+.top h1{font-size:1.05rem;font-weight:normal;color:var(--muted)}
+.hamb{font-size:1.05rem;line-height:1;border:1px solid var(--line);border-radius:8px;padding:5px 9px;background:var(--card);color:var(--ink);cursor:pointer;flex:0 0 auto}
+.nav{margin-left:auto;display:flex;gap:6px;flex-wrap:wrap;align-items:center}
+.nav a{font-size:.8rem;text-decoration:none;border:1px solid var(--line);border-radius:8px;padding:5px 9px;color:var(--muted)}
+.nav a.active{background:var(--accent);border-color:var(--accent);color:var(--on-accent)}
+.theme-toggle{font-size:.95rem;line-height:1;border:1px solid var(--line);border-radius:8px;padding:5px 8px;background:var(--card);color:var(--ink);cursor:pointer}
+.wrap{flex:1;display:flex;min-height:0}
+.side{width:230px;flex:0 0 auto;border-right:1px solid var(--line);background:var(--side-bg);overflow:auto;padding:10px}
+.side h2{font-size:.72rem;text-transform:uppercase;color:var(--muted);margin:6px 4px 8px;letter-spacing:.5px}
+.sitem{padding:8px 9px;border:1px solid var(--line);border-radius:8px;margin-bottom:6px;cursor:pointer;font-size:.82rem}
+.sitem:hover{border-color:var(--accent);background:var(--card)}
+.sitem .t{font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.sitem .m{color:var(--muted);font-size:.72rem;margin-top:2px}
+.main{flex:1;min-width:0;display:flex;flex-direction:column}
+.msgs{flex:1;overflow:auto;padding:18px;display:flex;flex-direction:column;gap:12px}
+.bubble{max-width:860px;width:100%;margin:0 auto;line-height:1.7}
+.bubble.user{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:10px 13px;white-space:pre-wrap}
+.step{background:var(--step-bg);border:1px solid var(--line);border-left:3px solid var(--accent);border-radius:8px;padding:7px 10px;font-size:.83rem;font-family:ui-monospace,Consolas,monospace;color:var(--ink);overflow-x:auto}
+.step .nm{color:var(--accent);font-weight:700}
+.step .rs{color:var(--muted);white-space:pre-wrap;display:block;margin-top:4px;max-height:200px;overflow:auto}
+.answer{white-space:pre-wrap}
+.barwrap{border-top:1px solid var(--line);background:var(--top-bg);padding:10px 14px}
+.ctl{display:flex;gap:8px;align-items:center;margin-bottom:8px;flex-wrap:nowrap;overflow-x:auto}
+.ctl #model{flex:1 1 120px;min-width:80px}
+select,input,textarea,button{font:inherit;color:var(--ink);background:var(--input-bg);border:1px solid var(--line);border-radius:8px}
+select,#budget{padding:6px 8px}
+#budget{width:90px}
+.lbl{font-size:.78rem;color:var(--muted);white-space:nowrap}
+.iorow{display:flex;gap:8px;align-items:flex-end;border:1px solid var(--line);border-radius:22px;padding:6px 6px 6px 14px;background:var(--input-bg)}
+#prompt{flex:1;resize:none;padding:8px 2px;min-height:40px;max-height:160px;line-height:1.5;border:none;background:transparent;outline:none}
+button.act{cursor:pointer;font-weight:800;padding:0 16px;height:42px;border:none;border-radius:14px}
+#sendBtn{background:var(--send);color:var(--on-accent)}
+#sendBtn:disabled{background:var(--line);color:var(--muted);cursor:not-allowed}
+#cancelBtn{background:var(--cancel);color:var(--on-accent);display:none}
+#saveGhBtn{background:var(--card);color:var(--ink);border:1px solid var(--line);font-weight:700;font-size:.78rem;padding:5px 9px;border-radius:8px;cursor:pointer}
+.status{font-size:.78rem;color:var(--muted)}
+.status .err{color:var(--err)}
+.status .ok{color:var(--ok)}
+.empty{color:var(--muted);text-align:center;margin:auto;font-size:.9rem}
+.side{transition:transform .25s ease}
+.resizer{flex:0 0 auto;width:5px;cursor:col-resize;background:var(--line)}
+.resizer:hover{background:var(--accent)}
+.side-backdrop{display:none;position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:9}
+#fsExit{display:none}
+body.side-collapsed .side,body.side-collapsed .resizer{display:none}
+body.fullscreen-code .top,body.fullscreen-code .side,body.fullscreen-code .resizer{display:none}
+body.fullscreen-code #fsExit{display:block;position:fixed;top:8px;right:10px;z-index:50}
+@media(max-width:760px){
+  .resizer{display:none}
+  .side{position:fixed;top:0;left:0;bottom:0;width:min(280px,82vw);z-index:10;transform:translateX(-110%);box-shadow:2px 0 18px rgba(0,0,0,.35)}
+  body.side-open .side{transform:translateX(0)}
+  body.side-open .side-backdrop{display:block}
+  /* 햄버거로 상단 접기 → 1줄(넓은 화면). 접힘 디폴트: 제목·🗂·⛶ 숨김, ☰+앱아이콘만 */
+  body.cc-navhidden .top .nav a{display:none}
+  body.cc-navhidden .top .app-title-text{display:none}
+  body.cc-navhidden .top #sessBtn,body.cc-navhidden .top #fsBtn{display:none}
+  body.cc-navhidden .top{padding-top:7px;padding-bottom:7px}
+  body.cc-navhidden .top h1{font-size:1rem}
+  /* 하단 컨트롤 1줄(모델/예산/테마/OMC) */
+  .ctl{flex-wrap:nowrap;overflow-x:auto;-webkit-overflow-scrolling:touch}
+  #model{min-width:0}
+}
+</style>
+</head>
+<body>
+<style id="appIcoStyle">
+/* 앱 아이콘 흑백화: 라이트(기본)=흰바탕+검정테두리/검정아이콘, 다크(body.dark)=검은바탕+흰테두리/흰아이콘 */
+.app-ico-wrap{display:inline-flex;align-items:center;justify-content:center;width:22px;height:22px;border-radius:6px;border:1.5px solid #111;background:#fff;margin-right:6px;flex:0 0 auto}
+.app-ico{display:inline-block;font-size:12px;line-height:1;filter:grayscale(1) brightness(0)}
+body.dark .app-ico-wrap{border-color:#fff!important;background:#000!important}
+body.dark .app-ico{filter:grayscale(1) brightness(0) invert(1)!important}
+body:not(.dark) .app-ico-wrap{border-color:#111!important;background:#fff!important}
+body:not(.dark) .app-ico{filter:grayscale(1) brightness(0)!important}
+</style>
+<div class="top">
+  <button type="button" class="hamb" id="hambBtn" title="상단 앱 전환 바 접기/펴기 (넓은 화면)">☰</button>
+  <h1><span class="app-ico-wrap"><span class="app-ico">⌨️</span></span><span class="app-title-text">Stella Codex</span></h1>
+  <nav class="nav">
+    <a href="/"><span class="app-ico-wrap"><span class="app-ico">🤖</span></span>GPT</a><a href="/talk"><span class="app-ico-wrap"><span class="app-ico">💬</span></span>Talk</a><a href="/db"><span class="app-ico-wrap"><span class="app-ico">🗄</span></span>DB</a><a href="/hub"><span class="app-ico-wrap"><span class="app-ico">🌐</span></span>Hub</a><a href="/abap"><span class="app-ico-wrap"><span class="app-ico">🧑‍💻</span></span>ABAP</a><a href="/cc"><span class="app-ico-wrap"><span class="app-ico">🛠</span></span>Code</a><a href="/codex" class="active"><span class="app-ico-wrap"><span class="app-ico">⌨️</span></span>Codex</a>
+    <button type="button" class="theme-toggle" id="sessBtn" title="세션 목록">🗂</button>
+    <button type="button" class="theme-toggle" id="fsBtn" title="코드 풀스크린">⛶</button>
+  </nav>
+</div>
+<div class="wrap">
+  <aside class="side">
+    <h2>세션 <button id="refreshBtn" style="float:right;font-size:.7rem;padding:2px 6px;cursor:pointer">↻</button></h2>
+    <div id="sessionList"><div class="lbl" style="padding:8px">불러오는 중…</div></div>
+  </aside>
+  <div class="resizer" id="resizer" title="사이드바 너비 조절"></div>
+  <main class="main">
+    <div class="msgs" id="msgs"><div class="empty" id="emptyHint"></div></div>
+    <div class="barwrap">
+      <div class="ctl">
+        <select id="model"></select>
+        <span class="lbl">예산$</span>
+        <input id="budget" type="number" min="0.5" max="50" step="0.5" value="20">
+        <button type="button" class="theme-toggle" id="themeToggle" title="다크/라이트 모드">🌙</button>
+        <label class="lbl" style="display:flex;align-items:center;gap:4px;cursor:pointer;white-space:nowrap" title="OMC 멀티에이전트 + 무인 오토파일럿: 구현→테스트→오류 자동수정 루프(질문 없이 RALPH_DONE까지)"><input type="checkbox" id="omc" style="width:auto"> 🤖 OMC</label>
+        <button type="button" id="saveGhBtn" title="이 세션 산출물을 Google Drive(StellaGPT/0download)에 저장" style="display:none">💾 Drive에 저장</button>
+        <span class="status" id="status"></span>
+      </div>
+      <div class="iorow">
+        <textarea id="prompt" placeholder="코딩 작업을 입력하세요 (Enter 전송 / Shift+Enter 줄바꿈)"></textarea>
+        <button class="act" id="sendBtn">전송</button>
+        <button class="act" id="cancelBtn">중단</button>
+      </div>
+    </div>
+  </main>
+</div>
+<div class="side-backdrop" id="sideBackdrop"></div>
+<button type="button" class="theme-toggle" id="fsExit" title="풀스크린 종료">✕ 나가기</button>
+
+<script type="module">
+import { CLAUDE_MODELS, DEFAULT_MODEL, AgentRun, nextDelayMs, buildTranscript } from '/lib/agentcore.mjs';
+
+const $ = (id) => document.getElementById(id);
+const MODEL_KEY = 'stella_codex_model';
+let cur = null;       // { sessionId, model, budgetUsd, title, run, attempt, polling, stopped }
+
+// ── 테마: Stella GPT와 동일한 body.dark 방식 + 'stella_theme' 키 공유 ──
+function applyTheme(){
+  let t='dark'; try{ t=localStorage.getItem('stella_theme')||'dark'; }catch(e){}
+  document.body.classList.toggle('dark', t!=='light');
+  const b=$('themeToggle'); if(b) b.textContent = (t==='light')?'🌙':'☀️';
+  const meta=document.querySelector('meta[name="theme-color"]'); if(meta) meta.setAttribute('content', t==='light'?'#ffffff':'#0d1117');
+}
+function toggleTheme(){
+  const dark=document.body.classList.toggle('dark');
+  try{ localStorage.setItem('stella_theme', dark?'dark':'light'); }catch(e){}
+  const b=$('themeToggle'); if(b) b.textContent = dark?'☀️':'🌙';
+  const meta=document.querySelector('meta[name="theme-color"]'); if(meta) meta.setAttribute('content', dark?'#0d1117':'#ffffff');
+}
+applyTheme();
+$('themeToggle').addEventListener('click', toggleTheme);
+
+// ── 레이아웃: 햄버거 토글 + 외부클릭 닫기 + 풀스크린 + 드래그 리사이저 ──
+(function initLayout(){
+  const body=document.body, side=document.querySelector('.side'), main=document.querySelector('.main');
+  const isMobile=()=>window.matchMedia('(max-width:760px)').matches;
+  const closeMobile=()=>body.classList.remove('side-open');
+  function toggleSide(){ if(isMobile()) body.classList.toggle('side-open'); else body.classList.toggle('side-collapsed'); }
+  // 햄버거(모바일): 상단 앱 전환 바 접기/펴기 → 넓은 화면 (기본 접힘, 상태 기억). 데스크톱: 사이드바 접기
+  const NAVHIDE_KEY='codex_navhidden';
+  (function applyNavHidden(){ var on=true; try{ var v=localStorage.getItem(NAVHIDE_KEY); on=(v===null)?true:(v==='1'); }catch(e){} body.classList.toggle('cc-navhidden', !!on); })();
+  function toggleNavHidden(){ var on=body.classList.toggle('cc-navhidden'); try{ localStorage.setItem(NAVHIDE_KEY, on?'1':'0'); }catch(e){} }
+  const hb=$('hambBtn'); if(hb) hb.addEventListener('click', e=>{ e.stopPropagation(); if(isMobile()) toggleNavHidden(); else body.classList.toggle('side-collapsed'); });
+  const sessBtn=$('sessBtn'); if(sessBtn) sessBtn.addEventListener('click', e=>{ e.stopPropagation(); toggleSide(); });
+  const bd=$('sideBackdrop'); if(bd) bd.addEventListener('click', closeMobile);
+  if(main) main.addEventListener('click', ()=>{ if(isMobile()) closeMobile(); });
+  document.addEventListener('click', e=>{
+    if(!isMobile() || !body.classList.contains('side-open')) return;
+    if((side&&side.contains(e.target)) || (hb&&hb.contains(e.target))) return;
+    closeMobile();
+  });
+  // 풀스크린(코드 영역 최대화): 헤더+사이드바 숨김
+  const fs=$('fsBtn'), fx=$('fsExit');
+  const toggleFs=()=>body.classList.toggle('fullscreen-code');
+  if(fs) fs.addEventListener('click', toggleFs);
+  if(fx) fx.addEventListener('click', toggleFs);
+  // 데스크톱 사이드바 너비 드래그 (영속)
+  const rz=$('resizer');
+  try{ const w=parseInt(localStorage.getItem('stella_codex_sidew')||'',10); if(w>=180&&w<=520&&side) side.style.width=w+'px'; }catch(e){}
+  if(rz&&side) rz.addEventListener('mousedown', e=>{
+    e.preventDefault(); const sx=e.clientX, sw=side.offsetWidth;
+    const mv=ev=>{ side.style.width=Math.max(180,Math.min(520, sw+(ev.clientX-sx)))+'px'; };
+    const up=()=>{ document.removeEventListener('mousemove',mv); document.removeEventListener('mouseup',up); try{localStorage.setItem('stella_codex_sidew', String(side.offsetWidth));}catch(e){} };
+    document.addEventListener('mousemove',mv); document.addEventListener('mouseup',up);
+  });
+})();
+
+// ── 모델 드롭다운 ──
+(function initModels(){
+  const sel = $('model');
+  sel.innerHTML = CLAUDE_MODELS.map(m => `<option value="${m.id}">${m.label} — ${m.note}</option>`).join('');
+  let saved = null; try { saved = localStorage.getItem(MODEL_KEY); } catch(e){}
+  sel.value = (saved && CLAUDE_MODELS.some(m=>m.id===saved)) ? saved : DEFAULT_MODEL;
+  sel.addEventListener('change', () => { try { localStorage.setItem(MODEL_KEY, sel.value); } catch(e){} });
+})();
+
+// ── OMC(oh-my-claudecode) 멀티에이전트 모드 토글 (영속) ──
+(function initOmc(){
+  const cb = $('omc');
+  try { cb.checked = localStorage.getItem('stella_cc_omc') === '1'; } catch(e){}
+  cb.addEventListener('change', () => { try { localStorage.setItem('stella_cc_omc', cb.checked ? '1' : '0'); } catch(e){} });
+})();
+
+function esc(s){ return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+function setStatus(html){ $('status').innerHTML = html || ''; }
+
+function addUserBubble(text){
+  const d = document.createElement('div'); d.className='bubble user'; d.textContent = text;
+  const m=$('msgs'); const empty=m.querySelector('.empty'); if(empty) empty.remove();
+  m.appendChild(d); m.scrollTop=m.scrollHeight;
+}
+
+// 진행 렌더: 같은 run을 한 컨테이너에 다시 그림
+function renderRun(run){
+  let host = cur._host;
+  if(!host){ host=document.createElement('div'); host.className='bubble'; $('msgs').appendChild(host); cur._host=host; }
+  const toolIcon = (n) => n==='bash' ? '🔧' : (n==='write'||n==='str_replace'||n==='edit' ? '✏️' : (n==='read'||n==='view' ? '📄' : '🛠️'));
+  let html = '';
+  for(const t of run.tools){
+    const inp = t.input!=null ? esc(JSON.stringify(t.input)).slice(0,160) : '';
+    html += `<div class="step"><span class="nm">${toolIcon(t.name)} ${esc(t.name)}</span> ${inp}` +
+            (t.result!=null ? `<span class="rs">${esc(typeof t.result==='string'?t.result:JSON.stringify(t.result)).slice(0,800)}</span>`:'') + `</div>`;
+  }
+  if(run.text) html += `<div class="answer">${esc(run.text)}</div>`;
+  host.innerHTML = html;
+  $('msgs').scrollTop = $('msgs').scrollHeight;
+}
+
+async function poll(){
+  if(!cur || cur.stopped) return;
+  try{
+    const r = await fetch('/api/cc/events?session='+encodeURIComponent(cur.sessionId)+'&after='+cur.run.cursor);
+    const d = await r.json();
+    if(d.events && d.events.length) cur.run.ingest(d.events);
+    renderRun(cur.run);
+    if(d.cost!=null) setStatus(`상태: ${cur.run.status} · 비용 약 $${Number(d.cost).toFixed(3)}${d.budget?(' / $'+Number(d.budget).toFixed(2)):''}`);
+    if(cur.run.done){ return finish(); }
+    cur.attempt++;
+    cur._timer = setTimeout(poll, nextDelayMs(cur.attempt));
+  }catch(e){
+    cur.attempt++;
+    if(cur.attempt>8){ setStatus('<span class="err">이벤트 폴링 실패: '+esc(e.message)+'</span>'); finish(true); return; }
+    cur._timer = setTimeout(poll, nextDelayMs(cur.attempt));
+  }
+}
+
+async function finish(failed){
+  setUIBusy(false);
+  const run = cur.run;
+  if(run.status==='error') setStatus('<span class="err">종료: '+esc(run.error||'error')+'</span>');
+  else setStatus('<span class="ok">완료 ✓</span>');
+  // 트랜스크립트 Drive 저장 (best-effort)
+  if(!failed){
+    try{
+      const md = buildTranscript({ title:cur.title, model:cur.model, prompt:cur.prompt, run });
+      await fetch('/api/cc/save',{method:'POST',headers:{'Content-Type':'application/json'},
+        body:JSON.stringify({ session:cur.sessionId, markdown:md, title:cur.title, status:run.status })});
+    }catch(e){}
+    // PART B: 세션 완료 시 산출물 GitHub 자동 저장 (best-effort) + 수동 버튼 노출
+    if(cur && cur.sessionId){ $('saveGhBtn').style.display=''; saveToGithub(true); }
+  }
+  loadSessions();
+}
+
+// PART B: 세션 산출물을 Google Drive(StellaGPT/0download)에 저장 (비공개) — auto/수동 공용
+async function saveToGithub(auto){
+  if(!cur || !cur.sessionId){ if(!auto) setStatus('<span class="err">세션이 없습니다</span>'); return; }
+  const btn=$('saveGhBtn'); const prev=btn.textContent; btn.disabled=true; btn.textContent='저장 중…';
+  try{
+    const r=await fetch('/api/cc/save-drive',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({session:cur.sessionId})});
+    const d=await r.json();
+    if(d.ok){ setStatus('<span class="ok">Drive 저장 ✓ '+(d.saved||0)+'개 파일</span>'+(d.folderLink?(' · <a href="'+esc(d.folderLink)+'" target="_blank" rel="noopener">폴더 열기</a>'):'')); }
+    else if(!auto){ setStatus('<span class="err">Drive 저장 실패: '+esc(d.message||d.error||'')+'</span>'); }
+  }catch(e){ if(!auto) setStatus('<span class="err">Drive 저장 오류: '+esc(e.message)+'</span>'); }
+  finally{ btn.disabled=false; btn.textContent=prev; }
+}
+
+function setUIBusy(busy){
+  $('sendBtn').disabled = busy;
+  $('cancelBtn').style.display = busy ? 'block' : 'none';
+  $('model').disabled = busy; $('budget').disabled = busy;
+}
+
+async function send(){
+  const text = $('prompt').value.trim();
+  if(!text) return;
+  $('prompt').value=''; $('prompt').style.height='';
+  const model = $('model').value;
+  const budgetUsd = Math.max(0.01, Math.min(Number($('budget').value)||20, 50));
+
+  if(cur && !cur.run.done){ return; } // 진행 중이면 무시(중단 후)
+  addUserBubble(text);
+  setUIBusy(true); setStatus('시작 중…');
+
+  if(cur && cur.sessionId && cur.run && cur.run.done){
+    // 같은 세션 후속 턴
+    cur.run = new AgentRun(); cur.attempt=0; cur.stopped=false; cur._host=null; cur.prompt=text;
+    try{
+      const r=await fetch('/api/cc/turn',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({session:cur.sessionId,prompt:text})});
+      const d=await r.json(); if(!r.ok||d.error) throw new Error(d.message||d.error||'turn 실패');
+      poll();
+    }catch(e){ setStatus('<span class="err">'+esc(e.message)+'</span>'); setUIBusy(false); }
+    return;
+  }
+  // 신규 세션
+  cur = { sessionId:null, model, budgetUsd, title:text.replace(/[\p{Cc}\p{Cf}]/gu,' ').replace(/\s+/g,' ').trim().slice(0,60), run:new AgentRun(), attempt:0, polling:true, stopped:false, prompt:text };
+  try{
+    const r=await fetch('/api/cc/start',{method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({ model, prompt:text, title:cur.title, budgetUsd, omc: $('omc').checked })});
+    const d=await r.json(); if(!r.ok||d.error) throw new Error(d.message||d.error||'start 실패');
+    cur.sessionId=d.sessionId; cur.model=d.model; cur.budgetUsd=d.budgetUsd;
+    setStatus('세션 '+d.sessionId.slice(0,12)+'… 진행 중'); poll();
+  }catch(e){ setStatus('<span class="err">'+esc(e.message)+'</span>'); setUIBusy(false); cur=null; }
+}
+
+async function cancel(){
+  if(!cur || !cur.sessionId) return;
+  setStatus('중단 요청…');
+  try{ await fetch('/api/cc/cancel',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({session:cur.sessionId})}); }catch(e){}
+}
+
+async function loadSessions(){
+  try{
+    const r=await fetch('/api/cc/sessions'); const d=await r.json();
+    const items=d.items||[];
+    const host=$('sessionList');
+    if(!items.length){ host.innerHTML='<div class="lbl" style="padding:8px">세션 없음</div>'; return; }
+    host.innerHTML=items.map(x=>`<div class="sitem" data-id="${esc(x.id)}" data-model="${esc(x.model)}" data-title="${esc(x.title)}">
+      <div class="t">${esc(x.title||'세션')}</div>
+      <div class="m">${esc(x.model||'')} · ${esc(x.status||'')}${x.cost_usd?(' · $'+Number(x.cost_usd).toFixed(3)):''}</div></div>`).join('');
+    host.querySelectorAll('.sitem').forEach(el=>el.addEventListener('click',()=>resume(el.dataset.id, el.dataset.model, el.dataset.title)));
+  }catch(e){ $('sessionList').innerHTML='<div class="lbl" style="padding:8px">목록 로드 실패</div>'; }
+}
+
+function resume(id, model, title){
+  if(cur && cur._timer) clearTimeout(cur._timer);
+  $('msgs').innerHTML='';
+  cur = { sessionId:id, model:model||DEFAULT_MODEL, title:title||'세션', run:new AgentRun(), attempt:0, stopped:false, prompt:'(재개)' };
+  $('saveGhBtn').style.display=''; // 재개 세션도 수동 GitHub 저장 가능
+  setUIBusy(true); setStatus('세션 재개 — 이벤트 로드 중…'); poll();
+}
+
+// ── 입력: Enter 전송 / Shift+Enter 줄바꿈 / IME 보호 / 모바일 줄바꿈 ──
+$('prompt').addEventListener('keydown', function(e){
+  if(e.key==='Enter'||e.keyCode===13){
+    if(e.isComposing||e.keyCode===229) return;
+    if(e.shiftKey) return;
+    const coarse=(window.matchMedia&&window.matchMedia('(pointer: coarse)').matches);
+    if(coarse) return; // 모바일: 줄바꿈, 전송은 버튼
+    e.preventDefault(); send();
+  }
+});
+$('prompt').addEventListener('input',function(){ this.style.height='auto'; this.style.height=Math.min(this.scrollHeight,160)+'px'; });
+$('sendBtn').addEventListener('click', send);
+$('cancelBtn').addEventListener('click', cancel);
+$('refreshBtn').addEventListener('click', loadSessions);
+$('saveGhBtn').addEventListener('click', () => saveToGithub(false));
+
+loadSessions();
+if('serviceWorker' in navigator){ navigator.serviceWorker.register('/sw.js').catch(function(){}); }
+</script>
+</body>
+</html>

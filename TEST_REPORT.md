@@ -53,3 +53,26 @@
 1. CC-7 빈 화면의 안내 텍스트 제거(emptyHint 빈 div).
 2. CC-8 app-ico-wrap 다크(검정/흰테두리/흰아이콘)·라이트(흰/검테두리/검아이콘) !important 강제 → 테마 일관.
 3. CC-9 .lbl white-space:nowrap → "예산$"가 두 줄로 내려가던 것 한 줄로.
+
+## 2026-06-20 (iter 5) · Stella Codex 앱 신규 + 바로가기 추가 · pass 7/7
+- vercel.json JSON.parse OK
+- codex.html 모듈/인라인 스크립트 추출 검증 bad=0
+- grep 검증: index.html `/codex`+⌨+Stella Codex / abap.html 동일 / codex.html `<title>Stella Codex</title>`+app-title-text / vercel `/codex`·`/stella-codex` 2건 / sw.js `/codex`+stella-v48 → 7/7 ✅
+
+| 항목 | 변경 | 테스트 | 결과 |
+|------|------|--------|------|
+| 신규 앱 | `cc.html`→`codex.html` 복제 후 리브랜딩(제목·앱타이틀 "Stella Codex", h1 아이콘 ⌨, localStorage `stella_codex_*`·`codex_navhidden`) | 모듈 node --check / 인라인 new Function bad=0 | ✅ |
+| 바로가기 | index.html(shortcut-admin)·abap.html(tree) "Stella Agent Code" 바로 아래 ⌨ 흑백 아이콘으로 "Stella Codex" 추가 | grep 2/2 | ✅ |
+| 라우트 | vercel.json `/codex`,`/stella-codex`→codex.html | JSON.parse + grep | ✅ |
+| SW | isHTML network-first에 `/codex` 추가, 캐시 v47→v48 | grep | ✅ |
+| 백엔드 | `/api/cc/*`(Managed Agents) 재사용 — 신규 키·라우트 0 | 정적 확인 | ⚠ OpenAI Codex 전용 런타임 인프라 부재(후속) |
+
+요약 3줄:
+1. 요청대로 명칭 "Stella Codex", 아이콘은 다른 앱과 동일한 흑백 통일 방식(⌨, app-ico-wrap/filter), 바로가기에서 Stella Agent Code 바로 아래 배치.
+2. 레이아웃은 Stella Agent Code(cc.html)와 동일하게 복제, localStorage 키만 codex 네임스페이스로 분리(상태 충돌 방지).
+3. 백엔드는 신규 인프라(API 키/라우트) 추가 없이 기존 Agent Code 런타임 재사용 — OpenAI Codex 전용 코드실행 런타임은 인프라에 없어 후속 반복으로 분리.
+
+## FINAL (iter 5)
+- 재검증: vercel.json JSON OK · codex.html scripts bad=0 · grep 7/7 PASS · 회귀 없음.
+- 배포: main 푸시 → Vercel 자동 배포. SW 캐시 stella-v48.
+- 가정: Stella Codex 백엔드는 현 Agent Code(Managed Agents) 재사용. OpenAI Codex 백엔드 분리는 신규 인프라 필요 → 후속.

@@ -32,6 +32,8 @@
     { "source": "/stella-abap", "destination": "/abap.html" },
     { "source": "/code", "destination": "/cc.html" },
     { "source": "/stella-code", "destination": "/cc.html" },
+    { "source": "/codex", "destination": "/codex.html" },
+    { "source": "/stella-codex", "destination": "/codex.html" },
     { "source": "/developer", "destination": "/developer.html" },
     { "source": "/restore", "destination": "/restore.html" }
   ]

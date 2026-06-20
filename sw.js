@@ -1,4 +1,4 @@
-const CACHE = 'stella-v47';
+const CACHE = 'stella-v48';
 
 self.addEventListener('install', e => self.skipWaiting());
 self.addEventListener('activate', e => {
@@ -21,6 +21,7 @@ self.addEventListener('fetch', e => {
     || url.pathname === '/talk'
     || url.pathname === '/db'
     || url.pathname === '/cc'
+    || url.pathname === '/codex'
     || url.pathname === '/abap'
     || url.pathname === '/hub'
     || url.pathname === '/gpt';

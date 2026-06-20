@@ -10,6 +10,7 @@
 ## 가정 로그
 - `vercel --prod` CLI 자격증명이 샌드박스에 없어 배포는 **main 푸시 → Vercel 자동 배포**로 수행(동등).
 - #2/#4는 브라우저/OS 제약(자동재생 정책·iOS 진동 미지원)이 본질이라 코드 보강 후 `[!]` 보류로 표기.
+- CC-6 Stella Codex: 현재 백엔드 `/api/cc/*`(Anthropic Managed Agents) 재사용. OpenAI Codex 전용 코드실행 런타임이 인프라에 없어, 신규 API 키·라우트 없이 동일 런타임으로 우선 제공. OpenAI 백엔드 분리는 신규 인프라 필요 → 후속 반복.
 
 ## Stella Agent Code 개선 + Codex 앱 (iter)
 - [x] CC-1. 상단 헤더 1줄 접기(디폴트 접힘): 제목 텍스트·🗂·⛶는 햄버거 확장 시만, 접힘 시 ☰+앱아이콘만 → 화면 넓게.
@@ -17,7 +18,7 @@
 - [x] CC-3. 프롬프트 입력 라인 Stella GPT식(둥근 pill 컨테이너 + 라운드 버튼).
 - [x] CC-5. 개발 완료 산출물 Google Drive(StellaGPT/0download) 자동 저장 — 완료 시 saveToGithub(true)→/api/cc/save-drive 자동 호출 확인됨.
 - [ ] CC-4. cc 입력창 이미지/첨부 파일 업로드(상세 개발용) — 백엔드(Managed Agents turn) 첨부 수용 필요(다음 반복).
-- [ ] CC-6. 빠른 즐겨찾기에 Codex 앱 추가(OpenAI 연결, cc.html 동일 레이아웃) — 신규 HTML+라우트(다음 반복).
+- [x] CC-6. 빠른 즐겨찾기에 Stella Codex 앱 추가 — `codex.html`(cc.html 동일 레이아웃, 명칭 "Stella Codex", 아이콘 ⌨ 흑백 통일), 바로가기에 Agent Code 바로 아래 배치(index.html/abap.html), `/codex`·`/stella-codex` 라우트(vercel.json), sw.js network-first+캐시 v48. ※ 백엔드는 현재 Agent Code(Managed Agents) 런타임 재사용 — OpenAI Codex 전용 코드실행 런타임이 인프라에 없어 추후 분리(아래 가정 로그).
 
 ## Stella Agent Code 미세 개선 (iter 4)
 - [x] CC-7. 빈 화면 안내문구("모델을 고르고 코딩 작업을 요청하세요 예~") 숨김 → 깨끗한 빈 화면.
