@@ -89,7 +89,7 @@ body.dark .np-content textarea{background:#0d1117;color:#e6edf3}
 })();
 </script>
 <div id="auth" class="auth"><div class="card"><h1>Stella</h1><p class="muted">회원 전용 AI 작업공간. 로그인은 로그아웃 전까지 유지됩니다.</p><div class="tabs"><button id="loginTab" class="active" type="button">로그인</button><button id="signupTab" type="button">회원가입</button></div><form id="authForm"><div class="field signupOnly hidden"><label>이름</label><input id="name" placeholder="이름" autocomplete="name"></div><div class="field"><label>아이디 또는 이메일</label><input id="loginId" placeholder="아이디 또는 이메일" autocomplete="username"></div><div class="field signupOnly hidden"><label>이메일</label><input id="email" placeholder="이메일" autocomplete="email"></div><div class="field signupOnly hidden"><label>생년월일</label><input id="birth" placeholder="YYYY-MM-DD"></div><div class="field"><label>비밀번호</label><input id="pw" type="password" placeholder="비밀번호" autocomplete="current-password"></div><label class="check loginOnly"><input id="rememberId" type="checkbox"> 아이디 기억하기</label><button id="submitBtn" class="primary" type="button" onclick="auth(event)">로그인</button><button type="button" id="forgotBtn">비밀번호를 잊으셨나요?</button><div id="authMsg" class="msg"></div></form></div></div><div id="app" class="app hidden"><aside id="side" class="side"><div class="brand">Stella GPT</div><div id="who" class="muted"></div><div style="display:flex;gap:8px;margin:10px 0"><button type="button" onclick="newChat()">＋ 새 채팅</button><button type="button" onclick="logout()">로그아웃</button></div><div class="search"><input id="q" placeholder="게시글/회의록/채팅 검색" onfocus="keepSide()" oninput="renderSide()"><button type="button" onclick="renderSide()">⌕</button></div><div class="section">프로젝트 카테고리</div><div id="chatList"></div><div class="section">게시판 카테고리</div><button class="tree" type="button" onclick="openNotePanel()">📝 노트</button>
-<button class="tree" type="button" onclick="location.href='/cloud'">▱ 기본 게시판</button><button class="tree" type="button" onclick="location.href='/cloud'">▱ DB / Stella Cloud</button><div class="section">바로가기</div><a class="tree" href="/cloud">Stella Cloud</a><a class="tree" href="/talk">Stella Talk</a><a class="tree" href="/developer">Developer</a>
+<button class="tree" type="button" onclick="location.href='/cloud'">▱ 기본 게시판</button><button class="tree" type="button" onclick="location.href='/cloud'">▱ DB / Stella Cloud</button><div class="section">바로가기</div><a class="tree" href="/cloud">Stella Cloud</a><a class="tree" href="/talk">Stella Talk</a><a class="tree" href="/developer">Developer</a><button id="adminApproveTab" class="tree hidden" type="button" onclick="openApprovalPanel()">🛡️ 회원 승인</button>
 <!-- 노트 오버레이 -->
 <div class="note-overlay" id="noteOverlay" onclick="closeNotePanel()"></div>
 <!-- 노트 패널 -->
@@ -123,6 +123,20 @@ body.dark .np-content textarea{background:#0d1117;color:#e6edf3}
     </div>
   </div>
 </div>
+<!-- 회원 승인 오버레이 -->
+<div class="note-overlay" id="approvalOverlay" onclick="closeApprovalPanel()"></div>
+<!-- 회원 승인 패널 -->
+<div class="note-panel" id="approvalPanel">
+  <div class="np-top">
+    <h2>🛡️ 회원 승인</h2>
+    <span class="np-saved-tag" id="apStatus"></span>
+    <button onclick="loadApprovals()">새로고침</button>
+    <button onclick="closeApprovalPanel()">닫기</button>
+  </div>
+  <div style="flex:1;overflow:auto;padding:16px">
+    <div id="apList"><div class="muted">불러오는 중...</div></div>
+  </div>
+</div>
 </aside><main class="main"><div class="top"><button class="btn hamb" type="button" onclick="toggleSide()">☰</button><div id="title" class="title">새 채팅</div><div class="spacer"></div><button class="btn themeBtn" type="button" onclick="installPWA()" id="installBtn" style="display:none;font-size:16px;padding:8px 10px;border-radius:12px" title="앱 설치">📲</button><button class="btn themeBtn" type="button" onclick="toggleTheme()" id="themeBtn">🌙</button></div><div id="msgs" class="msgs"></div><div class="compose"><div class="composeModel"><div class="modelWrap"><button class="modelBtn" type="button" onclick="toggleModelMenu()" id="modelBtn">Opus 4.8</button></div><select id="model" style="display:none"><optgroup label="── GPT ──"><option value="chatgpt-5.5-latest">GPT-5.5 최신</option><option value="gpt-5">GPT-5</option><option value="gpt-4o">GPT-4o</option><option value="gpt-4.1">GPT-4.1</option><option value="gpt-4.1-mini">GPT-4.1 Mini</option><option value="gpt-4o-mini">GPT-4o Mini</option></optgroup><optgroup label="── Claude ──"><option value="claude-fable-5">Claude Fable 5 (최신)</option><option value="claude-opus-4-8">Claude Opus 4.8</option><option value="claude-opus-4-7">Claude Opus 4.7</option><option value="claude-opus-4-6">Claude Opus 4.6</option><option value="claude-sonnet-4-6">Claude Sonnet 4.6</option><option value="claude-haiku-4-5-20251001">Claude Haiku 4.5</option></optgroup></select></div><div id="attachPreview" class="attach-preview"></div>
 <div class="bar">
 <button type="button" onclick="document.getElementById(\'attachInput\').click()" style="background:none;border:none;cursor:pointer;font-size:20px;padding:4px 6px;color:#6b7280" title="파일/이미지 첨부">+</button>
@@ -136,6 +150,8 @@ var _isDark=document.body.classList.contains('dark');
 var _avatarBg=_isDark?'#e6edf3':'#1f2937';
 var _avatarColor=_isDark?'#0d1117':'#fff';
 $('who').innerHTML='<div style="display:flex;align-items:center;gap:10px;padding:10px 0 6px"><div id="userAvatar" style="width:36px;height:36px;border-radius:50%;background:'+_avatarBg+';color:'+_avatarColor+';display:flex;align-items:center;justify-content:center;font-weight:900;font-size:16px;flex-shrink:0">'+_ini+'</div><div style="min-width:0"><div style="font-weight:700;font-size:.88rem;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+(user.name||user.id)+'</div><div style="font-size:.72rem;color:#8b949e;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+(user.email||user.id)+'</div></div></div>';
+  // 관리자면 "회원 승인" 메뉴 노출, 아니면 숨김
+  if($('adminApproveTab')){ if(isAdminUser()) $('adminApproveTab').classList.remove('hidden'); else $('adminApproveTab').classList.add('hidden'); }
   // 로컬 캐시 먼저 표시
   chats=read(K.chats,[]).filter(x=>x.userId===user.id);
   if(!chats.length){const tmp={id:'loading',userId:user.id,title:'불러오는 중...',messages:[]};chats=[tmp];active='loading';}
@@ -640,7 +656,80 @@ function renderNoteList(){
   el.innerHTML=html2;
 }
 
-
+// ════════════════════════════════
+// 회원 승인 (관리자 전용)
+// ════════════════════════════════
+function isAdminUser(){ return !!(user && ['yesblue0342','admin'].includes(String(user.id||'').toLowerCase())); }
+let _apList=[];
+// 관리자 자격증명 확보: admin 계정은 비번 admin, 그 외는 세션 캐시 또는 1회 입력
+function _adminCreds(){
+  const id=(user&&user.id)||'';
+  let pw=sessionStorage.getItem('stella_admin_pw')||'';
+  if(!pw){
+    if(String(id).toLowerCase()==='admin'){ pw='admin'; }
+    else { pw=prompt('관리자 비밀번호를 입력하세요 ('+id+')')||''; if(!pw) return null; }
+    sessionStorage.setItem('stella_admin_pw',pw);
+  }
+  return { adminId:id, adminPassword:pw };
+}
+function _isAuthErr(msg){ return /관리자|인증|권한|401|403/.test(String(msg||'')); }
+function openApprovalPanel(){
+  if(!isAdminUser()){ alert('관리자만 접근할 수 있습니다.'); return; }
+  document.getElementById('approvalPanel').classList.add('on');
+  document.getElementById('approvalOverlay').classList.add('on');
+  closeSideMobile();
+  loadApprovals();
+}
+function closeApprovalPanel(){
+  document.getElementById('approvalPanel').classList.remove('on');
+  document.getElementById('approvalOverlay').classList.remove('on');
+}
+async function loadApprovals(){
+  const box=document.getElementById('apList');
+  const st=document.getElementById('apStatus');
+  const creds=_adminCreds();
+  if(!creds){ box.innerHTML='<div class="muted">관리자 비밀번호가 필요합니다.</div>'; if(st)st.textContent=''; return; }
+  if(st)st.textContent='불러오는 중...';
+  box.innerHTML='<div class="muted">불러오는 중...</div>';
+  try{
+    const d=await api('/api/admin-approvals',{action:'list',adminId:creds.adminId,adminPassword:creds.adminPassword});
+    _apList=Array.isArray(d.pending)?d.pending:[];
+    if(st)st.textContent='대기 '+_apList.length+'건';
+    if(!_apList.length){ box.innerHTML='<div class="muted">승인 대기 중인 회원이 없습니다.</div>'; return; }
+    box.innerHTML=_apList.map(function(u,i){
+      const when=u.requestedAt?new Date(u.requestedAt).toLocaleString('ko-KR'):'-';
+      return '<div style="border:1px solid var(--border,#e5e7eb);border-radius:14px;padding:12px;margin-bottom:10px">'
+        +'<div style="font-weight:800">'+esc(u.name||u.id)+'</div>'
+        +'<div class="muted" style="font-size:.82rem;margin:3px 0">ID: '+esc(u.id)+(u.email?(' · '+esc(u.email)):'')+'</div>'
+        +'<div class="muted" style="font-size:.76rem">신청일시: '+esc(when)+'</div>'
+        +'<div style="display:flex;gap:8px;margin-top:10px">'
+        +'<button class="primary" type="button" onclick="decideApproval('+i+',\'approve\')">승인</button>'
+        +'<button type="button" onclick="decideApproval('+i+',\'reject\')">거절</button>'
+        +'</div></div>';
+    }).join('');
+  }catch(e){
+    if(_isAuthErr(e.message)){
+      sessionStorage.removeItem('stella_admin_pw');
+      box.innerHTML='<div class="msg">관리자 인증 실패: '+esc(e.message)+'<br><button type="button" onclick="loadApprovals()" style="margin-top:8px">다시 시도</button></div>';
+    } else {
+      box.innerHTML='<div class="msg">목록 불러오기 실패: '+esc(e.message)+'</div>';
+    }
+    if(st)st.textContent='오류';
+  }
+}
+async function decideApproval(i,action){
+  const u=_apList[i]; if(!u) return;
+  const creds=_adminCreds(); if(!creds) return;
+  const verb=(action==='approve')?'승인':'거절';
+  if(!confirm((u.name||u.id)+' 회원을 '+verb+'하시겠습니까?')) return;
+  try{
+    await api('/api/admin-approvals',{action:action,adminId:creds.adminId,adminPassword:creds.adminPassword,targetId:u.id,key:u.key});
+    loadApprovals();
+  }catch(e){
+    if(_isAuthErr(e.message)) sessionStorage.removeItem('stella_admin_pw');
+    alert(verb+' 실패: '+e.message);
+  }
+}
 
 </script><script>if('serviceWorker' in navigator){navigator.serviceWorker.register('/sw.js').catch(function(){});}var _dp=null;function installPWA(){if(!_dp)return;_dp.prompt();_dp.userChoice.then(function(){_dp=null;var btn=document.getElementById('installBtn');if(btn)btn.style.display='none';});}window.addEventListener('beforeinstallprompt',function(e){e.preventDefault();_dp=e;var btn=document.getElementById('installBtn');if(btn)btn.style.display='';});window.addEventListener('appinstalled',function(){_dp=null;var btn=document.getElementById('installBtn');if(btn)btn.style.display='none';});
 
