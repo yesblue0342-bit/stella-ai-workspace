@@ -210,6 +210,12 @@ body.theme-dark .theme-btn.active{background:#1e3a5f}
 <body class="theme-kakao">
 
 <div class="app-wrap" id="appWrap">
+  <!-- ── 알림 권한 배너 (작업2) ── -->
+  <div id="notifBanner" style="display:none;align-items:center;gap:10px;background:#1f6feb;color:#fff;padding:10px 14px;font-size:.85rem;font-weight:700">
+    <span id="notifBannerText" style="flex:1">🔔 알림이 꺼져 있어요 · 새 메시지를 바로 받으려면</span>
+    <button id="notifBannerBtn" type="button" onclick="enableNotif()" style="background:#fff;color:#1f6feb;border:0;border-radius:8px;padding:6px 12px;font-weight:800;cursor:pointer;white-space:nowrap">알림 켜기</button>
+    <button type="button" onclick="dismissNotifBanner()" title="닫기" style="background:transparent;border:0;color:#fff;font-size:1.15rem;line-height:1;cursor:pointer">×</button>
+  </div>
   <!-- ── 사이드바 ── -->
   <div class="sidebar" id="sidebar">
     <div class="header">
@@ -2405,7 +2411,33 @@ function forceUpdate(){
   }
 }
 
-function requestNotification(){if(Notification.permission==='default')Notification.requestPermission().then(function(p){if(p==='granted')new Notification('Stella Talk',{body:'알림이 설정되었습니다.',icon:'/icons/talk-192.png'});});}
+function requestNotification(){if(Notification.permission==='default')Notification.requestPermission().then(function(p){if(p==='granted')new Notification('Stella Talk',{body:'알림이 설정되었습니다.',icon:'/icons/talk-192.png'});updateNotifBanner();}).catch(function(){});}
+// ── 작업2: 알림 권한 배너 (미허용 시 원탭 켜기) ──
+function dismissNotifBanner(){ var b=document.getElementById('notifBanner'); if(b)b.style.display='none'; try{sessionStorage.setItem('stella_notif_banner_dismissed','1');}catch(e){} }
+function updateNotifBanner(){
+  var b=document.getElementById('notifBanner'); if(!b) return;
+  var dismissed=false; try{ dismissed=sessionStorage.getItem('stella_notif_banner_dismissed')==='1'; }catch(e){}
+  var perm=(window.Notification&&Notification.permission)||'default';
+  if(isLoggedIn() && perm!=='granted' && !dismissed){
+    var t=document.getElementById('notifBannerText'), btn=document.getElementById('notifBannerBtn');
+    if(perm==='denied'){ if(t)t.textContent='🔔 알림이 차단됨 · 브라우저 설정 > 사이트 권한 > 알림 허용으로 켜주세요'; if(btn)btn.style.display='none'; }
+    else { if(t)t.textContent='🔔 알림이 꺼져 있어요 · 새 메시지를 바로 받으려면'; if(btn)btn.style.display=''; }
+    b.style.display='flex';
+  } else { b.style.display='none'; }
+}
+function enableNotif(){
+  if(!window.Notification) return;
+  try{
+    Notification.requestPermission().then(function(p){
+      if(p==='granted'){
+        var b=document.getElementById('notifBanner'); if(b)b.style.display='none';
+        try{ toast('알림이 켜졌어요'); }catch(e){}
+        try{ if('serviceWorker' in navigator){ navigator.serviceWorker.getRegistration().then(function(r){ if(!r) navigator.serviceWorker.register('/sw.js').catch(function(){}); }); } }catch(e){}
+      } else { updateNotifBanner(); } // denied → 설정 안내로 교체
+    }).catch(function(){ updateNotifBanner(); });
+  }catch(e){}
+}
+document.addEventListener('visibilitychange', function(){ if(document.visibilityState==='visible') updateNotifBanner(); });
 
 // ── PWA ──
 var _dp=null;
@@ -2460,6 +2492,7 @@ window.onload=function(){
 function initTalk(){
   loadRooms();ensureMyChat();renderRooms();
   setTimeout(requestNotification,2000);
+  updateNotifBanner();                 // 작업2: 로그인 직후 미허용이면 배너
   setTimeout(syncRoomListFromServer,500);
   setInterval(syncRoomListFromServer, 5000);
 }
