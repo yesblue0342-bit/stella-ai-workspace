@@ -450,6 +450,8 @@ body.theme-dark .theme-btn.active{background:#1e3a5f}
       <button class="sound-opt" onclick="previewSound('byeolha')" data-key="byeolha">🌟 김별하~</button>
       <button class="sound-opt" onclick="previewSound('queen')" data-key="queen">👑 앵쥬 왕비님~</button>
     </div>
+    <button id="voiceSpeakToggle" class="sound-opt" onclick="toggleVoiceSpeak()" style="width:100%;margin-bottom:10px;text-align:left">🔊 음성으로 읽기 <span style="font-size:.75rem;color:var(--text2)">(포그라운드에서 메시지 음성 낭독)</span></button>
+    <button class="sound-opt" onclick="testNotify()" style="width:100%;margin-bottom:12px;text-align:center">🔔 알림 테스트 <span style="font-size:.75rem;color:var(--text2)">(소리+팝업 즉시 확인)</span></button>
     <button class="btn-primary" onclick="closeModal('soundSettingsModal');toast('알림 설정이 저장되었습니다')">확인</button>
   </div>
 </div>
@@ -1313,7 +1315,12 @@ function loadNotif(){
     s.voiceKey=(legacyKey&&map[legacyKey])||'s1';
   }
   if(!TALK_VOICES[s.voiceKey]) s.voiceKey='s1';
+  if(typeof s.voiceSpeak!=='boolean') s.voiceSpeak=false; // 🔊 음성으로 읽기 기본 off
   return s;
+}
+function toggleVoiceSpeak(){
+  var on=!loadNotif().voiceSpeak; saveNotif({voiceSpeak:on}); syncSoundUI();
+  if(on){ unlockAudio(); speakVoice(getVoiceKey()); } // 켜는 순간 미리듣기
 }
 function saveNotif(patch){
   var s=loadNotif();
@@ -1391,21 +1398,31 @@ function beepFallback(){
 //          직전 재생이 안 끝나도 막히지 않음. 재생 직전 반드시 ctx.resume().
 function playMelody(key){
   if(!TALK_VOICES[key]) key='s1';
-  var notes=(TALK_VOICES[key]&&TALK_VOICES[key].melody)||[[659.25,0,0.18],[987.77,0.16,0.26]];
+  var base=(TALK_VOICES[key]&&TALK_VOICES[key].melody)||[[659.25,0,0.18],[987.77,0.16,0.26]];
+  // 음 3개 보장: 상승 후 강조 지속음 → "딩-동~" 종소리감
+  var notes=base.slice();
+  if(notes.length<3){
+    var last=notes[notes.length-1]||[880,0,0.26];
+    notes.push([last[0], (last[1]||0)+(last[2]||0.26)*0.5, 0.42]);
+  }
   try{
     if(!_audioCtx){ _audioCtx=new (window.AudioContext||window.webkitAudioContext)(); }
     var ctx=_audioCtx;
     if(ctx.state==='suspended'){ try{ ctx.resume(); }catch(e){} }
+    var master=ctx.createGain(); master.gain.value=0.9; master.connect(ctx.destination); // 클리핑 방지 마스터
     var t0=ctx.currentTime+0.01;
     notes.forEach(function(n){
-      var freq=n[0], off=n[1]||0, dur=n[2]||0.2;
-      var o=ctx.createOscillator(), g=ctx.createGain();
-      o.type='sine'; o.frequency.setValueAtTime(freq, t0+off);
-      o.connect(g); g.connect(ctx.destination);
-      g.gain.setValueAtTime(0.0001, t0+off);
-      g.gain.exponentialRampToValueAtTime(0.30, t0+off+0.02);
-      g.gain.exponentialRampToValueAtTime(0.0001, t0+off+dur);
-      o.start(t0+off); o.stop(t0+off+dur+0.03);
+      var freq=n[0], off=n[1]||0, dur=Math.max(0.30, n[2]||0.30); // 0.18→0.30↑
+      // sine(주) + triangle(배음 보강) 2레이어
+      [['sine',0.55],['triangle',0.18]].forEach(function(L){
+        var o=ctx.createOscillator(), g=ctx.createGain();
+        o.type=L[0]; o.frequency.setValueAtTime(freq, t0+off);
+        o.connect(g); g.connect(master);
+        g.gain.setValueAtTime(0.0001, t0+off);
+        g.gain.exponentialRampToValueAtTime(L[1], t0+off+0.02);   // 부드러운 attack(0.02s), peak 0.55
+        g.gain.exponentialRampToValueAtTime(0.0001, t0+off+dur);  // 부드러운 decay
+        o.start(t0+off); o.stop(t0+off+dur+0.05);
+      });
     });
     return true;
   }catch(e){ return false; }
@@ -1458,15 +1475,18 @@ function playNotifySound(msgId){
     if(msgId){ if(msgId===_lastNotifMsgId && (now-_lastNotifAt)<250) return; }
     else if((now-_lastNotifAt)<250) return;
     _lastNotifAt=now; if(msgId) _lastNotifMsgId=msgId;
-    // 재생 직전 큐 깨우기(다시 안 울림 방지)
+    // 재생 직전 오디오 unlock 1회 + 큐 깨우기(자동재생 정책 / 다시 안 울림 방지)
+    try{ unlockAudio(); }catch(e){}
     try{ if(_audioCtx && _audioCtx.state==='suspended') _audioCtx.resume(); }catch(e){}
     var key=getVoiceKey();
+    // 켜짐 + 포그라운드면 음성으로도 읽기(작업1-3)
+    try{ if(loadNotif().voiceSpeak && document.visibilityState==='visible'){ speakVoice(key); } }catch(e){}
     var mp3=TALK_VOICE_MP3 && TALK_VOICE_MP3[key];
     if(mp3){
       try{ var a=_voiceAudioCache[key]||(_voiceAudioCache[key]=new Audio(mp3)); a.currentTime=0;
         var p=a.play(); if(p&&p.catch) p.catch(function(){ playMelody(key); }); return; }catch(e){}
     }
-    playMelody(key);   // 주 알림음
+    playMelody(key);   // 주 알림음(강화 멜로디)
   }catch(e){}
 }
 
@@ -1498,6 +1518,23 @@ function syncSoundUI(){
   document.querySelectorAll('.sound-opt').forEach(function(b){ b.classList.toggle('active', b.dataset.key===n.voiceKey); });
   var box=document.getElementById('voiceOptList');
   if(box) box.style.opacity=(n.mode==='sound')?'1':'0.45';
+  var vt=document.getElementById('voiceSpeakToggle');
+  if(vt) vt.classList.toggle('active', !!n.voiceSpeak);
+}
+
+// 작업3: 혼자 테스트 — 소리 + (권한 있으면)팝업 둘 다 즉시 확인
+function testNotify(){
+  try{ unlockAudio(); }catch(e){}
+  playNotifySound('test-'+Date.now());
+  try{
+    if(window.Notification && Notification.permission==='granted'){
+      if(navigator.serviceWorker && navigator.serviceWorker.ready){
+        navigator.serviceWorker.ready.then(function(reg){
+          reg.showNotification('Stella Talk · 테스트', {body:'알림 테스트 ✅', icon:'/icons/talk-192.png', tag:'stella-talk-test', renotify:true});
+        }).catch(function(){ try{ new Notification('Stella Talk · 테스트',{body:'알림 테스트 ✅',icon:'/icons/talk-192.png'}); }catch(e){} });
+      } else { try{ new Notification('Stella Talk · 테스트',{body:'알림 테스트 ✅',icon:'/icons/talk-192.png'}); }catch(e){} }
+    }
+  }catch(e){}
 }
 
 // 앱 아이콘 뱃지 업데이트 (홈화면 숫자)
