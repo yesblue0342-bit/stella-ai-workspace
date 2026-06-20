@@ -10,3 +10,11 @@
 ## 가정 로그
 - `vercel --prod` CLI 자격증명이 샌드박스에 없어 배포는 **main 푸시 → Vercel 자동 배포**로 수행(동등).
 - #2/#4는 브라우저/OS 제약(자동재생 정책·iOS 진동 미지원)이 본질이라 코드 보강 후 `[!]` 보류로 표기.
+
+## Stella Agent Code 개선 + Codex 앱 (iter)
+- [x] CC-1. 상단 헤더 1줄 접기(디폴트 접힘): 제목 텍스트·🗂·⛶는 햄버거 확장 시만, 접힘 시 ☰+앱아이콘만 → 화면 넓게.
+- [x] CC-2. 하단 컨트롤 1줄: 모델/예산/테마(🌙)/OMC 한 줄(nowrap+가로스크롤), 테마 토글을 상단→하단 이동, "모델" 라벨 제거.
+- [x] CC-3. 프롬프트 입력 라인 Stella GPT식(둥근 pill 컨테이너 + 라운드 버튼).
+- [x] CC-5. 개발 완료 산출물 Google Drive(StellaGPT/0download) 자동 저장 — 완료 시 saveToGithub(true)→/api/cc/save-drive 자동 호출 확인됨.
+- [ ] CC-4. cc 입력창 이미지/첨부 파일 업로드(상세 개발용) — 백엔드(Managed Agents turn) 첨부 수용 필요(다음 반복).
+- [ ] CC-6. 빠른 즐겨찾기에 Codex 앱 추가(OpenAI 연결, cc.html 동일 레이아웃) — 신규 HTML+라우트(다음 반복).

@@ -36,3 +36,12 @@
 - 재검증: talk 인라인 JS bad=0 · #2 grep 4/4 PASS · 회귀 없음.
 - 남은 [!]: #4(진동) — iOS 미지원 OS 제약. 잠금화면/백그라운드 알림 전반은 Web Push(VAPID) 필요.
 - 배포: main 푸시 → Vercel 자동 배포. SW 캐시 stella-v45.
+
+## 2026-06-19 (iter 3) · Stella Agent Code 레이아웃 넓게 + Drive 저장 검증 · pass 7/7
+- cc.html 모듈 node --check OK
+- CC-1 제목/🗂/⛶ 접힘·디폴트 접힘 / CC-2 1줄 컨트롤·테마 이동·모델라벨 제거 / CC-3 둥근 프롬프트 grep 7/7 ✅
+- CC-5 자동저장: saveToGithub(true)→/api/cc/save-drive 호출 확인 ✅
+요약 3줄:
+1. 상단 헤더는 디폴트 1줄(☰+앱아이콘), 햄버거 확장 시 제목·🗂·⛶ 노출 → 화면 세로 확보.
+2. 하단은 모델/예산/🌙/OMC 한 줄, 프롬프트는 GPT식 둥근 입력 → 넓게.
+3. CC-4(첨부)·CC-6(Codex 앱)은 백엔드/신규앱 필요 → 다음 반복([ ] 유지).

@@ -43,14 +43,15 @@ a{color:var(--accent)}
 .step .rs{color:var(--muted);white-space:pre-wrap;display:block;margin-top:4px;max-height:200px;overflow:auto}
 .answer{white-space:pre-wrap}
 .barwrap{border-top:1px solid var(--line);background:var(--top-bg);padding:10px 14px}
-.ctl{display:flex;gap:8px;align-items:center;margin-bottom:8px;flex-wrap:wrap}
+.ctl{display:flex;gap:8px;align-items:center;margin-bottom:8px;flex-wrap:nowrap;overflow-x:auto}
+.ctl #model{flex:1 1 120px;min-width:80px}
 select,input,textarea,button{font:inherit;color:var(--ink);background:var(--input-bg);border:1px solid var(--line);border-radius:8px}
 select,#budget{padding:6px 8px}
 #budget{width:90px}
 .lbl{font-size:.78rem;color:var(--muted)}
-.iorow{display:flex;gap:8px;align-items:flex-end}
-#prompt{flex:1;resize:none;padding:10px;min-height:46px;max-height:160px;line-height:1.5}
-button.act{cursor:pointer;font-weight:800;padding:0 16px;height:46px;border:none}
+.iorow{display:flex;gap:8px;align-items:flex-end;border:1px solid var(--line);border-radius:22px;padding:6px 6px 6px 14px;background:var(--input-bg)}
+#prompt{flex:1;resize:none;padding:8px 2px;min-height:40px;max-height:160px;line-height:1.5;border:none;background:transparent;outline:none}
+button.act{cursor:pointer;font-weight:800;padding:0 16px;height:42px;border:none;border-radius:14px}
 #sendBtn{background:var(--send);color:var(--on-accent)}
 #sendBtn:disabled{background:var(--line);color:var(--muted);cursor:not-allowed}
 #cancelBtn{background:var(--cancel);color:var(--on-accent);display:none}
@@ -72,9 +73,15 @@ body.fullscreen-code #fsExit{display:block;position:fixed;top:8px;right:10px;z-i
   .side{position:fixed;top:0;left:0;bottom:0;width:min(280px,82vw);z-index:10;transform:translateX(-110%);box-shadow:2px 0 18px rgba(0,0,0,.35)}
   body.side-open .side{transform:translateX(0)}
   body.side-open .side-backdrop{display:block}
-  /* 햄버거로 상단 앱 전환 링크 접기 → 넓은 화면 (컨트롤 ⛶/🌙/🗂는 유지) */
+  /* 햄버거로 상단 접기 → 1줄(넓은 화면). 접힘 디폴트: 제목·🗂·⛶ 숨김, ☰+앱아이콘만 */
   body.cc-navhidden .top .nav a{display:none}
+  body.cc-navhidden .top .app-title-text{display:none}
+  body.cc-navhidden .top #sessBtn,body.cc-navhidden .top #fsBtn{display:none}
   body.cc-navhidden .top{padding-top:7px;padding-bottom:7px}
+  body.cc-navhidden .top h1{font-size:1rem}
+  /* 하단 컨트롤 1줄(모델/예산/테마/OMC) */
+  .ctl{flex-wrap:nowrap;overflow-x:auto;-webkit-overflow-scrolling:touch}
+  #model{min-width:0}
 }
 </style>
 </head>
@@ -88,12 +95,11 @@ body.dark .app-ico{filter:grayscale(1) brightness(0) invert(1)}
 </style>
 <div class="top">
   <button type="button" class="hamb" id="hambBtn" title="상단 앱 전환 바 접기/펴기 (넓은 화면)">☰</button>
-  <h1><span class="app-ico-wrap"><span class="app-ico">🛠️</span></span>Stella Agent Code</h1>
+  <h1><span class="app-ico-wrap"><span class="app-ico">🛠️</span></span><span class="app-title-text">Stella Agent Code</span></h1>
   <nav class="nav">
     <a href="/"><span class="app-ico-wrap"><span class="app-ico">🤖</span></span>GPT</a><a href="/talk"><span class="app-ico-wrap"><span class="app-ico">💬</span></span>Talk</a><a href="/db"><span class="app-ico-wrap"><span class="app-ico">🗄</span></span>DB</a><a href="/hub"><span class="app-ico-wrap"><span class="app-ico">🌐</span></span>Hub</a><a href="/abap"><span class="app-ico-wrap"><span class="app-ico">🧑‍💻</span></span>ABAP</a><a href="/cc" class="active"><span class="app-ico-wrap"><span class="app-ico">🛠</span></span>Code</a>
     <button type="button" class="theme-toggle" id="sessBtn" title="세션 목록">🗂</button>
     <button type="button" class="theme-toggle" id="fsBtn" title="코드 풀스크린">⛶</button>
-    <button type="button" class="theme-toggle" id="themeToggle" title="다크/라이트 모드">🌙</button>
   </nav>
 </div>
 <div class="wrap">
@@ -106,11 +112,11 @@ body.dark .app-ico{filter:grayscale(1) brightness(0) invert(1)}
     <div class="msgs" id="msgs"><div class="empty">모델을 고르고 코딩 작업을 요청하세요.<br>예: "write fibonacci.py with the first 20 numbers and run it"</div></div>
     <div class="barwrap">
       <div class="ctl">
-        <span class="lbl">모델</span>
         <select id="model"></select>
-        <span class="lbl">예산($)</span>
+        <span class="lbl">예산$</span>
         <input id="budget" type="number" min="0.5" max="50" step="0.5" value="20">
-        <label class="lbl" style="display:flex;align-items:center;gap:4px;cursor:pointer" title="OMC 멀티에이전트 + 무인 오토파일럿: 구현→테스트→오류 자동수정 루프(질문 없이 RALPH_DONE까지)"><input type="checkbox" id="omc" style="width:auto"> 🤖 OMC</label>
+        <button type="button" class="theme-toggle" id="themeToggle" title="다크/라이트 모드">🌙</button>
+        <label class="lbl" style="display:flex;align-items:center;gap:4px;cursor:pointer;white-space:nowrap" title="OMC 멀티에이전트 + 무인 오토파일럿: 구현→테스트→오류 자동수정 루프(질문 없이 RALPH_DONE까지)"><input type="checkbox" id="omc" style="width:auto"> 🤖 OMC</label>
         <button type="button" id="saveGhBtn" title="이 세션 산출물을 Google Drive(StellaGPT/0download)에 저장" style="display:none">💾 Drive에 저장</button>
         <span class="status" id="status"></span>
       </div>
