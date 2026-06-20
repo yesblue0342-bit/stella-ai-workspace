@@ -105,17 +105,14 @@ export default async function handler(req, res){
     // ===== 회원가입 =====
     if(password.length < 4) return res.status(400).json({ ok:false, message:"비밀번호는 4자 이상 입력하세요." });
 
-    // 중복 확인
-    const existing = await readUser(idKey, emailKey);
-    if(existing){
-      if(verify(password, existing.password_hash)){
-        // 비밀번호가 맞아도 승인 상태를 반드시 확인 (pending 계정 자동 로그인 우회 방지)
-        if(!canLogin(existing)){
-          return res.status(403).json({ ok:false, status:existing.status||"", message: loginDenialMessage(existing) || "로그인할 수 없는 계정입니다." });
-        }
-        return res.status(200).json({ ok:true, message:"이미 가입된 계정입니다. 자동 로그인합니다.", user:publicUser(existing) });
-      }
-      return res.status(409).json({ ok:false, message:"이미 가입된 아이디 또는 이메일입니다. 로그인 탭에서 로그인하세요." });
+    // 중복 확인 (ID / e-mail 각각 키값으로 검사) — 비밀번호 무관 무조건 차단
+    const dupById    = idKey    ? await readUser(idKey, "")    : null;
+    const dupByEmail = emailKey ? await readUser("", emailKey) : null;
+    if(dupById){
+      return res.status(409).json({ ok:false, code:"DUPLICATE_ID", field:"id", message:"가입한 ID가 존재합니다. 다른 ID로 신청하세요." });
+    }
+    if(dupByEmail){
+      return res.status(409).json({ ok:false, code:"DUPLICATE_EMAIL", field:"email", message:"가입한 e-mail이 존재합니다. 다른 ID로 신청하세요." });
     }
 
     // 신규 가입: status=pending 으로 저장 (관리자 승인 전 로그인 불가).
