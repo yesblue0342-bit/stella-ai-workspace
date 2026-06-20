@@ -196,3 +196,38 @@ STATUS: IN_PROGRESS
 - STAGE 6 SW 백그라운드 수신/알림 고도화(per-room 뮤트, 알림 합치기, 멘션, 인앱 토스트)
 - STAGE 7 나머지(상대 입력중 안정화, 오프라인 배너+미전송 큐, URL 링크화)
 - STAGE 8 (선택) 길게눌러 답장/반응 이모지/방내 검색
+
+---
+
+## 2026-06-20 사이드바 앱 아이콘 흑백화 (Method A)
+
+### 적용 파일 (이모지 앱 바로가기 있는 페이지)
+- index.html (사이드바 바로가기 7개: 🗄DB 🧑‍💻ABAP 🛠AgentCode ☁Cloud 💬Talk 🌐Hub + 🔄업데이트)
+- abap.html (사이드바 바로가기 8개: ✨GPT 🗄DB 🧑‍💻ABAP 🛠AgentCode ☁Cloud 💬Talk 🌐Hub + 🔄업데이트)
+- hub.html (상단 nav 4개 + 타이틀 🌐: GPT/ABAP/DB/Talk)
+- cc.html (상단 nav 6개 + 타이틀 🛠️: GPT/Talk/DB/Hub/ABAP/Code)
+
+### 방식 (Method A — 이모지 유지 + 흑백 배지)
+- 각 이모지를 <span class="app-ico-wrap"><span class="app-ico">…</span></span> 로 감쌈.
+- .app-ico = filter:grayscale(1) brightness(0)  (컬러 제거→검정 단색),
+  다크 테마에서 filter에 invert(1) 추가 → 흰색 단색.
+- .app-ico-wrap = 24x24(사이드바)/22x22(nav) 둥근 배지 테두리.
+
+### 테마별 결과 (각 페이지 실제 토글 방식에 맞춤)
+- index/abap: body.dark 토글(기본 라이트). 라이트=흰바탕+검정테두리/검정아이콘,
+  body.dark=검은바탕+흰테두리/흰아이콘.
+- hub: :root 기본 다크 / body.light 라이트. 기본(다크)=검은바탕+흰테두리/흰아이콘,
+  body.light=흰바탕+검정테두리/검정아이콘.
+- cc: body.dark 토글(기본 라이트, index와 동일 매핑).
+
+### 적용 제외 (사유)
+- gpt.html: 사이드바 앱 바로가기(Stella Cloud/Talk/Developer)에 이모지 없음 → 대상 없음.
+- db.html/cloud.html/developer.html: 이모지는 페이지 제목(h1/h2)뿐, "바로가기 아이콘" 아님 → 제외.
+- talk.html: 이모지는 기능 버튼(새 채팅방/강제 업데이트/음성 미리듣기)뿐, 앱 바로가기 nav 없음 → 제외.
+
+### 방법 B (라인 SVG 아이콘 교체)
+- 다음 단계로 남김. 현재 Method A로 전체 통일 완료(컬러 제거 + 테마별 흑백 테두리).
+
+### 서비스워커 캐시: v35 → v36
+### 검증: index/abap/hub 임베드 스크립트 new Function 파싱 OK. cc는 <script type=module>(import)
+  이라 정적 파서 예외이나 편집은 HTML(스타일/span)만 → 영향 없음.

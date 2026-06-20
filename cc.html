@@ -76,11 +76,18 @@ body.fullscreen-code #fsExit{display:block;position:fixed;top:8px;right:10px;z-i
 </style>
 </head>
 <body>
+<style id="appIcoStyle">
+/* 앱 아이콘 흑백화: 라이트(기본)=흰바탕+검정테두리/검정아이콘, 다크(body.dark)=검은바탕+흰테두리/흰아이콘 */
+.app-ico-wrap{display:inline-flex;align-items:center;justify-content:center;width:22px;height:22px;border-radius:6px;border:1.5px solid #111;background:#fff;margin-right:6px;flex:0 0 auto}
+.app-ico{display:inline-block;font-size:12px;line-height:1;filter:grayscale(1) brightness(0)}
+body.dark .app-ico-wrap{border-color:#fff;background:#000}
+body.dark .app-ico{filter:grayscale(1) brightness(0) invert(1)}
+</style>
 <div class="top">
   <button type="button" class="hamb" id="hambBtn" title="메뉴 열기/닫기">☰</button>
-  <h1>🛠️ Stella Agent Code</h1>
+  <h1><span class="app-ico-wrap"><span class="app-ico">🛠️</span></span>Stella Agent Code</h1>
   <nav class="nav">
-    <a href="/">🤖 GPT</a><a href="/talk">💬 Talk</a><a href="/db">🗄 DB</a><a href="/hub">🌐 Hub</a><a href="/abap">🧑‍💻 ABAP</a><a href="/cc" class="active">🛠 Code</a>
+    <a href="/"><span class="app-ico-wrap"><span class="app-ico">🤖</span></span>GPT</a><a href="/talk"><span class="app-ico-wrap"><span class="app-ico">💬</span></span>Talk</a><a href="/db"><span class="app-ico-wrap"><span class="app-ico">🗄</span></span>DB</a><a href="/hub"><span class="app-ico-wrap"><span class="app-ico">🌐</span></span>Hub</a><a href="/abap"><span class="app-ico-wrap"><span class="app-ico">🧑‍💻</span></span>ABAP</a><a href="/cc" class="active"><span class="app-ico-wrap"><span class="app-ico">🛠</span></span>Code</a>
     <button type="button" class="theme-toggle" id="fsBtn" title="코드 풀스크린">⛶</button>
     <button type="button" class="theme-toggle" id="themeToggle" title="다크/라이트 모드">🌙</button>
   </nav>

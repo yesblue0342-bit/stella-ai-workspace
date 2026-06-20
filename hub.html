@@ -20,6 +20,11 @@ a{color:var(--primary)}
 .nav{margin-left:auto;display:flex;gap:8px;flex-wrap:wrap;align-items:center}
 .nav a{font-size:.85rem;text-decoration:none;border:1px solid var(--border);border-radius:10px;padding:8px 13px;color:var(--text2);display:inline-flex;align-items:center;min-height:38px;white-space:nowrap}
 .nav a:hover{border-color:var(--primary);color:var(--text)}
+/* 앱 아이콘 흑백화: 다크(기본)=검은바탕+흰테두리/흰아이콘, 라이트(body.light)=흰바탕+검정테두리/검정아이콘 */
+.app-ico-wrap{display:inline-flex;align-items:center;justify-content:center;width:22px;height:22px;border-radius:6px;border:1.5px solid #fff;background:#000;margin-right:6px;flex:0 0 auto}
+.app-ico{display:inline-block;font-size:12px;line-height:1;filter:grayscale(1) brightness(0) invert(1)}
+body.light .app-ico-wrap{border-color:#111;background:#fff}
+body.light .app-ico{filter:grayscale(1) brightness(0)}
 .nav a.active{background:var(--primary);border-color:var(--primary);color:#fff}
 .icon-btn{font-size:1rem;line-height:1;border:1px solid var(--border);border-radius:10px;padding:0 12px;min-height:38px;background:var(--bg3);color:var(--text);cursor:pointer;display:inline-flex;align-items:center}
 .icon-btn:hover{border-color:var(--primary)}
@@ -84,9 +89,9 @@ body.light .hljs-name,body.light .hljs-tag,body.light .hljs-selector-class{color
 <body>
 <div class="top">
   <button class="icon-btn hamb" id="hambBtn" title="레포 목록">☰</button>
-  <h1>🌐 Stella Hub</h1>
+  <h1><span class="app-ico-wrap"><span class="app-ico">🌐</span></span>Stella Hub</h1>
   <nav class="nav">
-    <a href="/">🤖 GPT</a><a href="/abap">🧑‍💻 ABAP</a><a href="/db">🗄 DB</a><a href="/talk">💬 Talk</a>
+    <a href="/"><span class="app-ico-wrap"><span class="app-ico">🤖</span></span>GPT</a><a href="/abap"><span class="app-ico-wrap"><span class="app-ico">🧑‍💻</span></span>ABAP</a><a href="/db"><span class="app-ico-wrap"><span class="app-ico">🗄</span></span>DB</a><a href="/talk"><span class="app-ico-wrap"><span class="app-ico">💬</span></span>Talk</a>
     <button class="icon-btn" id="refreshBtn" title="새로고침">↻</button>
     <button class="icon-btn" id="themeToggle" title="다크/라이트 모드">🌙</button>
   </nav>
