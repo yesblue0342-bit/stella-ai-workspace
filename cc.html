@@ -72,6 +72,9 @@ body.fullscreen-code #fsExit{display:block;position:fixed;top:8px;right:10px;z-i
   .side{position:fixed;top:0;left:0;bottom:0;width:min(280px,82vw);z-index:10;transform:translateX(-110%);box-shadow:2px 0 18px rgba(0,0,0,.35)}
   body.side-open .side{transform:translateX(0)}
   body.side-open .side-backdrop{display:block}
+  /* 햄버거로 상단 앱 전환 링크 접기 → 넓은 화면 (컨트롤 ⛶/🌙/🗂는 유지) */
+  body.cc-navhidden .top .nav a{display:none}
+  body.cc-navhidden .top{padding-top:7px;padding-bottom:7px}
 }
 </style>
 </head>
@@ -84,10 +87,11 @@ body.dark .app-ico-wrap{border-color:#fff;background:#000}
 body.dark .app-ico{filter:grayscale(1) brightness(0) invert(1)}
 </style>
 <div class="top">
-  <button type="button" class="hamb" id="hambBtn" title="메뉴 열기/닫기">☰</button>
+  <button type="button" class="hamb" id="hambBtn" title="상단 앱 전환 바 접기/펴기 (넓은 화면)">☰</button>
   <h1><span class="app-ico-wrap"><span class="app-ico">🛠️</span></span>Stella Agent Code</h1>
   <nav class="nav">
     <a href="/"><span class="app-ico-wrap"><span class="app-ico">🤖</span></span>GPT</a><a href="/talk"><span class="app-ico-wrap"><span class="app-ico">💬</span></span>Talk</a><a href="/db"><span class="app-ico-wrap"><span class="app-ico">🗄</span></span>DB</a><a href="/hub"><span class="app-ico-wrap"><span class="app-ico">🌐</span></span>Hub</a><a href="/abap"><span class="app-ico-wrap"><span class="app-ico">🧑‍💻</span></span>ABAP</a><a href="/cc" class="active"><span class="app-ico-wrap"><span class="app-ico">🛠</span></span>Code</a>
+    <button type="button" class="theme-toggle" id="sessBtn" title="세션 목록">🗂</button>
     <button type="button" class="theme-toggle" id="fsBtn" title="코드 풀스크린">⛶</button>
     <button type="button" class="theme-toggle" id="themeToggle" title="다크/라이트 모드">🌙</button>
   </nav>
@@ -150,7 +154,12 @@ $('themeToggle').addEventListener('click', toggleTheme);
   const isMobile=()=>window.matchMedia('(max-width:760px)').matches;
   const closeMobile=()=>body.classList.remove('side-open');
   function toggleSide(){ if(isMobile()) body.classList.toggle('side-open'); else body.classList.toggle('side-collapsed'); }
-  const hb=$('hambBtn'); if(hb) hb.addEventListener('click', e=>{ e.stopPropagation(); toggleSide(); });
+  // 햄버거(모바일): 상단 앱 전환 바 접기/펴기 → 넓은 화면 (기본 접힘, 상태 기억). 데스크톱: 사이드바 접기
+  const NAVHIDE_KEY='cc_navhidden';
+  (function applyNavHidden(){ var on=true; try{ var v=localStorage.getItem(NAVHIDE_KEY); on=(v===null)?true:(v==='1'); }catch(e){} body.classList.toggle('cc-navhidden', !!on); })();
+  function toggleNavHidden(){ var on=body.classList.toggle('cc-navhidden'); try{ localStorage.setItem(NAVHIDE_KEY, on?'1':'0'); }catch(e){} }
+  const hb=$('hambBtn'); if(hb) hb.addEventListener('click', e=>{ e.stopPropagation(); if(isMobile()) toggleNavHidden(); else body.classList.toggle('side-collapsed'); });
+  const sessBtn=$('sessBtn'); if(sessBtn) sessBtn.addEventListener('click', e=>{ e.stopPropagation(); toggleSide(); });
   const bd=$('sideBackdrop'); if(bd) bd.addEventListener('click', closeMobile);
   if(main) main.addEventListener('click', ()=>{ if(isMobile()) closeMobile(); });
   document.addEventListener('click', e=>{
