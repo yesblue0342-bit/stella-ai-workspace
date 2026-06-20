@@ -301,3 +301,10 @@ STATUS: IN_PROGRESS
 
 ### 서비스워커 캐시: v38 → v39
 ### node --check: talk.html 임베드 스크립트 3블록 OK
+
+## [autopilot iter 7] Stella Agent Code / Codex 가정 로그
+- T3 "Stella Codex API를 OpenAI로 고정": cc Managed Agents(Anthropic 샌드박스 /api/cc/*) 대신 **기존 OpenAI 엔드포인트 /api/chat 재사용**(model 필드로 OpenAI 라우팅, 빌링 분리). 신규 키·라우트 0(CLAUDE.md 준수).
+- 결과 Codex = 채팅형 코딩 어시스턴트. 샌드박스 전용 기능(세션/이벤트폴링/예산/OMC/Drive 산출물저장)은 OpenAI 챗에 해당 없어 Codex UI에서 제거, 대화는 localStorage(stella_codex_chats) 보관.
+- chat.js callOpenAI의 "[표+요약]" 강제 프리픽스가 코딩답변엔 부적합 → 하위호환 additive 플래그 `bare` 추가(기본 off=GPT/ABAP 무영향), Codex만 bare:true.
+- Stella Agent Code(cc.html)는 Claude(Managed Agents) 그대로 유지.
+- 한계: 실제 OpenAI 응답은 OPENAI_API_KEY 있는 라이브에서만. 샌드박스는 jsdom으로 모델목록/기본값(gpt-4.1-mini)/전송 페이로드(model·bare·system)/렌더링까지 검증.

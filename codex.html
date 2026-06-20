@@ -109,8 +109,8 @@ body:not(.dark) .app-ico{filter:grayscale(1) brightness(0)!important}
 </div>
 <div class="wrap">
   <aside class="side">
-    <h2>세션 <button id="refreshBtn" style="float:right;font-size:.7rem;padding:2px 6px;cursor:pointer">↻</button></h2>
-    <div id="sessionList"><div class="lbl" style="padding:8px">불러오는 중…</div></div>
+    <h2>대화 <button id="refreshBtn" title="새 대화" style="float:right;font-size:.7rem;padding:2px 6px;cursor:pointer">＋ 새 대화</button></h2>
+    <div id="sessionList"><div class="lbl" style="padding:8px">대화 없음</div></div>
   </aside>
   <div class="resizer" id="resizer" title="사이드바 너비 조절"></div>
   <main class="main">
@@ -118,11 +118,7 @@ body:not(.dark) .app-ico{filter:grayscale(1) brightness(0)!important}
     <div class="barwrap">
       <div class="ctl">
         <select id="model"></select>
-        <span class="lbl">예산$</span>
-        <input id="budget" type="number" min="0.5" max="50" step="0.5" value="20">
         <button type="button" class="theme-toggle" id="themeToggle" title="다크/라이트 모드"></button>
-        <label class="lbl" style="display:flex;align-items:center;gap:4px;cursor:pointer;white-space:nowrap" title="OMC 멀티에이전트 + 무인 오토파일럿: 구현→테스트→오류 자동수정 루프(질문 없이 RALPH_DONE까지)"><input type="checkbox" id="omc" style="width:auto"><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:16px;height:16px"><rect x="4" y="9" width="16" height="11" rx="2"/><path d="M12 9V5"/><circle cx="12" cy="4" r="1"/><circle cx="9" cy="14" r="1"/><circle cx="15" cy="14" r="1"/><path d="M9 17.5h6"/></svg> OMC</label>
-        <button type="button" id="saveGhBtn" title="이 세션 산출물을 Google Drive(StellaGPT/0download)에 저장" style="display:none">💾 Drive에 저장</button>
         <span class="status" id="status"></span>
       </div>
       <div id="attachStrip" style="display:none;gap:8px;flex-wrap:wrap;padding:4px 6px"></div>
@@ -140,11 +136,23 @@ body:not(.dark) .app-ico{filter:grayscale(1) brightness(0)!important}
 <button type="button" class="theme-toggle" id="fsExit" title="풀스크린 종료">✕ 나가기</button>
 
 <script type="module">
-import { CLAUDE_MODELS, DEFAULT_MODEL, AgentRun, nextDelayMs, buildTranscript } from '/lib/agentcore.mjs';
-
 const $ = (id) => document.getElementById(id);
 const MODEL_KEY = 'stella_codex_model';
-let cur = null;       // { sessionId, model, budgetUsd, title, run, attempt, polling, stopped }
+const CHATS_KEY = 'stella_codex_chats';
+const DEFAULT_MODEL = 'gpt-4.1-mini';
+// Stella Codex = OpenAI(ChatGPT) 전용 코딩 어시스턴트. 모델 목록은 OpenAI 계열만, 기본 gpt-4.1-mini.
+const OPENAI_MODELS = [
+  { id:'gpt-5.5-pro', label:'GPT-5.5 Pro', note:'최고 성능' },
+  { id:'gpt-5.5', label:'GPT-5.5', note:'최신' },
+  { id:'gpt-4.1', label:'GPT-4.1', note:'호환' },
+  { id:'gpt-4.1-mini', label:'GPT-4.1 Mini', note:'빠른 응답·기본' },
+  { id:'gpt-4o', label:'GPT-4o', note:'호환' },
+  { id:'gpt-4o-mini', label:'GPT-4o Mini', note:'경량' },
+];
+const CODEX_SYSTEM = 'You are Stella Codex, a coding assistant powered by OpenAI (ChatGPT). 한국어로 답한다. 동작하는 코드를 명확히 제시하고 설명은 간결하게. 코드는 반드시 언어 태그가 있는 마크다운 코드블록(```lang ... ```)으로 출력한다. 이미지가 오면 그 안의 코드/스크린샷을 분석해 수정안을 제시한다.';
+
+let chat = { id: null, title: '새 대화', model: DEFAULT_MODEL, messages: [] };
+let busy = false;
 
 // ── 테마: Stella GPT와 동일한 body.dark 방식 + 'stella_theme' 키 공유 ──
 // 흰색 모노크롬 라인 아이콘(stroke=currentColor) — 사이드바 바로가기와 톤 통일
@@ -171,7 +179,6 @@ $('themeToggle').addEventListener('click', toggleTheme);
   const isMobile=()=>window.matchMedia('(max-width:760px)').matches;
   const closeMobile=()=>body.classList.remove('side-open');
   function toggleSide(){ if(isMobile()) body.classList.toggle('side-open'); else body.classList.toggle('side-collapsed'); }
-  // 햄버거(모바일): 상단 앱 전환 바 접기/펴기 → 넓은 화면 (기본 접힘, 상태 기억). 데스크톱: 사이드바 접기
   const NAVHIDE_KEY='codex_navhidden';
   (function applyNavHidden(){ var on=true; try{ var v=localStorage.getItem(NAVHIDE_KEY); on=(v===null)?true:(v==='1'); }catch(e){} body.classList.toggle('cc-navhidden', !!on); })();
   function toggleNavHidden(){ var on=body.classList.toggle('cc-navhidden'); try{ localStorage.setItem(NAVHIDE_KEY, on?'1':'0'); }catch(e){} }
@@ -184,12 +191,10 @@ $('themeToggle').addEventListener('click', toggleTheme);
     if((side&&side.contains(e.target)) || (hb&&hb.contains(e.target))) return;
     closeMobile();
   });
-  // 풀스크린(코드 영역 최대화): 헤더+사이드바 숨김
   const fs=$('fsBtn'), fx=$('fsExit');
   const toggleFs=()=>body.classList.toggle('fullscreen-code');
   if(fs) fs.addEventListener('click', toggleFs);
   if(fx) fx.addEventListener('click', toggleFs);
-  // 데스크톱 사이드바 너비 드래그 (영속)
   const rz=$('resizer');
   try{ const w=parseInt(localStorage.getItem('stella_codex_sidew')||'',10); if(w>=180&&w<=520&&side) side.style.width=w+'px'; }catch(e){}
   if(rz&&side) rz.addEventListener('mousedown', e=>{
@@ -200,33 +205,47 @@ $('themeToggle').addEventListener('click', toggleTheme);
   });
 })();
 
-// ── 모델 드롭다운 ──
+// ── 모델 드롭다운 (OpenAI 전용) ──
 (function initModels(){
   const sel = $('model');
-  sel.innerHTML = CLAUDE_MODELS.map(m => `<option value="${m.id}">${m.label} — ${m.note}</option>`).join('');
+  sel.innerHTML = OPENAI_MODELS.map(m => `<option value="${m.id}">${m.label} — ${m.note}</option>`).join('');
   let saved = null; try { saved = localStorage.getItem(MODEL_KEY); } catch(e){}
-  sel.value = (saved && CLAUDE_MODELS.some(m=>m.id===saved)) ? saved : DEFAULT_MODEL;
-  sel.addEventListener('change', () => { try { localStorage.setItem(MODEL_KEY, sel.value); } catch(e){} });
-})();
-
-// ── OMC(oh-my-claudecode) 멀티에이전트 모드 토글 (영속) ──
-(function initOmc(){
-  const cb = $('omc');
-  try { cb.checked = localStorage.getItem('stella_codex_omc') === '1'; } catch(e){}
-  cb.addEventListener('change', () => { try { localStorage.setItem('stella_codex_omc', cb.checked ? '1' : '0'); } catch(e){} });
+  sel.value = (saved && OPENAI_MODELS.some(m=>m.id===saved)) ? saved : DEFAULT_MODEL;
+  chat.model = sel.value;
+  sel.addEventListener('change', () => { chat.model = sel.value; try { localStorage.setItem(MODEL_KEY, sel.value); } catch(e){} });
 })();
 
 function esc(s){ return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
 function setStatus(html){ $('status').innerHTML = html || ''; }
 
+// ── 마크다운 라이트 렌더 (코드블록/인라인코드/볼드) ──
+function inlineMd(s){ return s.replace(/`([^`]+)`/g,'<code style="background:var(--card);padding:1px 4px;border-radius:4px">$1</code>').replace(/\*\*([^*]+)\*\*/g,'<strong>$1</strong>'); }
+function renderMd(t){
+  const parts = String(t==null?'':t).split('```');
+  let html='';
+  for(let i=0;i<parts.length;i++){
+    if(i%2===1){
+      let c=parts[i]; const nl=c.indexOf('\n'); if(nl>=0){ c=c.slice(nl+1); }
+      html += '<pre style="background:var(--step-bg);border:1px solid var(--line);border-radius:8px;padding:10px;overflow:auto;margin:6px 0"><code>'+esc(c)+'</code></pre>';
+    } else {
+      if(parts[i]) html += '<div style="white-space:pre-wrap">'+inlineMd(esc(parts[i]))+'</div>';
+    }
+  }
+  return html;
+}
+
+function clearEmpty(){ const m=$('msgs'); const empty=m.querySelector('.empty'); if(empty) empty.remove(); }
 function addUserBubble(text, attCount){
   const d = document.createElement('div'); d.className='bubble user'; d.textContent = text;
   if(attCount>0){ const b=document.createElement('div'); b.className='lbl'; b.style.marginTop='4px'; b.textContent='📎 이미지 '+attCount+'개 첨부'; d.appendChild(b); }
-  const m=$('msgs'); const empty=m.querySelector('.empty'); if(empty) empty.remove();
-  m.appendChild(d); m.scrollTop=m.scrollHeight;
+  clearEmpty(); const m=$('msgs'); m.appendChild(d); m.scrollTop=m.scrollHeight;
+}
+function addAssistantBubble(text){
+  const d = document.createElement('div'); d.className='bubble'; d.innerHTML = renderMd(text);
+  clearEmpty(); const m=$('msgs'); m.appendChild(d); m.scrollTop=m.scrollHeight; return d;
 }
 
-// 이미지 첨부: base64 콘텐츠 블록으로 /api/cc/start|turn 에 전달. Vercel 본문 한도 보호용 개당 3.5MB 상한.
+// ── 이미지 첨부: data URL로 /api/chat images 필드에 전달 (개당 3.5MB 상한) ──
 let pendingAtt=[];
 const ATT_MAX=3.5*1024*1024;
 function renderAttStrip(){
@@ -241,142 +260,98 @@ function addFiles(files){
     if(!f || !/^image\//.test(f.type)) continue;
     if(f.size>ATT_MAX){ setStatus('<span class="err">'+esc(f.name)+': 이미지가 3.5MB를 초과해 건너뜀</span>'); continue; }
     const r=new FileReader();
-    r.onload=()=>{ const s=String(r.result||''); const i=s.indexOf(','); if(i<0) return; pendingAtt.push({ name:f.name||'image', media_type:f.type, data:s.slice(i+1) }); renderAttStrip(); };
+    r.onload=()=>{ const s=String(r.result||''); pendingAtt.push({ name:f.name||'image', dataUrl:s }); renderAttStrip(); };
     r.readAsDataURL(f);
   }
 }
 
-// 진행 렌더: 같은 run을 한 컨테이너에 다시 그림
-function renderRun(run){
-  let host = cur._host;
-  if(!host){ host=document.createElement('div'); host.className='bubble'; $('msgs').appendChild(host); cur._host=host; }
-  const toolIcon = (n) => n==='bash' ? '🔧' : (n==='write'||n==='str_replace'||n==='edit' ? '✏️' : (n==='read'||n==='view' ? '📄' : '🛠️'));
-  let html = '';
-  for(const t of run.tools){
-    const inp = t.input!=null ? esc(JSON.stringify(t.input)).slice(0,160) : '';
-    html += `<div class="step"><span class="nm">${toolIcon(t.name)} ${esc(t.name)}</span> ${inp}` +
-            (t.result!=null ? `<span class="rs">${esc(typeof t.result==='string'?t.result:JSON.stringify(t.result)).slice(0,800)}</span>`:'') + `</div>`;
+function setUIBusy(b){
+  busy=b;
+  $('sendBtn').disabled = b;
+  $('cancelBtn').style.display = b ? 'block' : 'none';
+  $('model').disabled = b;
+}
+
+// ── 대화 저장/목록 (localStorage) ──
+function loadChatStore(){ try{ return JSON.parse(localStorage.getItem(CHATS_KEY)||'[]'); }catch(e){ return []; } }
+function saveChatStore(arr){ try{ localStorage.setItem(CHATS_KEY, JSON.stringify(arr.slice(0,40))); }catch(e){} }
+function persistCurrent(){
+  if(!chat.messages.length) return;
+  const arr=loadChatStore();
+  if(!chat.id) chat.id='c'+Date.now();
+  if(!chat.title || chat.title==='새 대화'){ const first=chat.messages.find(m=>m.role==='user'); chat.title=(first?first.content:'대화').replace(/\s+/g,' ').trim().slice(0,40)||'대화'; }
+  const idx=arr.findIndex(c=>c.id===chat.id);
+  const rec={ id:chat.id, title:chat.title, model:chat.model, messages:chat.messages, ts:Date.now() };
+  if(idx>=0) arr[idx]=rec; else arr.unshift(rec);
+  arr.sort((a,b)=>(b.ts||0)-(a.ts||0));
+  saveChatStore(arr); renderChatList();
+}
+function renderChatList(){
+  const host=$('sessionList'); const arr=loadChatStore();
+  if(!arr.length){ host.innerHTML='<div class="lbl" style="padding:8px">대화 없음</div>'; return; }
+  host.innerHTML=arr.map(c=>`<div class="sitem" data-id="${esc(c.id)}"><div class="t">${esc(c.title||'대화')}</div><div class="m">${esc(c.model||'')}</div></div>`).join('');
+  host.querySelectorAll('.sitem').forEach(el=>el.addEventListener('click',()=>selectChat(el.dataset.id)));
+}
+function renderAllMessages(){
+  const m=$('msgs'); m.innerHTML='';
+  if(!chat.messages.length){ m.innerHTML='<div class="empty" id="emptyHint"></div>'; return; }
+  for(const msg of chat.messages){
+    if(msg.role==='user') addUserBubble(msg.content, msg.attCount||0);
+    else addAssistantBubble(msg.content);
   }
-  if(run.text) html += `<div class="answer">${esc(run.text)}</div>`;
-  host.innerHTML = html;
-  $('msgs').scrollTop = $('msgs').scrollHeight;
+}
+function selectChat(id){
+  const arr=loadChatStore(); const c=arr.find(x=>x.id===id); if(!c) return;
+  chat={ id:c.id, title:c.title, model:c.model||DEFAULT_MODEL, messages:(c.messages||[]).slice() };
+  const sel=$('model'); if(OPENAI_MODELS.some(m=>m.id===chat.model)) sel.value=chat.model;
+  renderAllMessages(); setStatus('');
+  if(window.matchMedia('(max-width:760px)').matches) document.body.classList.remove('side-open');
+}
+function newChat(){
+  chat={ id:null, title:'새 대화', model:$('model').value||DEFAULT_MODEL, messages:[] };
+  renderAllMessages(); setStatus('');
 }
 
-async function poll(){
-  if(!cur || cur.stopped) return;
-  try{
-    const r = await fetch('/api/cc/events?session='+encodeURIComponent(cur.sessionId)+'&after='+cur.run.cursor);
-    const d = await r.json();
-    if(d.events && d.events.length) cur.run.ingest(d.events);
-    renderRun(cur.run);
-    if(d.cost!=null) setStatus(`상태: ${cur.run.status} · 비용 약 $${Number(d.cost).toFixed(3)}${d.budget?(' / $'+Number(d.budget).toFixed(2)):''}`);
-    if(cur.run.done){ return finish(); }
-    cur.attempt++;
-    cur._timer = setTimeout(poll, nextDelayMs(cur.attempt));
-  }catch(e){
-    cur.attempt++;
-    if(cur.attempt>8){ setStatus('<span class="err">이벤트 폴링 실패: '+esc(e.message)+'</span>'); finish(true); return; }
-    cur._timer = setTimeout(poll, nextDelayMs(cur.attempt));
-  }
-}
-
-async function finish(failed){
-  setUIBusy(false);
-  const run = cur.run;
-  if(run.status==='error') setStatus('<span class="err">종료: '+esc(run.error||'error')+'</span>');
-  else setStatus('<span class="ok">완료 ✓</span>');
-  // 트랜스크립트 Drive 저장 (best-effort)
-  if(!failed){
-    try{
-      const md = buildTranscript({ title:cur.title, model:cur.model, prompt:cur.prompt, run });
-      await fetch('/api/cc/save',{method:'POST',headers:{'Content-Type':'application/json'},
-        body:JSON.stringify({ session:cur.sessionId, markdown:md, title:cur.title, status:run.status })});
-    }catch(e){}
-    // PART B: 세션 완료 시 산출물 GitHub 자동 저장 (best-effort) + 수동 버튼 노출
-    if(cur && cur.sessionId){ $('saveGhBtn').style.display=''; saveToGithub(true); }
-  }
-  loadSessions();
-}
-
-// PART B: 세션 산출물을 Google Drive(StellaGPT/0download)에 저장 (비공개) — auto/수동 공용
-async function saveToGithub(auto){
-  if(!cur || !cur.sessionId){ if(!auto) setStatus('<span class="err">세션이 없습니다</span>'); return; }
-  const btn=$('saveGhBtn'); const prev=btn.textContent; btn.disabled=true; btn.textContent='저장 중…';
-  try{
-    const r=await fetch('/api/cc/save-drive',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({session:cur.sessionId})});
-    const d=await r.json();
-    if(d.ok){ setStatus('<span class="ok">Drive 저장 ✓ '+(d.saved||0)+'개 파일</span>'+(d.folderLink?(' · <a href="'+esc(d.folderLink)+'" target="_blank" rel="noopener">폴더 열기</a>'):'')); }
-    else if(!auto){ setStatus('<span class="err">Drive 저장 실패: '+esc(d.message||d.error||'')+'</span>'); }
-  }catch(e){ if(!auto) setStatus('<span class="err">Drive 저장 오류: '+esc(e.message)+'</span>'); }
-  finally{ btn.disabled=false; btn.textContent=prev; }
-}
-
-function setUIBusy(busy){
-  $('sendBtn').disabled = busy;
-  $('cancelBtn').style.display = busy ? 'block' : 'none';
-  $('model').disabled = busy; $('budget').disabled = busy;
-}
-
+// ── 전송: OpenAI(/api/chat, bare 모드) 호출 ──
+let _ctrl=null;
 async function send(){
+  if(busy) return;
   const text = $('prompt').value.trim();
   const att = pendingAtt.slice();
   if(!text && !att.length) return;
   $('prompt').value=''; $('prompt').style.height='';
   pendingAtt=[]; renderAttStrip();
-  const model = $('model').value;
-  const budgetUsd = Math.max(0.01, Math.min(Number($('budget').value)||20, 50));
+  const model = $('model').value || DEFAULT_MODEL;
 
-  if(cur && !cur.run.done){ return; } // 진행 중이면 무시(중단 후)
   addUserBubble(text, att.length);
-  setUIBusy(true); setStatus('시작 중…');
+  const historyForApi = chat.messages.map(m=>({ role:m.role, content:m.content }));
+  chat.messages.push({ role:'user', content:text, attCount:att.length });
+  setUIBusy(true); setStatus('생각 중…');
+  const thinking = addAssistantBubble('…');
 
-  if(cur && cur.sessionId && cur.run && cur.run.done){
-    // 같은 세션 후속 턴
-    cur.run = new AgentRun(); cur.attempt=0; cur.stopped=false; cur._host=null; cur.prompt=text;
-    try{
-      const r=await fetch('/api/cc/turn',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({session:cur.sessionId,prompt:text,attachments:att})});
-      const d=await r.json(); if(!r.ok||d.error) throw new Error(d.message||d.error||'turn 실패');
-      poll();
-    }catch(e){ setStatus('<span class="err">'+esc(e.message)+'</span>'); setUIBusy(false); }
-    return;
-  }
-  // 신규 세션
-  cur = { sessionId:null, model, budgetUsd, title:text.replace(/[\p{Cc}\p{Cf}]/gu,' ').replace(/\s+/g,' ').trim().slice(0,60), run:new AgentRun(), attempt:0, polling:true, stopped:false, prompt:text };
+  _ctrl = new AbortController();
   try{
-    const r=await fetch('/api/cc/start',{method:'POST',headers:{'Content-Type':'application/json'},
-      body:JSON.stringify({ model, prompt:text, title:cur.title, budgetUsd, omc: $('omc').checked, attachments:att })});
-    const d=await r.json(); if(!r.ok||d.error) throw new Error(d.message||d.error||'start 실패');
-    cur.sessionId=d.sessionId; cur.model=d.model; cur.budgetUsd=d.budgetUsd;
-    setStatus('세션 '+d.sessionId.slice(0,12)+'… 진행 중'); poll();
-  }catch(e){ setStatus('<span class="err">'+esc(e.message)+'</span>'); setUIBusy(false); cur=null; }
+    const images = att.map(a=>a.dataUrl).filter(Boolean);
+    const r = await fetch('/api/chat', { method:'POST', headers:{'Content-Type':'application/json'}, signal:_ctrl.signal,
+      body: JSON.stringify({ message:text, history:historyForApi, model, system:CODEX_SYSTEM, images, bare:true }) });
+    const d = await r.json().catch(()=>({ ok:false, error:'JSON 파싱 실패' }));
+    if(!r.ok || d.ok===false){ throw new Error(d.error || d.message || ('HTTP '+r.status)); }
+    const answer = d.text || d.answer || '응답 없음';
+    thinking.innerHTML = renderMd(answer);
+    $('msgs').scrollTop = $('msgs').scrollHeight;
+    chat.messages.push({ role:'assistant', content:answer });
+    chat.model = model;
+    persistCurrent();
+    setStatus('<span class="ok">완료 ✓</span>');
+  }catch(e){
+    const msg = (e && e.name==='AbortError') ? '중단됨' : ('오류: '+(e&&e.message?e.message:e));
+    thinking.innerHTML = '<span class="err">'+esc(msg)+'</span>';
+    setStatus('<span class="err">'+esc(msg)+'</span>');
+    // 실패한 user 메시지는 히스토리에서 제거(재전송 가능)
+    if(chat.messages.length && chat.messages[chat.messages.length-1].role==='user') chat.messages.pop();
+  }finally{ setUIBusy(false); _ctrl=null; }
 }
-
-async function cancel(){
-  if(!cur || !cur.sessionId) return;
-  setStatus('중단 요청…');
-  try{ await fetch('/api/cc/cancel',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({session:cur.sessionId})}); }catch(e){}
-}
-
-async function loadSessions(){
-  try{
-    const r=await fetch('/api/cc/sessions'); const d=await r.json();
-    const items=d.items||[];
-    const host=$('sessionList');
-    if(!items.length){ host.innerHTML='<div class="lbl" style="padding:8px">세션 없음</div>'; return; }
-    host.innerHTML=items.map(x=>`<div class="sitem" data-id="${esc(x.id)}" data-model="${esc(x.model)}" data-title="${esc(x.title)}">
-      <div class="t">${esc(x.title||'세션')}</div>
-      <div class="m">${esc(x.model||'')} · ${esc(x.status||'')}${x.cost_usd?(' · $'+Number(x.cost_usd).toFixed(3)):''}</div></div>`).join('');
-    host.querySelectorAll('.sitem').forEach(el=>el.addEventListener('click',()=>resume(el.dataset.id, el.dataset.model, el.dataset.title)));
-  }catch(e){ $('sessionList').innerHTML='<div class="lbl" style="padding:8px">목록 로드 실패</div>'; }
-}
-
-function resume(id, model, title){
-  if(cur && cur._timer) clearTimeout(cur._timer);
-  $('msgs').innerHTML='';
-  cur = { sessionId:id, model:model||DEFAULT_MODEL, title:title||'세션', run:new AgentRun(), attempt:0, stopped:false, prompt:'(재개)' };
-  $('saveGhBtn').style.display=''; // 재개 세션도 수동 GitHub 저장 가능
-  setUIBusy(true); setStatus('세션 재개 — 이벤트 로드 중…'); poll();
-}
+function cancel(){ if(_ctrl){ try{ _ctrl.abort(); }catch(e){} } }
 
 // ── 입력: Enter 전송 / Shift+Enter 줄바꿈 / IME 보호 / 모바일 줄바꿈 ──
 $('prompt').addEventListener('keydown', function(e){
@@ -384,7 +359,7 @@ $('prompt').addEventListener('keydown', function(e){
     if(e.isComposing||e.keyCode===229) return;
     if(e.shiftKey) return;
     const coarse=(window.matchMedia&&window.matchMedia('(pointer: coarse)').matches);
-    if(coarse) return; // 모바일: 줄바꿈, 전송은 버튼
+    if(coarse) return;
     e.preventDefault(); send();
   }
 });
@@ -394,10 +369,9 @@ $('cancelBtn').addEventListener('click', cancel);
 $('attachBtn').addEventListener('click', ()=>$('attachInput').click());
 $('attachInput').addEventListener('change', e=>{ addFiles(e.target.files); e.target.value=''; });
 $('prompt').addEventListener('paste', e=>{ const items=(e.clipboardData&&e.clipboardData.items)||[]; const imgs=[]; for(const it of items){ if(it.kind==='file'){ const f=it.getAsFile(); if(f&&/^image\//.test(f.type)) imgs.push(f); } } if(imgs.length){ e.preventDefault(); addFiles(imgs); } });
-$('refreshBtn').addEventListener('click', loadSessions);
-$('saveGhBtn').addEventListener('click', () => saveToGithub(false));
+$('refreshBtn').addEventListener('click', newChat);
 
-loadSessions();
+renderChatList();
 if('serviceWorker' in navigator){ navigator.serviceWorker.register('/sw.js').catch(function(){}); }
 </script>
 </body>

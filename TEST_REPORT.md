@@ -106,3 +106,23 @@
 1. 테마 토글: 🌙/☀️ 이모지 → 흰색 모노크롬 라인 SVG(달/해, stroke=currentColor=--ink) JS 주입.
 2. OMC: 🤖 이모지 → 라인 로봇 SVG, 체크박스는 파란 accent → 중립(accent-color:var(--muted)).
 3. 사이드바 바로가기 아이콘 톤과 통일, 기능(테마 전환/OMC 토글) 로직 동일.
+
+## 2026-06-20 (iter 7) · T3 Stella Codex OpenAI 전환 · pass 6/6
+- node --check api/chat.js OK · codex.html 모듈 스크립트 bad=0
+- 참조 ID 누락 0 · jsdom 초기화 무에러
+- jsdom 검증: 모델 6개 전부 OpenAI(claude 0), 기본 gpt-4.1-mini, 테마 SVG 주입, 새 대화 OK
+- jsdom send(): POST /api/chat · body.model=gpt-4.1-mini · bare=true · system="Stella Codex…" · user+assistant 버블 2개 · 코드블록 `<pre>` 렌더
+- cc.html 회귀: agentcore/`/api/cc/start`/CLAUDE_MODELS 그대로(5 hit) — Claude 유지
+
+| 항목 | 변경 | 테스트 | 결과 |
+|------|------|--------|------|
+| 모델 목록 | codex만 CLAUDE_MODELS→OPENAI_MODELS(6종), 기본 gpt-4.1-mini, Claude 제거 | jsdom 옵션검사 | ✅ |
+| API 고정 | /api/cc/* → /api/chat(OpenAI), CODEX_SYSTEM+bare:true | jsdom 페이로드 | ✅ |
+| 백엔드 | chat.js callOpenAI에 `bare` 플래그(기본 off, 하위호환) | node --check | ✅ |
+| UI 단순화 | 예산/OMC/Drive저장/세션 제거 → 대화 localStorage, 코드 마크다운 렌더 | jsdom 렌더 | ✅ |
+| 회귀 | cc.html Claude 경로 무변경 | grep | ✅ |
+
+요약 3줄:
+1. Stella Codex를 OpenAI 전용 채팅형 코딩 어시스턴트로 전환 — 모델 OpenAI 6종(기본 gpt-4.1-mini), 호출은 기존 /api/chat(빌링 분리) bare 모드, 신규 키·라우트 0.
+2. chat.js에 하위호환 additive `bare` 플래그(표+요약 강제 프리픽스 생략) 추가 — GPT/ABAP 무영향.
+3. Stella Agent Code(cc.html)는 Claude/Managed Agents 그대로 유지. 실제 응답은 라이브(OPENAI_API_KEY)에서만, 샌드박스는 jsdom 정적·런타임 검증까지.

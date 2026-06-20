@@ -404,7 +404,7 @@ export default async function handler(req, res) {
       answer = await callClaude({ model, system: prompt, history, message: aiMessage, images });
     } else {
       provider = "openai";
-      answer = await callOpenAI({ model, system: prompt, history, message: aiMessage, images });
+      answer = await callOpenAI({ model, system: prompt, history, message: aiMessage, images, bare: !!body.bare });
     }
     
     // ⑤ 메모리 업데이트 (비동기 - 응답 지연 없음)
@@ -694,10 +694,12 @@ function resolveClaudeModel(model) {
   return "claude-sonnet-4-6";
 }
 
-async function callOpenAI({ model, system, history, message, images = [] }) {
+async function callOpenAI({ model, system, history, message, images = [], bare = false }) {
   const apiKey = process.env.OPENAI_API_KEY;
   if (!apiKey) throw new Error("OPENAI_API_KEY not configured");
   const selectedModel = resolveOpenAIModel(model);
+  // bare=true(예: Stella Codex 코딩 어시스턴트)는 "[표+요약]" 강제 형식 프리픽스를 생략
+  const pfx = bare ? "" : "[표+요약 형식으로 답변] ";
   const response = await fetch("https://api.openai.com/v1/chat/completions", {
     method: "POST",
     headers: { "Content-Type": "application/json", Authorization: `Bearer ${apiKey}` },
@@ -708,9 +710,9 @@ async function callOpenAI({ model, system, history, message, images = [] }) {
         { role: "system", content: system },
         ...history.slice(-12).map(m => ({ role: m.role === "assistant" ? "assistant" : "user", content: String(m.content || "") })),
         { role: "user", content: images.length > 0
-          ? [{ type:"text", text:"[표+요약 형식으로 답변] "+String(message||"") },
+          ? [{ type:"text", text:pfx+String(message||"") },
              ...images.filter(u=>u&&u.startsWith("data:")).map(u=>({ type:"image_url", image_url:{ url:u, detail:"auto" } }))]
-          : "[표+요약 형식으로 답변] "+String(message||"") }
+          : pfx+String(message||"") }
       ]
     })
   });

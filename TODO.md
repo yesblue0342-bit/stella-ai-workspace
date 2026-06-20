@@ -28,4 +28,4 @@
 ## Stella Agent Code / Codex 툴바·모델 (iter 7, autopilot)
 - [x] T1. cc.html·codex.html 프롬프트 placeholder에서 "(Enter 전송 / Shift+Enter 줄바꿈)" 제거 → "코딩 작업을 입력하세요"만.
 - [x] T2. 하단 툴바 컬러 이모지(🌙/☀️ 테마·🤖 OMC·파란 체크박스)를 사이드바와 동일한 흰색 모노크롬 라인 SVG(stroke=currentColor)+중립 체크박스(accent-color:var(--muted))로 교체. cc.html/codex.html 공통.
-- [ ] T3. Stella Codex만 모델 목록 OpenAI 계열만 노출 + OpenAI API 고정(기본 gpt-4.1-mini). Stella Agent Code는 Claude 유지.
+- [x] T3. Stella Codex만 모델 목록 OpenAI 계열만 노출(Claude 제거) + OpenAI API 고정(`/api/chat` bare 모드, 기본 gpt-4.1-mini). 샌드박스 전용 기능 제거→채팅형 코딩 어시스턴트, 대화 localStorage 보관. Stella Agent Code(cc.html)는 Claude/Managed Agents 그대로. (가정: PROGRESS.md)
