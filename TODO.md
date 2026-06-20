@@ -18,3 +18,8 @@
 - [x] CC-5. 개발 완료 산출물 Google Drive(StellaGPT/0download) 자동 저장 — 완료 시 saveToGithub(true)→/api/cc/save-drive 자동 호출 확인됨.
 - [ ] CC-4. cc 입력창 이미지/첨부 파일 업로드(상세 개발용) — 백엔드(Managed Agents turn) 첨부 수용 필요(다음 반복).
 - [ ] CC-6. 빠른 즐겨찾기에 Codex 앱 추가(OpenAI 연결, cc.html 동일 레이아웃) — 신규 HTML+라우트(다음 반복).
+
+## Stella Agent Code 미세 개선 (iter 4)
+- [x] CC-7. 빈 화면 안내문구("모델을 고르고 코딩 작업을 요청하세요 예~") 숨김 → 깨끗한 빈 화면.
+- [x] CC-8. 앱 아이콘 색 일관: 다크=흰 테두리+검정 바탕+흰 아이콘, 라이트=검정 테두리+흰 바탕+검정 아이콘(!important로 강제).
+- [x] CC-9. "예산$" 라벨 줄바꿈(글자 내려감) 수정 → .lbl white-space:nowrap.

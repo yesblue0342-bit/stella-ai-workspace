@@ -48,7 +48,7 @@ a{color:var(--accent)}
 select,input,textarea,button{font:inherit;color:var(--ink);background:var(--input-bg);border:1px solid var(--line);border-radius:8px}
 select,#budget{padding:6px 8px}
 #budget{width:90px}
-.lbl{font-size:.78rem;color:var(--muted)}
+.lbl{font-size:.78rem;color:var(--muted);white-space:nowrap}
 .iorow{display:flex;gap:8px;align-items:flex-end;border:1px solid var(--line);border-radius:22px;padding:6px 6px 6px 14px;background:var(--input-bg)}
 #prompt{flex:1;resize:none;padding:8px 2px;min-height:40px;max-height:160px;line-height:1.5;border:none;background:transparent;outline:none}
 button.act{cursor:pointer;font-weight:800;padding:0 16px;height:42px;border:none;border-radius:14px}
@@ -90,8 +90,10 @@ body.fullscreen-code #fsExit{display:block;position:fixed;top:8px;right:10px;z-i
 /* 앱 아이콘 흑백화: 라이트(기본)=흰바탕+검정테두리/검정아이콘, 다크(body.dark)=검은바탕+흰테두리/흰아이콘 */
 .app-ico-wrap{display:inline-flex;align-items:center;justify-content:center;width:22px;height:22px;border-radius:6px;border:1.5px solid #111;background:#fff;margin-right:6px;flex:0 0 auto}
 .app-ico{display:inline-block;font-size:12px;line-height:1;filter:grayscale(1) brightness(0)}
-body.dark .app-ico-wrap{border-color:#fff;background:#000}
-body.dark .app-ico{filter:grayscale(1) brightness(0) invert(1)}
+body.dark .app-ico-wrap{border-color:#fff!important;background:#000!important}
+body.dark .app-ico{filter:grayscale(1) brightness(0) invert(1)!important}
+body:not(.dark) .app-ico-wrap{border-color:#111!important;background:#fff!important}
+body:not(.dark) .app-ico{filter:grayscale(1) brightness(0)!important}
 </style>
 <div class="top">
   <button type="button" class="hamb" id="hambBtn" title="상단 앱 전환 바 접기/펴기 (넓은 화면)">☰</button>
@@ -109,7 +111,7 @@ body.dark .app-ico{filter:grayscale(1) brightness(0) invert(1)}
   </aside>
   <div class="resizer" id="resizer" title="사이드바 너비 조절"></div>
   <main class="main">
-    <div class="msgs" id="msgs"><div class="empty">모델을 고르고 코딩 작업을 요청하세요.<br>예: "write fibonacci.py with the first 20 numbers and run it"</div></div>
+    <div class="msgs" id="msgs"><div class="empty" id="emptyHint"></div></div>
     <div class="barwrap">
       <div class="ctl">
         <select id="model"></select>
