@@ -286,3 +286,18 @@ STATUS: IN_PROGRESS
 ### node --check: api/chat-room.js OK / talk.html 임베드 스크립트 3블록 OK
 
 ### 남은 STAGE: 5(성능/lazy load), 6(SW 백그라운드 수신/뮤트/멘션), 7(입력·오프라인·재연결), 8(반응/검색)
+
+---
+
+## 2026-06-20 Stella Talk STAGE 5 — 성능 / 메시지 누적 대비
+
+- 렌더 윈도우: renderMessages 가 최근 MSG_WINDOW(100)개만 그림. 방 진입 시 _shownCount 초기화.
+- 위로 lazy load: 더 오래된 메시지가 있으면 상단에 "↑ 이전 메시지 더보기" 버튼 → loadMoreMessages()가
+  +100개씩 확장하고 스크롤 위치를 보존(보던 메시지 유지). 키 기반 증분 렌더와 호환(__loadmore 유닛).
+- 이미지/동영상 base64 금지: 정상 경로는 이미 Drive 업로드 후 fileUrl(드라이브 URL)만 저장.
+  base64는 Drive 업로드 실패 시 <300KB 한정 폴백만 유지(전송 보장용). 서버 JSON 비대화 방지 목적 충족.
+- [다음 단계] 방 메시지 청크/일자 파일 분할 저장(MemberChat/{roomId}/{yyyymmdd}.json)은 미적용.
+  현재는 get since/limit + 렌더 윈도우로 "최근만" 처리. 대용량 방이 많아지면 분할 도입 검토.
+
+### 서비스워커 캐시: v38 → v39
+### node --check: talk.html 임베드 스크립트 3블록 OK

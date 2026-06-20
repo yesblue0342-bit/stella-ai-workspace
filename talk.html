@@ -963,6 +963,7 @@ function deleteRoom(){
 let _pollTimer=null;
 function openRoom(id){
   _cur=_rooms.find(r=>r.id===id);if(!_cur)return;
+  _shownCount=MSG_WINDOW;   // STAGE 5: 방 진입 시 렌더 윈도우 초기화(최근 100개)
   // 방 열면 읽음 처리 (현재 시각으로 lastReadAt 갱신)
   const idx=_rooms.findIndex(r=>r.id===id);
   if(idx>=0){_rooms[idx].lastReadAt=Date.now();_cur=_rooms[idx];saveRooms();}
@@ -1689,6 +1690,17 @@ function msgSig(m, myId){
           unread, m.sendState||''].join('␟');
 }
 
+// STAGE 5: 렌더 윈도우(최근 N개) + "이전 메시지 더보기" lazy load
+var MSG_WINDOW=100, _shownCount=null;
+function loadMoreMessages(){
+  var el=document.getElementById('chatMessages');
+  var prevH=el?el.scrollHeight:0, prevTop=el?el.scrollTop:0;
+  _shownCount=(_shownCount||MSG_WINDOW)+MSG_WINDOW;
+  renderMessages();
+  // 스크롤 위치 보존(위로 늘어난 만큼 보정 → 보던 메시지 유지)
+  if(el){ var newH=el.scrollHeight; el.scrollTop=prevTop+(newH-prevH); }
+}
+
 // FIX-LOCK [4] 키 기반 증분 렌더 (innerHTML 전면 교체 폐기) — 폴링 re-render가 깜빡임/회귀를 만들지 않게.
 // 같은 키+서명의 노드는 재사용하고, 바뀐 것만 갱신/추가/삭제. (전면 innerHTML 교체로 되돌리지 말 것)
 function renderMessages(){
@@ -1711,15 +1723,22 @@ function renderMessages(){
   if(_cur.messages && _cur.messages.length > 1){
     _cur.messages.sort(function(a,b){ return (a.at||0) - (b.at||0); });
   }
-  const msgs=_cur.messages||[];
-  if(!msgs.length){
+  const allMsgs=_cur.messages||[];
+  if(!allMsgs.length){
     Array.from(el.children).forEach(function(c){ if(c!==bgLayer) c.remove(); });
     const e=document.createElement('div');e.className='empty';e.setAttribute('data-key','__empty');e.textContent='메시지가 없습니다.';
     el.appendChild(e);return;
   }
   const myId=getMyId();
+  // STAGE 5: 최근 _shownCount 개만 렌더(메시지 누적 대비 성능). 위로 "이전 메시지 더보기"로 확장.
+  if(_shownCount==null) _shownCount=MSG_WINDOW;
+  const total=allMsgs.length;
+  const startIdx=Math.max(0, total-_shownCount);
+  const msgs=allMsgs.slice(startIdx);
+  const hasOlder=startIdx>0;
   // 표시할 단위(날짜 구분선 + 메시지) 목록을 키/서명과 함께 구성
   const units=[];
+  if(hasOlder){ units.push({key:'__loadmore', sig:'loadmore␟'+startIdx, kind:'loadmore'}); }
   let lastDate='';
   msgs.forEach(function(m){
     const dateStr=new Date(m.at).toLocaleDateString('ko-KR',{year:'numeric',month:'long',day:'numeric'});
@@ -1738,7 +1757,8 @@ function renderMessages(){
       // 재사용 (DOM/이미지 유지 → 깜빡임 없음)
     } else {
       if(node) node.remove();
-      if(u.kind==='date'){ node=document.createElement('div');node.className='date-divider';node.innerHTML='<span>'+esc(u.dateStr)+'</span>'; }
+      if(u.kind==='loadmore'){ node=document.createElement('div');node.style.cssText='text-align:center;padding:8px';node.innerHTML='<button type="button" onclick="loadMoreMessages()" style="border:1px solid var(--border);background:var(--bg2);color:var(--text2);border-radius:14px;padding:7px 16px;font-size:.82rem;cursor:pointer">↑ 이전 메시지 더보기</button>'; }
+      else if(u.kind==='date'){ node=document.createElement('div');node.className='date-divider';node.innerHTML='<span>'+esc(u.dateStr)+'</span>'; }
       else if(u.kind==='sys'){ node=document.createElement('div');node.className='date-divider';node.innerHTML='<span>'+esc(u.m.text)+'</span>'; }
       else { node=buildMsgRow(u.m, myId); }
       node.setAttribute('data-key',u.key);
