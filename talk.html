@@ -1483,16 +1483,22 @@ function playNotifySound(msgId){
     _lastNotifAt=now; if(msgId) _lastNotifMsgId=msgId;
     // 재생 직전 오디오 unlock 1회 + 큐 깨우기(자동재생 정책 / 다시 안 울림 방지)
     try{ unlockAudio(); }catch(e){}
-    try{ if(_audioCtx && _audioCtx.state==='suspended') _audioCtx.resume(); }catch(e){}
     var key=getVoiceKey();
     // 켜짐 + 포그라운드면 음성으로도 읽기(작업1-3)
     try{ if(loadNotif().voiceSpeak && document.visibilityState==='visible'){ speakVoice(key); } }catch(e){}
-    var mp3=TALK_VOICE_MP3 && TALK_VOICE_MP3[key];
-    if(mp3){
-      try{ var a=_voiceAudioCache[key]||(_voiceAudioCache[key]=new Audio(mp3)); a.currentTime=0;
-        var p=a.play(); if(p&&p.catch) p.catch(function(){ playMelody(key); }); return; }catch(e){}
+    // 실제 소리 재생 (mp3 우선 → 강화 멜로디).
+    function _emit(){
+      var mp3=TALK_VOICE_MP3 && TALK_VOICE_MP3[key];
+      if(mp3){
+        try{ var a=_voiceAudioCache[key]||(_voiceAudioCache[key]=new Audio(mp3)); a.currentTime=0;
+          var p=a.play(); if(p&&p.catch) p.catch(function(){ playMelody(key); }); return; }catch(e){}
+      }
+      playMelody(key);   // 주 알림음(강화 멜로디)
     }
-    playMelody(key);   // 주 알림음(강화 멜로디)
+    // ctx가 suspended면 resume 완료 후 재생(즉시 재생 시 무음 되는 레이스 수정) — #2 소리 안 남
+    if(_audioCtx && _audioCtx.state==='suspended'){
+      try{ var rp=_audioCtx.resume(); if(rp&&rp.then){ rp.then(_emit).catch(_emit); } else _emit(); }catch(e){ _emit(); }
+    } else { _emit(); }
   }catch(e){}
 }
 
@@ -2437,7 +2443,7 @@ function enableNotif(){
     }).catch(function(){ updateNotifBanner(); });
   }catch(e){}
 }
-document.addEventListener('visibilitychange', function(){ if(document.visibilityState==='visible') updateNotifBanner(); });
+document.addEventListener('visibilitychange', function(){ if(document.visibilityState==='visible'){ updateNotifBanner(); try{ if(_audioCtx && _audioCtx.state==='suspended') _audioCtx.resume(); }catch(e){} } });
 
 // ── PWA ──
 var _dp=null;

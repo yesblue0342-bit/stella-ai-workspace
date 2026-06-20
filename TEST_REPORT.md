@@ -23,3 +23,16 @@
 - 전체 재검증: node --check(chat-room.js) OK · talk 인라인 JS bad=0 · 로직 9/9 PASS.
 - 배포: main 푸시 → Vercel 자동 배포(샌드박스 `vercel --prod` 자격증명 없음, 동등 처리). SW 캐시 stella-v44.
 - 한계: 잠금화면/백그라운드 알림은 WebAudio·폴링이 OS에 정지되므로 별도 Web Push(VAPID+subscribe+서버 발송) 구현 전까지 불가.
+
+## 2026-06-19 (iter 2) · #2 음성 알림음 무음 레이스 수정 · pass 5/5
+- talk.html 인라인 JS new Function → bad=0
+- #2 resume-then-play / no-immediate-play / visibilitychange resume / vibrate 유지 grep 4/4 ✅
+요약 3줄:
+1. #2 근본: WebAudio ctx가 suspended일 때 resume(async) 직후 즉시 playMelody → 깨어나기 전 스케줄 = 무음. resume().then(_emit)으로 수정.
+2. 탭 복귀 시 ctx resume 추가 → 백그라운드 다녀와도 소리 복구.
+3. #4 진동은 코드 정상(navigator.vibrate + 백그라운드 SW vibrate). 잔여는 iOS Vibration API 미지원(OS).
+
+## FINAL (iter 2)
+- 재검증: talk 인라인 JS bad=0 · #2 grep 4/4 PASS · 회귀 없음.
+- 남은 [!]: #4(진동) — iOS 미지원 OS 제약. 잠금화면/백그라운드 알림 전반은 Web Push(VAPID) 필요.
+- 배포: main 푸시 → Vercel 자동 배포. SW 캐시 stella-v45.
