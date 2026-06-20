@@ -90,3 +90,11 @@
 - 재검증: 백엔드 3종 node --check OK · cc/codex 스크립트 bad=0 · grep 5/5 PASS · 텍스트 경로 회귀 없음.
 - 배포: main 푸시 → Vercel 자동 배포. SW 캐시 stella-v49.
 - 한계: 이미지 블록의 런타임 실제 수용은 라이브(Vercel+Managed Agents 자격증명)에서만 확인 가능. 미지원 시에도 텍스트 전송은 영향 없음(첨부는 additive).
+
+## 2026-06-20 (iter 7) · T1 프롬프트 placeholder 정리 · pass 2/2
+- cc.html / codex.html 모듈·인라인 스크립트 bad=0
+- grep: `placeholder="코딩 작업을 입력하세요"` 각 1 hit, placeholder의 "줄바꿈" 0 (잔여 2건은 JS 동작 설명 주석)
+요약 3줄:
+1. 두 파일 프롬프트 textarea placeholder에서 "(Enter 전송 / Shift+Enter 줄바꿈)" 안내 제거.
+2. 안내 문구만 제거, Enter 전송/Shift+Enter 줄바꿈 동작 로직은 그대로 유지.
+3. 회귀 없음(스크립트 파싱 bad=0).

@@ -24,3 +24,8 @@
 - [x] CC-7. 빈 화면 안내문구("모델을 고르고 코딩 작업을 요청하세요 예~") 숨김 → 깨끗한 빈 화면.
 - [x] CC-8. 앱 아이콘 색 일관: 다크=흰 테두리+검정 바탕+흰 아이콘, 라이트=검정 테두리+흰 바탕+검정 아이콘(!important로 강제).
 - [x] CC-9. "예산$" 라벨 줄바꿈(글자 내려감) 수정 → .lbl white-space:nowrap.
+
+## Stella Agent Code / Codex 툴바·모델 (iter 7, autopilot)
+- [x] T1. cc.html·codex.html 프롬프트 placeholder에서 "(Enter 전송 / Shift+Enter 줄바꿈)" 제거 → "코딩 작업을 입력하세요"만.
+- [ ] T2. 하단 툴바 컬러 이모지(🌙/☀️ 테마·🤖 OMC·파란 체크박스)를 사이드바와 동일한 흰색 모노크롬 라인 SVG(stroke=currentColor)+중립 체크박스로 교체.
+- [ ] T3. Stella Codex만 모델 목록 OpenAI 계열만 노출 + OpenAI API 고정(기본 gpt-4.1-mini). Stella Agent Code는 Claude 유지.
