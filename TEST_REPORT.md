@@ -126,3 +126,12 @@
 1. Stella Codex를 OpenAI 전용 채팅형 코딩 어시스턴트로 전환 — 모델 OpenAI 6종(기본 gpt-4.1-mini), 호출은 기존 /api/chat(빌링 분리) bare 모드, 신규 키·라우트 0.
 2. chat.js에 하위호환 additive `bare` 플래그(표+요약 강제 프리픽스 생략) 추가 — GPT/ABAP 무영향.
 3. Stella Agent Code(cc.html)는 Claude/Managed Agents 그대로 유지. 실제 응답은 라이브(OPENAI_API_KEY)에서만, 샌드박스는 jsdom 정적·런타임 검증까지.
+
+## FINAL (iter 7) — T1·T2·T3 전체 완료
+- npm test (`node --test test/*.test.js`): **62/62 pass**, fail 0.
+- 백엔드 node --check: chat.js · cc/_maclient.mjs · cc/start.js · cc/turn.js OK.
+- HTML 모듈 스크립트(cc.html·codex.html): bad=0. codex jsdom 초기화·send 무에러.
+- T1 placeholder 정리 / T2 툴바 모노크롬 라인 SVG+중립 체크박스 / T3 Codex OpenAI 전환 — 전부 `[x]`.
+- SW 캐시 v49→**v50** (UI 변경 캐시 무력화).
+- 배포: main 푸시 → Vercel 자동 배포(team: stella-gpt). 샌드박스에 `vercel --prod` 자격증명 없어 main 푸시로 동등 배포.
+- 한계: Codex 실제 OpenAI 응답·라이브 UI는 Vercel(OPENAI_API_KEY) 환경에서만 확인 가능(Deployment Protection 403로 샌드박스 직접 확인 불가).
