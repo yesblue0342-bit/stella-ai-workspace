@@ -3,6 +3,13 @@ import { applyLeave, shouldListRoom } from "../lib/room-membership.js";
 
 const clean = (v) => String(v || "").trim();
 const makeRoomId = (v) => (clean(v) || "default-room").replace(/[^a-zA-Z0-9가-힣_-]/g, "_").slice(0, 80);
+// STAGE 4: 멤버 검증 — members 명단이 비면(레거시 방) 잠금 방지로 통과. 코드방은 코드 아는 누구나 허용.
+const isMember = (data, userId) => {
+  const members = Array.isArray(data?.members) ? data.members.map(String) : [];
+  if (!members.length) return true;
+  return members.includes(String(userId || ""));
+};
+const isCodeRoom = (roomId) => String(roomId || "").startsWith("room_code_");
 
 // ── reads/typing 전용 meta 파일 (메시지 파일과 분리해 동시쓰기 클로버링 방지) ──
 const metaName = (roomId) => roomId + "__meta";
@@ -32,6 +39,11 @@ export default async function handler(req, res) {
       const serverTime = Date.now();
       const f = await readJsonFromDrive({ folderPath: ["MemberChat"], fileName: roomId });
       if (!f?.data) return res.status(200).json({ ok: true, room: null, messages: [], reads: {}, typing: {}, serverTime, lastMessageAt: 0, hasMore: false });
+      // STAGE 4 보안: 멤버가 아니면 열람 차단(임의 roomId 조회 방지). 코드방/레거시(멤버없음)는 허용.
+      const requester = clean(req.query.userId || req.body?.userId);
+      if (requester && !isCodeRoom(roomId) && !isMember(f.data, requester)) {
+        return res.status(403).json({ ok: false, message: "이 방의 멤버가 아닙니다." });
+      }
       // reads/typing은 별도 meta 파일에 보관(메시지 파일을 건드리지 않아 동시쓰기로 메시지가 사라지는 레이스 방지).
       // meta가 없으면 레거시(메시지 파일 내부 reads/typing)로 폴백.
       const meta = await readMeta(roomId);
@@ -107,6 +119,14 @@ export default async function handler(req, res) {
       const existing = await readJsonFromDrive({ folderPath: ["MemberChat"], fileName: roomId }).catch(() => null);
       const prevMessages = existing?.data?.messages || [];
       const prevMembers = existing?.data?.members || [];
+      // STAGE 4 보안: 기존 방 + 멤버명단 있음 + 발신자 비멤버 + 코드방 아님 → 임의 전송 차단.
+      //   (새 방 생성/코드방 입장/기존 멤버는 통과. 비멤버 자동합류 금지)
+      if (existing?.data && !isCodeRoom(roomId)) {
+        const pm = prevMembers.map(String);
+        if (pm.length && !pm.includes(String(userId))) {
+          return res.status(403).json({ ok: false, message: "이 방의 멤버가 아니어서 전송할 수 없습니다." });
+        }
+      }
       // 멤버 병합
       const allMembers = [...new Set([...prevMembers, ...members])];
 
@@ -132,6 +152,36 @@ export default async function handler(req, res) {
 
       const saved = await saveJsonToDrive({ folderPath: ["MemberChat"], fileName: roomId, data });
       return res.status(200).json({ ok: true, saved, message: messageItem, room: data });
+    }
+
+    // ── 멤버 초대/합류 (메시지 없이 members 갱신, 재초대 시 left 해제) ── STAGE 4
+    //   confirmInvite/joinByCode 가 호출 → 초대된 사용자가 list/get 에서 방을 실제로 보게 됨.
+    if (action === "invite" || action === "join") {
+      const body = req.body || {};
+      const roomId = makeRoomId(body.roomId || body.room);
+      const title = clean(body.title || body.roomName || "");
+      const add = (Array.isArray(body.members) ? body.members : [body.userId]).map(clean).filter(Boolean);
+      if (!roomId || !add.length) return res.status(400).json({ ok: false, message: "roomId, members 필요" });
+      const existing = await readJsonFromDrive({ folderPath: ["MemberChat"], fileName: roomId }).catch(() => null);
+      const base = existing?.data || { type: "memberChat", roomId, title: title || roomId, members: [], messages: [] };
+      const prevMembers = Array.isArray(base.members) ? base.members.map(String) : [];
+      const newMembers = [...new Set([...prevMembers, ...add])];
+      // 재초대: 나간 기록(left)에서 복귀
+      const prevLeft = Array.isArray(base.left) ? base.left.map(String) : [];
+      const newLeft = prevLeft.filter((l) => !add.includes(l));
+      const data = {
+        ...base,
+        type: "memberChat",
+        roomId,
+        title: title || base.title || roomId,
+        members: newMembers,
+        left: newLeft,
+        deleted: newMembers.length ? false : base.deleted,   // 멤버 생기면 tombstone 해제
+        updatedAt: new Date().toISOString(),
+        messages: Array.isArray(base.messages) ? base.messages : []
+      };
+      await saveJsonToDrive({ folderPath: ["MemberChat"], fileName: roomId, data });
+      return res.status(200).json({ ok: true, members: newMembers, left: newLeft });
     }
 
     // ── 내가 속한 방 목록 ──
@@ -196,8 +246,13 @@ export default async function handler(req, res) {
     // ── 방 삭제 ──
     if (action === "delete") {
       const roomId = makeRoomId(req.body?.roomId || req.query.roomId);
+      const userId = clean(req.body?.userId || req.query.userId);
       const existing = await readJsonFromDrive({ folderPath: ["MemberChat"], fileName: roomId }).catch(() => null);
       if (!existing?.data) return res.status(404).json({ ok: false, message: "방 없음" });
+      // STAGE 4 보안: 멤버만 삭제 가능 (레거시 멤버없음 방은 통과)
+      if (userId && !isMember(existing.data, userId)) {
+        return res.status(403).json({ ok: false, message: "이 방의 멤버만 삭제할 수 있습니다." });
+      }
       // soft delete
       await saveJsonToDrive({ folderPath: ["MemberChat"], fileName: roomId, data: { ...existing.data, deleted: true, deletedAt: new Date().toISOString() } });
       return res.status(200).json({ ok: true, message: "방 삭제됨" });

@@ -256,3 +256,33 @@ STATUS: IN_PROGRESS
 
 ### 남은 과제(다음 단계)
 - 세션이 있는데 사용자가 일부러 다른 id를 조회하려는 시나리오: 현재는 세션 id 우선(경고 표시). 필요 시 "입력 id 강제 조회" 토글 추가 검토.
+
+---
+
+## 2026-06-20 Stella Talk STAGE 4 — 멤버/초대/방 정합성 + 권한·보안
+
+### 정합성
+- 초대 멤버 서버 반영(핵심 버그 수정): confirmInvite 가 로컬 members 만 갱신하고 서버엔 안 알려
+  초대된 사용자가 action=list 에서 방을 못 보던 문제 → 신규 action=invite 호출로 서버 members 갱신.
+  (api/chat-room.js: action="invite"/"join" = 메시지 없이 members 병합 저장)
+- 1:1 결정적 roomId: createRoom 에서 멤버 2명이면 dm_{min}_{max} 로 생성 → 두 사람이 항상 같은 방 합류(중복 방 방지). 코드방(room_code_)·그룹(room_) 기존 방식 유지.
+- 재초대 시 left 해제: action=invite 가 left 배열에서 복귀 멤버 제거 + members 생기면 tombstone(deleted) 해제.
+- [가정/정책] 재입장 후 메시지 노출: 현재 서버는 방당 단일 메시지 목록이라 재입장자도 전체 히스토리를 본다.
+  "재입장 후 메시지만" 정책(멤버별 joinedAt 필터)은 별도 기능으로 다음 단계에 남김.
+
+### 권한·보안 (api/chat-room.js)
+- isMember(data,userId) 헬퍼: members 명단 비면(레거시) 통과, 있으면 포함 여부 검사. isCodeRoom 별도 허용.
+- get: 요청자 userId 가 멤버가 아니면 403(임의 roomId 열람 차단). 코드방/레거시는 허용. talk.html get 호출에 &userId 추가.
+- send: 기존 방 + 멤버명단 있음 + 발신자 비멤버 + 코드방 아님 → 403(비멤버 임의 전송/자동합류 차단). 새 방 생성·코드방·멤버는 통과.
+- delete: 멤버만 가능하도록 userId 검사 추가(기존 권한 체크 없던 부분 보강). delete-message 는 기존 본인 검사 유지. leave 는 자기 자신만 제외(기존 유지).
+- [한계] 세션 토큰이 없는 구조라 userId 위조까지는 막지 못함(정직한-호기심 단계 차단). 토큰 기반 인증은 다음 단계 과제로 기록.
+
+### XSS
+- 메시지/발신자명/파일명 렌더는 textContent 또는 esc() 사용 확인(buildMsgRow/renderMessages/renderRooms/typing).
+- 파일·이미지 URL 스킴 화이트리스트 safeFileUrl(): http(s)/data/blob 만 허용 → javascript:/vbscript: href·src 인젝션 차단(serverMsgToLocal 진입점에서 정화).
+- 이미지 onerror 는 createElement+함수 할당이라 인젝션 벡터 없음(확인).
+
+### 서비스워커 캐시: v37 → v38
+### node --check: api/chat-room.js OK / talk.html 임베드 스크립트 3블록 OK
+
+### 남은 STAGE: 5(성능/lazy load), 6(SW 백그라운드 수신/뮤트/멘션), 7(입력·오프라인·재연결), 8(반응/검색)

@@ -810,9 +810,14 @@ function createRoom(){
     // 방 코드가 있으면 코드 기반 ID (양쪽이 같은 코드 = 같은 방)
     roomId='room_code_'+roomCode.replace(/[^a-zA-Z0-9가-힣]/g,'_').slice(0,70);
   } else {
-    // 없으면 기존 멤버 조합 방식
-    const sortedMembers=[...new Set(allMembers)].sort();
-    roomId='room_'+sortedMembers.join('_').replace(/[^a-zA-Z0-9가-힣]/g,'_').slice(0,70);
+    const uniqMembers=[...new Set(allMembers)];
+    const sortedMembers=uniqMembers.slice().sort();
+    if(uniqMembers.length===2){
+      // STAGE 4: 1:1은 결정적 dm_{min}_{max} → 두 사람이 항상 같은 방에 합류(중복 방 방지)
+      roomId='dm_'+sortedMembers.join('_').replace(/[^a-zA-Z0-9가-힣]/g,'_').slice(0,70);
+    } else {
+      roomId='room_'+sortedMembers.join('_').replace(/[^a-zA-Z0-9가-힣]/g,'_').slice(0,70);
+    }
   }
   const room={id:roomId,name,messages:[],members:allMembers,createdAt:Date.now()};
   // 중복 방 체크
@@ -901,6 +906,11 @@ function confirmInvite(){
   if(idx<0)return;
   _inviteMembers.forEach(function(m){if(!_rooms[idx].members.includes(m))_rooms[idx].members.push(m);});
   _cur=_rooms[idx];
+  // STAGE 4: 서버 members 갱신 → 초대된 사용자가 action=list/get 에서 방을 실제로 보게 됨(재초대 시 left 해제).
+  if(_inviteMembers.length){
+    fetch('/api/chat-room?action=invite',{method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({roomId:_cur.id,title:_cur.name,members:(_rooms[idx].members||[])})}).catch(function(){});
+  }
   // 시스템 메시지
   if(_inviteMembers.length){
     const sysMsg={id:'m_'+Date.now(),type:'system',text:_inviteMembers.join(', ')+'님이 초대되었습니다.',at:Date.now()};
@@ -1026,8 +1036,13 @@ function stopPolling(){
 }
 
 // 서버 메시지를 로컬 형식으로 변환
+// STAGE 4 보안: 파일/이미지 URL 스킴 화이트리스트 (javascript:/vbscript: 등 인젝션 차단)
+function safeFileUrl(u){
+  if(!u) return null;
+  return /^(https?:|data:|blob:)/i.test(String(u)) ? u : null;
+}
 function serverMsgToLocal(m){
-  const fUrl = m.fileUrl || m.imageUrl || null;
+  const fUrl = safeFileUrl(m.fileUrl || m.imageUrl || null);
   const fName = m.fileName || '';
   const fMime = m.mimeType || '';
   let msgType = 'text';
@@ -1085,7 +1100,9 @@ async function syncRoomFromServer(scrollAfter, opts){
   const idx=_rooms.findIndex(x=>x.id===roomId);
   if(idx<0)return;
   const since=(!opts.full && _lastSyncAt[roomId]) ? _lastSyncAt[roomId] : 0;
+  const _myId=getMyId();
   let url='/api/chat-room?action=get&roomId='+encodeURIComponent(roomId);
+  if(_myId) url+='&userId='+encodeURIComponent(_myId);   // STAGE 4: 멤버 검증(비멤버 열람 차단)
   if(since>0) url+='&since='+since;     // 증분: 새 메시지만
   else url+='&limit=100';               // 첫 진입/풀 재조정: 최근 100개
   try{
