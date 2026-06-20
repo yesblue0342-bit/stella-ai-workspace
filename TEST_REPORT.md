@@ -98,3 +98,11 @@
 1. 두 파일 프롬프트 textarea placeholder에서 "(Enter 전송 / Shift+Enter 줄바꿈)" 안내 제거.
 2. 안내 문구만 제거, Enter 전송/Shift+Enter 줄바꿈 동작 로직은 그대로 유지.
 3. 회귀 없음(스크립트 파싱 bad=0).
+
+## 2026-06-20 (iter 7) · T2 툴바 모노크롬 라인 아이콘 · pass 4/4
+- cc.html/codex.html 모듈 스크립트 bad=0, SVG open/close 균형 3/3 OK
+- grep: themeToggle 빈 버튼(JS가 SVG 주입)·SVG_SUN/MOON 상수·OMC `<svg class="ico">`·`#omc{accent-color:var(--muted)}` 각각 확인, ctl 내 이모지 🌙/🤖 0
+요약 3줄:
+1. 테마 토글: 🌙/☀️ 이모지 → 흰색 모노크롬 라인 SVG(달/해, stroke=currentColor=--ink) JS 주입.
+2. OMC: 🤖 이모지 → 라인 로봇 SVG, 체크박스는 파란 accent → 중립(accent-color:var(--muted)).
+3. 사이드바 바로가기 아이콘 톤과 통일, 기능(테마 전환/OMC 토글) 로직 동일.

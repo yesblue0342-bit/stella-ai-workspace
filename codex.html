@@ -45,6 +45,9 @@ a{color:var(--accent)}
 .barwrap{border-top:1px solid var(--line);background:var(--top-bg);padding:10px 14px}
 .ctl{display:flex;gap:8px;align-items:center;margin-bottom:8px;flex-wrap:nowrap;overflow-x:auto}
 .ctl #model{flex:1 1 120px;min-width:80px}
+.ctl .ico{width:18px;height:18px;display:inline-block;vertical-align:middle;color:var(--ink);stroke:currentColor}
+.ctl #omc{accent-color:var(--muted);width:auto}
+#themeToggle{display:inline-flex;align-items:center;justify-content:center}
 select,input,textarea,button{font:inherit;color:var(--ink);background:var(--input-bg);border:1px solid var(--line);border-radius:8px}
 select,#budget{padding:6px 8px}
 #budget{width:90px}
@@ -117,8 +120,8 @@ body:not(.dark) .app-ico{filter:grayscale(1) brightness(0)!important}
         <select id="model"></select>
         <span class="lbl">예산$</span>
         <input id="budget" type="number" min="0.5" max="50" step="0.5" value="20">
-        <button type="button" class="theme-toggle" id="themeToggle" title="다크/라이트 모드">🌙</button>
-        <label class="lbl" style="display:flex;align-items:center;gap:4px;cursor:pointer;white-space:nowrap" title="OMC 멀티에이전트 + 무인 오토파일럿: 구현→테스트→오류 자동수정 루프(질문 없이 RALPH_DONE까지)"><input type="checkbox" id="omc" style="width:auto"> 🤖 OMC</label>
+        <button type="button" class="theme-toggle" id="themeToggle" title="다크/라이트 모드"></button>
+        <label class="lbl" style="display:flex;align-items:center;gap:4px;cursor:pointer;white-space:nowrap" title="OMC 멀티에이전트 + 무인 오토파일럿: 구현→테스트→오류 자동수정 루프(질문 없이 RALPH_DONE까지)"><input type="checkbox" id="omc" style="width:auto"><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:16px;height:16px"><rect x="4" y="9" width="16" height="11" rx="2"/><path d="M12 9V5"/><circle cx="12" cy="4" r="1"/><circle cx="9" cy="14" r="1"/><circle cx="15" cy="14" r="1"/><path d="M9 17.5h6"/></svg> OMC</label>
         <button type="button" id="saveGhBtn" title="이 세션 산출물을 Google Drive(StellaGPT/0download)에 저장" style="display:none">💾 Drive에 저장</button>
         <span class="status" id="status"></span>
       </div>
@@ -144,16 +147,19 @@ const MODEL_KEY = 'stella_codex_model';
 let cur = null;       // { sessionId, model, budgetUsd, title, run, attempt, polling, stopped }
 
 // ── 테마: Stella GPT와 동일한 body.dark 방식 + 'stella_theme' 키 공유 ──
+// 흰색 모노크롬 라인 아이콘(stroke=currentColor) — 사이드바 바로가기와 톤 통일
+const SVG_MOON='<svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>';
+const SVG_SUN='<svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M4.93 19.07l1.41-1.41M17.66 6.34l1.41-1.41"/></svg>';
 function applyTheme(){
   let t='dark'; try{ t=localStorage.getItem('stella_theme')||'dark'; }catch(e){}
   document.body.classList.toggle('dark', t!=='light');
-  const b=$('themeToggle'); if(b) b.textContent = (t==='light')?'🌙':'☀️';
+  const b=$('themeToggle'); if(b) b.innerHTML = (t==='light')?SVG_MOON:SVG_SUN;
   const meta=document.querySelector('meta[name="theme-color"]'); if(meta) meta.setAttribute('content', t==='light'?'#ffffff':'#0d1117');
 }
 function toggleTheme(){
   const dark=document.body.classList.toggle('dark');
   try{ localStorage.setItem('stella_theme', dark?'dark':'light'); }catch(e){}
-  const b=$('themeToggle'); if(b) b.textContent = dark?'☀️':'🌙';
+  const b=$('themeToggle'); if(b) b.innerHTML = dark?SVG_SUN:SVG_MOON;
   const meta=document.querySelector('meta[name="theme-color"]'); if(meta) meta.setAttribute('content', dark?'#0d1117':'#ffffff');
 }
 applyTheme();
