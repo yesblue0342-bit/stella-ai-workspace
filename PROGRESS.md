@@ -107,3 +107,43 @@ STATUS: IN_PROGRESS
 - 인라인 JS new Function 문법 통과(1블록 0 bad) · node --check sw.js OK · npm test 54/54 ·
   jsdom 7/7(A 에러+재시도 렌더·HTML응답 방어 / B 308→200 완료·단일청크·3회재시도후 실패사유 / C blob 이미지·실패폴백).
 - sw 캐시 stella-v22 → v23. 새 API 라우트/키 0(기존 /api/drive-list·drive-manage·download 재사용).
+
+---
+
+## 2026-06-20 추가 작업: 중복가입 메시지 통일 + 관리자 승인 UI
+
+### (1) 중복 가입 차단 메시지 통일 — 비밀번호 무관 무조건 차단
+- `api/auth.js` 회원가입 중복확인 블록 교체: ID/e-mail 각각 별도 키값으로 검사.
+  - 기존 "비밀번호 맞으면 자동 로그인" 분기 제거 → 무조건 409 차단.
+  - DUPLICATE_ID → "가입한 ID가 존재합니다. 다른 ID로 신청하세요."
+  - DUPLICATE_EMAIL → "가입한 e-mail이 존재합니다. 다른 ID로 신청하세요."
+- `api/member-store.js` signup 분기: `init(id)` 전에 `read(id)`/`read(safe(email))`로
+  중복 검사 후 동일 코드/메시지로 409 반환.
+
+### (2) 관리자 회원 승인 메뉴탭 + 패널 신규 개발 (gpt.html)
+- 사이드바 '바로가기' 섹션에 `#adminApproveTab` 버튼 추가(기본 .hidden).
+- `openApp()`에서 로그인 사용자가 관리자(yesblue0342/admin, 대소문자 무시)면 노출.
+- 슬라이드 패널(`#approvalPanel`, 노트 패널 CSS 재사용) + 오버레이 신규.
+- `loadApprovals()`: POST /api/admin-approvals {action:list} → pending 목록 렌더
+  (이름/ID/이메일/신청일시 + 승인·거절 버튼). 빈 목록 시 "승인 대기 중인 회원이 없습니다."
+- `decideApproval(i,action)`: approve/reject POST 후 목록 자동 새로고침.
+- 관리자 자격증명: 세션 user.id + sessionStorage 캐시 비번(없으면 1회 prompt,
+  admin 계정은 'admin' 자동). 인증 실패 시 캐시 비번 폐기 후 재시도 유도.
+- 서비스워커 캐시 v33 → v34.
+
+### node --check / 문법 검증 결과
+- api/auth.js .......... OK
+- api/member-store.js .. OK
+- sw.js ................ OK
+- gpt.html 임베드 <script> 3블록 전부 OK (new Function 파싱, 32750자 메인 포함)
+- 정적 점검: getElementById ID(adminApproveTab/approvalPanel/approvalOverlay/apStatus/apList)
+  + onclick 핸들러 4종 모두 정의·매칭 확인.
+
+### 테스트 체크리스트 (배포 후 수동 확인)
+- [ ] 일반 사용자 로그인 시 '회원 승인' 탭 미노출
+- [ ] yesblue0342/admin 로그인 시 '회원 승인' 탭 노출
+- [ ] 동일 ID 재가입 → "가입한 ID가 존재합니다…" 차단(비번 일치해도 차단)
+- [ ] 동일 e-mail 재가입 → "가입한 e-mail이 존재합니다…" 차단
+- [ ] 승인 패널: pending 목록/빈 목록/로딩·에러 표시
+- [ ] 승인/거절 버튼 → 처리 후 목록 자동 새로고침, 해당 사용자 로그인 가능/불가 반영
+- [ ] admin 계정 비번 자동(admin), 그 외 관리자 비번 1회 입력 캐시
