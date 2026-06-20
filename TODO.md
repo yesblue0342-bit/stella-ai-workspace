@@ -17,7 +17,7 @@
 - [x] CC-2. 하단 컨트롤 1줄: 모델/예산/테마(🌙)/OMC 한 줄(nowrap+가로스크롤), 테마 토글을 상단→하단 이동, "모델" 라벨 제거.
 - [x] CC-3. 프롬프트 입력 라인 Stella GPT식(둥근 pill 컨테이너 + 라운드 버튼).
 - [x] CC-5. 개발 완료 산출물 Google Drive(StellaGPT/0download) 자동 저장 — 완료 시 saveToGithub(true)→/api/cc/save-drive 자동 호출 확인됨.
-- [ ] CC-4. cc 입력창 이미지/첨부 파일 업로드(상세 개발용) — 백엔드(Managed Agents turn) 첨부 수용 필요(다음 반복).
+- [x] CC-4. cc/codex 입력창 이미지 첨부 — 프런트(📎 버튼+파일선택+붙여넣기, 개당 3.5MB 상한, base64), 백엔드(`_maclient.sendUserMessage`가 attachments→image 콘텐츠 블록, start.js/turn.js 통과). 텍스트는 항상 보장 경로(첨부 단독 전송도 허용). ※ Managed Agents 런타임 image 블록 수용은 Claude 기반이라 지원 예상이나 샌드박스 자격증명 부재로 라이브 미검증.
 - [x] CC-6. 빠른 즐겨찾기에 Stella Codex 앱 추가 — `codex.html`(cc.html 동일 레이아웃, 명칭 "Stella Codex", 아이콘 ⌨ 흑백 통일), 바로가기에 Agent Code 바로 아래 배치(index.html/abap.html), `/codex`·`/stella-codex` 라우트(vercel.json), sw.js network-first+캐시 v48. ※ 백엔드는 현재 Agent Code(Managed Agents) 런타임 재사용 — OpenAI Codex 전용 코드실행 런타임이 인프라에 없어 추후 분리(아래 가정 로그).
 
 ## Stella Agent Code 미세 개선 (iter 4)

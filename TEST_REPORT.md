@@ -76,3 +76,17 @@
 - 재검증: vercel.json JSON OK · codex.html scripts bad=0 · grep 7/7 PASS · 회귀 없음.
 - 배포: main 푸시 → Vercel 자동 배포. SW 캐시 stella-v48.
 - 가정: Stella Codex 백엔드는 현 Agent Code(Managed Agents) 재사용. OpenAI Codex 백엔드 분리는 신규 인프라 필요 → 후속.
+
+## 2026-06-20 (iter 6) · CC-4 cc/codex 이미지 첨부 업로드 · pass 5/5
+- node --check api/cc/_maclient.mjs · start.js · turn.js → OK
+- cc.html / codex.html 인라인+모듈 스크립트 bad=0
+- grep: cc.html 첨부 wiring 12 hit / codex.html 12 hit / start.js·turn.js attachments / _maclient image 블록 ✅
+요약 3줄:
+1. 프런트: iorow에 📎 버튼+숨김 file input(image/*, multiple)+붙여넣기(paste) 캡처, base64 변환(개당 3.5MB 상한, Vercel 본문 한도 보호), 첨부 칩 strip(개별 삭제), 전송 후 비움.
+2. 백엔드: `sendUserMessage(sessionId,text,attachments)`가 `buildContent`로 image 콘텐츠 블록 생성(텍스트는 항상 보장 경로). start.js/turn.js가 body의 attachments 통과, turn은 첨부 단독 전송도 허용.
+3. 신규 API 키/라우트 0(기존 /api/cc/* 재사용). ⚠ Managed Agents 런타임 image 블록 수용은 Claude 기반이라 지원 예상이나 샌드박스 자격증명 부재로 라이브 미검증 — 텍스트 경로 회귀 없음.
+
+## FINAL (iter 6)
+- 재검증: 백엔드 3종 node --check OK · cc/codex 스크립트 bad=0 · grep 5/5 PASS · 텍스트 경로 회귀 없음.
+- 배포: main 푸시 → Vercel 자동 배포. SW 캐시 stella-v49.
+- 한계: 이미지 블록의 런타임 실제 수용은 라이브(Vercel+Managed Agents 자격증명)에서만 확인 가능. 미지원 시에도 텍스트 전송은 영향 없음(첨부는 additive).

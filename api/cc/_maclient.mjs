@@ -80,10 +80,26 @@ export async function createSession(agentId, environmentId, title) {
   return s.id;
 }
 const SP = (id) => "/v1/sessions/" + encodeURIComponent(id);
-export async function sendUserMessage(sessionId, text) {
+// 첨부(이미지) 지원: attachments = [{ media_type, data(base64) }] → image 콘텐츠 블록 변환.
+// 텍스트는 항상 보장 경로. 잘못된 첨부는 조용히 건너뛰어 텍스트 전송이 깨지지 않게 함.
+function buildContent(text, attachments) {
+  const blocks = [];
+  if (Array.isArray(attachments)) {
+    for (const a of attachments) {
+      if (!a || !a.data) continue;
+      const mt = String(a.media_type || "image/png");
+      if (!/^image\//.test(mt)) continue; // 이미지만 (런타임 지원 범위)
+      blocks.push({ type: "image", source: { type: "base64", media_type: mt, data: String(a.data) } });
+    }
+  }
+  const t = String(text || "");
+  if (t || blocks.length === 0) blocks.push({ type: "text", text: t });
+  return blocks;
+}
+export async function sendUserMessage(sessionId, text, attachments) {
   return maFetch(SP(sessionId) + "/events?beta=true", {
     method: "POST",
-    body: { events: [{ type: "user.message", content: [{ type: "text", text: String(text || "") }] }] },
+    body: { events: [{ type: "user.message", content: buildContent(text, attachments) }] },
   });
 }
 export async function interruptSession(sessionId) {

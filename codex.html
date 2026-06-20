@@ -99,7 +99,7 @@ body:not(.dark) .app-ico{filter:grayscale(1) brightness(0)!important}
   <button type="button" class="hamb" id="hambBtn" title="상단 앱 전환 바 접기/펴기 (넓은 화면)">☰</button>
   <h1><span class="app-ico-wrap"><span class="app-ico">⌨️</span></span><span class="app-title-text">Stella Codex</span></h1>
   <nav class="nav">
-    <a href="/"><span class="app-ico-wrap"><span class="app-ico">🤖</span></span>GPT</a><a href="/talk"><span class="app-ico-wrap"><span class="app-ico">💬</span></span>Talk</a><a href="/db"><span class="app-ico-wrap"><span class="app-ico">🗄</span></span>DB</a><a href="/hub"><span class="app-ico-wrap"><span class="app-ico">🌐</span></span>Hub</a><a href="/abap"><span class="app-ico-wrap"><span class="app-ico">🧑‍💻</span></span>ABAP</a><a href="/cc"><span class="app-ico-wrap"><span class="app-ico">🛠</span></span>Code</a><a href="/codex" class="active"><span class="app-ico-wrap"><span class="app-ico">⌨️</span></span>Codex</a>
+    <a href="/"><span class="app-ico-wrap"><span class="app-ico">🤖</span></span>GPT</a><a href="/talk"><span class="app-ico-wrap"><span class="app-ico">💬</span></span>Talk</a><a href="/db"><span class="app-ico-wrap"><span class="app-ico">🗄</span></span>DB</a><a href="/hub"><span class="app-ico-wrap"><span class="app-ico">🌐</span></span>Hub</a><a href="/abap"><span class="app-ico-wrap"><span class="app-ico">🧑‍💻</span></span>ABAP</a><a href="/cc"><span class="app-ico-wrap"><span class="app-ico">🛠</span></span>Code</a><a href="/codex" class="active"><span class="app-ico-wrap"><span class="app-ico">⌨</span></span>Codex</a>
     <button type="button" class="theme-toggle" id="sessBtn" title="세션 목록">🗂</button>
     <button type="button" class="theme-toggle" id="fsBtn" title="코드 풀스크린">⛶</button>
   </nav>
@@ -122,7 +122,10 @@ body:not(.dark) .app-ico{filter:grayscale(1) brightness(0)!important}
         <button type="button" id="saveGhBtn" title="이 세션 산출물을 Google Drive(StellaGPT/0download)에 저장" style="display:none">💾 Drive에 저장</button>
         <span class="status" id="status"></span>
       </div>
+      <div id="attachStrip" style="display:none;gap:8px;flex-wrap:wrap;padding:4px 6px"></div>
       <div class="iorow">
+        <input type="file" id="attachInput" accept="image/*" multiple style="display:none">
+        <button class="act" id="attachBtn" type="button" title="이미지 첨부" style="padding:0 12px">📎</button>
         <textarea id="prompt" placeholder="코딩 작업을 입력하세요 (Enter 전송 / Shift+Enter 줄바꿈)"></textarea>
         <button class="act" id="sendBtn">전송</button>
         <button class="act" id="cancelBtn">중단</button>
@@ -203,17 +206,38 @@ $('themeToggle').addEventListener('click', toggleTheme);
 // ── OMC(oh-my-claudecode) 멀티에이전트 모드 토글 (영속) ──
 (function initOmc(){
   const cb = $('omc');
-  try { cb.checked = localStorage.getItem('stella_cc_omc') === '1'; } catch(e){}
-  cb.addEventListener('change', () => { try { localStorage.setItem('stella_cc_omc', cb.checked ? '1' : '0'); } catch(e){} });
+  try { cb.checked = localStorage.getItem('stella_codex_omc') === '1'; } catch(e){}
+  cb.addEventListener('change', () => { try { localStorage.setItem('stella_codex_omc', cb.checked ? '1' : '0'); } catch(e){} });
 })();
 
 function esc(s){ return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
 function setStatus(html){ $('status').innerHTML = html || ''; }
 
-function addUserBubble(text){
+function addUserBubble(text, attCount){
   const d = document.createElement('div'); d.className='bubble user'; d.textContent = text;
+  if(attCount>0){ const b=document.createElement('div'); b.className='lbl'; b.style.marginTop='4px'; b.textContent='📎 이미지 '+attCount+'개 첨부'; d.appendChild(b); }
   const m=$('msgs'); const empty=m.querySelector('.empty'); if(empty) empty.remove();
   m.appendChild(d); m.scrollTop=m.scrollHeight;
+}
+
+// 이미지 첨부: base64 콘텐츠 블록으로 /api/cc/start|turn 에 전달. Vercel 본문 한도 보호용 개당 3.5MB 상한.
+let pendingAtt=[];
+const ATT_MAX=3.5*1024*1024;
+function renderAttStrip(){
+  const s=$('attachStrip'); if(!s) return;
+  if(!pendingAtt.length){ s.style.display='none'; s.innerHTML=''; return; }
+  s.style.display='flex';
+  s.innerHTML=pendingAtt.map((a,i)=>'<span class="lbl" style="border:1px solid var(--line);border-radius:10px;padding:3px 8px">📎 '+esc(a.name)+' <a href="#" data-i="'+i+'" class="attDel" style="color:var(--err,#c00);text-decoration:none">✕</a></span>').join('');
+  s.querySelectorAll('.attDel').forEach(el=>el.addEventListener('click',e=>{e.preventDefault();pendingAtt.splice(+el.dataset.i,1);renderAttStrip();}));
+}
+function addFiles(files){
+  for(const f of files){
+    if(!f || !/^image\//.test(f.type)) continue;
+    if(f.size>ATT_MAX){ setStatus('<span class="err">'+esc(f.name)+': 이미지가 3.5MB를 초과해 건너뜀</span>'); continue; }
+    const r=new FileReader();
+    r.onload=()=>{ const s=String(r.result||''); const i=s.indexOf(','); if(i<0) return; pendingAtt.push({ name:f.name||'image', media_type:f.type, data:s.slice(i+1) }); renderAttStrip(); };
+    r.readAsDataURL(f);
+  }
 }
 
 // 진행 렌더: 같은 run을 한 컨테이너에 다시 그림
@@ -289,20 +313,22 @@ function setUIBusy(busy){
 
 async function send(){
   const text = $('prompt').value.trim();
-  if(!text) return;
+  const att = pendingAtt.slice();
+  if(!text && !att.length) return;
   $('prompt').value=''; $('prompt').style.height='';
+  pendingAtt=[]; renderAttStrip();
   const model = $('model').value;
   const budgetUsd = Math.max(0.01, Math.min(Number($('budget').value)||20, 50));
 
   if(cur && !cur.run.done){ return; } // 진행 중이면 무시(중단 후)
-  addUserBubble(text);
+  addUserBubble(text, att.length);
   setUIBusy(true); setStatus('시작 중…');
 
   if(cur && cur.sessionId && cur.run && cur.run.done){
     // 같은 세션 후속 턴
     cur.run = new AgentRun(); cur.attempt=0; cur.stopped=false; cur._host=null; cur.prompt=text;
     try{
-      const r=await fetch('/api/cc/turn',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({session:cur.sessionId,prompt:text})});
+      const r=await fetch('/api/cc/turn',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({session:cur.sessionId,prompt:text,attachments:att})});
       const d=await r.json(); if(!r.ok||d.error) throw new Error(d.message||d.error||'turn 실패');
       poll();
     }catch(e){ setStatus('<span class="err">'+esc(e.message)+'</span>'); setUIBusy(false); }
@@ -312,7 +338,7 @@ async function send(){
   cur = { sessionId:null, model, budgetUsd, title:text.replace(/[\p{Cc}\p{Cf}]/gu,' ').replace(/\s+/g,' ').trim().slice(0,60), run:new AgentRun(), attempt:0, polling:true, stopped:false, prompt:text };
   try{
     const r=await fetch('/api/cc/start',{method:'POST',headers:{'Content-Type':'application/json'},
-      body:JSON.stringify({ model, prompt:text, title:cur.title, budgetUsd, omc: $('omc').checked })});
+      body:JSON.stringify({ model, prompt:text, title:cur.title, budgetUsd, omc: $('omc').checked, attachments:att })});
     const d=await r.json(); if(!r.ok||d.error) throw new Error(d.message||d.error||'start 실패');
     cur.sessionId=d.sessionId; cur.model=d.model; cur.budgetUsd=d.budgetUsd;
     setStatus('세션 '+d.sessionId.slice(0,12)+'… 진행 중'); poll();
@@ -359,6 +385,9 @@ $('prompt').addEventListener('keydown', function(e){
 $('prompt').addEventListener('input',function(){ this.style.height='auto'; this.style.height=Math.min(this.scrollHeight,160)+'px'; });
 $('sendBtn').addEventListener('click', send);
 $('cancelBtn').addEventListener('click', cancel);
+$('attachBtn').addEventListener('click', ()=>$('attachInput').click());
+$('attachInput').addEventListener('change', e=>{ addFiles(e.target.files); e.target.value=''; });
+$('prompt').addEventListener('paste', e=>{ const items=(e.clipboardData&&e.clipboardData.items)||[]; const imgs=[]; for(const it of items){ if(it.kind==='file'){ const f=it.getAsFile(); if(f&&/^image\//.test(f.type)) imgs.push(f); } } if(imgs.length){ e.preventDefault(); addFiles(imgs); } });
 $('refreshBtn').addEventListener('click', loadSessions);
 $('saveGhBtn').addEventListener('click', () => saveToGithub(false));
 

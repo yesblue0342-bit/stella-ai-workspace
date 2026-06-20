@@ -7,10 +7,11 @@ export const config = { maxDuration: 30 };
 export default async function handler(req, res) {
   if (req.method !== "POST") return res.status(405).json({ error: "POST only" });
   try {
-    const { session, prompt } = req.body || {};
+    const { session, prompt, attachments } = req.body || {};
     if (!session) return res.status(400).json({ error: "session required" });
-    if (!prompt || !String(prompt).trim()) return res.status(400).json({ error: "prompt required" });
-    await MA.sendUserMessage(session, prompt);
+    const hasAtt = Array.isArray(attachments) && attachments.length > 0;
+    if ((!prompt || !String(prompt).trim()) && !hasAtt) return res.status(400).json({ error: "prompt required" });
+    await MA.sendUserMessage(session, prompt, attachments);
     const row = await getSessionRow(session);
     if (row) await saveSession({ id: session, title: row.title, model: row.model, agentId: row.agent_id, environmentId: row.environment_id, status: "running", driveFileId: row.drive_file_id, costUsd: row.cost_usd, budgetUsd: row.budget_usd });
     return res.status(200).json({ ok: true });
