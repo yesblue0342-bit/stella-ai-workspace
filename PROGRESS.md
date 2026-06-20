@@ -147,3 +147,52 @@ STATUS: IN_PROGRESS
 - [ ] 승인 패널: pending 목록/빈 목록/로딩·에러 표시
 - [ ] 승인/거절 버튼 → 처리 후 목록 자동 새로고침, 해당 사용자 로그인 가능/불가 반영
 - [ ] admin 계정 비번 자동(admin), 그 외 관리자 비번 1회 입력 캐시
+
+---
+
+## 2026-06-20 Stella Talk 전면 개선 (STAGE 1~3 배포)
+
+### STAGE 1 — 실시간 수신: 증분 동기화 + 적응형 폴링 + 낙관적 전송
+- api/chat-room.js action=get: `since`(ms epoch) 지원 → createdAt>since 메시지만, `limit` 지원
+  → 최근 limit개만. 응답에 serverTime/lastMessageAt/hasMore/total 추가. (없으면 전체=하위호환)
+- api/chat-room-sse.js 신규(롱폴링): since 이후 새 메시지를 최대 25초 대기 후 반환(maxDuration 30 준수).
+- talk.html:
+  - 증분 동기화: _lastSyncAt[roomId] 보관, 폴링은 since=_lastSyncAt 로 새 메시지만 union 병합.
+    방 첫 진입 시에만 limit=100 전체 1회. 기존 dedup/clientId/FIX-LOCK 병합 로직 유지.
+  - 적응형 폴링: 활성(최근 15초 송수신) 1초 / 유휴 3초 / document.hidden 5초 (자기 스케줄링 setTimeout).
+  - sendMsg 낙관적 렌더 유지 + send 응답의 확정 message 로 즉시 교체(체감 실시간). clientId 중복 방지.
+  - visibilitychange=visible / focus 시 즉시 풀 동기화(full) → 백그라운드 누적 메시지 즉시 표시.
+  - SSE/롱폴링 전환 지점 주석화 + USE_LONGPOLL 플래그(기본 false=적응형 폴링, 서버리스 안정성 우선).
+  - [가정] 롱폴 엔드포인트는 배포하되 클라 기본은 적응형 폴링. 1초 폴링으로 "1초 내 수신" 충족.
+
+### STAGE 2 — 알림음 안정화 (TTS 의존 제거)
+- talk.html: 주 알림음을 WebAudio 합성 멜로디(playMelody)로 교체. 우선순위 (옵션)mp3 → 멜로디.
+  TTS(speakVoice)는 미리듣기 전용으로 강등.
+- TALK_VOICES[key].melody = [주파수,오프셋,길이] 배열로 음성키별 0.3~0.5초 구분 멜로디 정의.
+- 재생 직전 _audioCtx.resume(). visibilitychange/focus 마다 _wakeAudio()로 audioCtx + speechSynthesis 큐 깨우기.
+- 각 음은 독립 oscillator(cancel 의존 제거) → 직전 재생 미완료여도 안 막힘.
+- 연타 방지: 250ms 디바운스, 단 메시지 id 다르면 항상 재생. silent/vibrate 모드 유지.
+
+### STAGE 3 — 읽음("1")/안읽음 정확도
+- api/chat-room.js action=read: reads 저장을 max(기존,신규)로 monotonic 보강(되돌림 금지).
+- talk.html: 방 목록 unread = max(로컬 lastReadAt, 서버 reads[myId]) 기준 → 기기 간 어긋남 제거.
+- 그룹 안읽음 "남은 인원수" 버블 옆 표시(countUnreadByOthers)·1:1 "1"은 기존 구현 유지.
+- 현재 보는 방 새 메시지 → 즉시 read 보고(기존) 유지.
+
+### STAGE 7 일부(선반영) — 과거 메시지 보는 중 강제 스크롤 금지
+- 새 메시지 도착 시 하단 근처가 아니면 강제 스크롤 대신 "▼ 새 메시지 N개" 칩 표시(showNewMsgChip).
+
+### 서비스워커 캐시: v34 → v35
+
+### node --check / 문법 검증
+- api/chat-room.js ...... OK
+- api/chat-room-sse.js .. OK
+- sw.js ................. OK
+- talk.html 임베드 <script> 3블록 전부 OK (new Function 파싱)
+
+### 남은 STAGE (다음 배포 예정)
+- STAGE 4 멤버/초대/방 정합성 + 권한·보안(서버 멤버 검증, 결정적 dm roomId, XSS 점검)
+- STAGE 5 성능(렌더 최근 N개 + 과거 lazy load; 이미지 base64 금지→Drive URL만)
+- STAGE 6 SW 백그라운드 수신/알림 고도화(per-room 뮤트, 알림 합치기, 멘션, 인앱 토스트)
+- STAGE 7 나머지(상대 입력중 안정화, 오프라인 배너+미전송 큐, URL 링크화)
+- STAGE 8 (선택) 길게눌러 답장/반응 이모지/방내 검색

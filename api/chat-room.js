@@ -29,17 +29,37 @@ export default async function handler(req, res) {
     if (action === "get") {
       const roomId = makeRoomId(req.query.roomId || req.query.room);
       if (!roomId) return res.status(400).json({ ok: false, message: "roomId 필요" });
+      const serverTime = Date.now();
       const f = await readJsonFromDrive({ folderPath: ["MemberChat"], fileName: roomId });
-      if (!f?.data) return res.status(200).json({ ok: true, room: null, messages: [], reads: {}, typing: {} });
+      if (!f?.data) return res.status(200).json({ ok: true, room: null, messages: [], reads: {}, typing: {}, serverTime, lastMessageAt: 0, hasMore: false });
       // reads/typing은 별도 meta 파일에 보관(메시지 파일을 건드리지 않아 동시쓰기로 메시지가 사라지는 레이스 방지).
       // meta가 없으면 레거시(메시지 파일 내부 reads/typing)로 폴백.
       const meta = await readMeta(roomId);
+      // STAGE 1: 증분 동기화 — since(ms epoch) 있으면 그 이후 메시지만, limit 있으면 최근 limit개만.
+      //          since/limit 모두 없으면 전체 반환(하위호환). since 우선(증분 폴링 경로).
+      const allMsgs = Array.isArray(f.data.messages) ? f.data.messages : [];
+      const msgTime = (m) => { const t = new Date(m && m.createdAt).getTime(); return isNaN(t) ? 0 : t; };
+      const since = Number(req.query.since || 0) || 0;
+      const limit = Number(req.query.limit || 0) || 0;
+      let out = allMsgs;
+      let hasMore = false;
+      if (since > 0) {
+        out = allMsgs.filter((m) => msgTime(m) > since);          // 새 메시지만
+      } else if (limit > 0 && allMsgs.length > limit) {
+        out = allMsgs.slice(-limit);                              // 최근 limit개
+        hasMore = true;                                           // 위로 더 불러올 과거 메시지 있음
+      }
+      const lastMsg = allMsgs[allMsgs.length - 1];
       return res.status(200).json({
         ok: true,
         room: f.data,
-        messages: f.data.messages || [],
+        messages: out,
         reads: (meta && meta.reads) || f.data.reads || {},
-        typing: (meta && meta.typing) || f.data.typing || {}
+        typing: (meta && meta.typing) || f.data.typing || {},
+        serverTime,
+        lastMessageAt: lastMsg ? msgTime(lastMsg) : 0,
+        hasMore,
+        total: allMsgs.length
       });
     }
 
@@ -50,7 +70,8 @@ export default async function handler(req, res) {
       if (!roomId || !userId) return res.status(400).json({ ok: false, message: "roomId, userId 필요" });
       const meta = (await readMeta(roomId)) || (await seedMeta(roomId));
       meta.reads = meta.reads || {};
-      meta.reads[userId] = Date.now();
+      // STAGE 3: 읽음 시각은 단조 증가만 (read-modify-write 레이스로 과거 값이 와도 되돌리지 않음)
+      meta.reads[userId] = Math.max(Number(meta.reads[userId]) || 0, Date.now());
       await saveMeta(roomId, meta);
       return res.status(200).json({ ok: true, reads: meta.reads });
     }

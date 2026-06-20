@@ -683,7 +683,9 @@ function renderRooms(){
     // 안읽은 메시지 카운트 (마지막 읽은 시각 이후 상대 메시지)
     let unread=0;
     if(!r.isMyChat&&!isActive){
-      const lastRead=r.lastReadAt||0;
+      // STAGE 3: 로컬 lastReadAt 과 서버 reads[myId] 중 "더 최신" 기준 → 기기 간 어긋남 제거
+      const serverRead=(r.reads&&myId&&r.reads[myId])?Number(r.reads[myId])||0:0;
+      const lastRead=Math.max(r.lastReadAt||0, serverRead);
       unread=(r.messages||[]).filter(function(m){
         return m.from!==myId && (m.at||0)>lastRead && m.type!=='system';
       }).length;
@@ -980,28 +982,48 @@ function openRoom(id){
   }
   renderMessages();
   renderRooms();
+  hideNewMsgChip();
   scrollBottom();
+  // STAGE 1: 방 첫 진입은 since 초기화 → 최근 100개 전체 1회 로드
+  _lastSyncAt[id]=0;
+  markActivity();
   // 서버에서 메시지 동기화 + 폴링 시작
-  syncRoomFromServer(true);
+  syncRoomFromServer(true,{full:true});
   reportRead(id);
   clearTalkNotifications(); // C4: 방 읽음 → 해당 알림 닫기
   startPolling();
 }
-// ── 폴링 / 실시간 수신 (향후 WebSocket/SSE로 교체 가능) ──
-// poll(roomId, callback) 형태로 분리 → 나중에 이 함수만 교체하면 됨
+// ── 폴링 / 실시간 수신 (STAGE 1: 증분 동기화 + 적응형 폴링) ──
+// _lastSyncAt[roomId] = 마지막으로 받은 serverTime(ms). 다음 폴링은 since=이 값으로 새 메시지만 요청.
+var _lastSyncAt = {};
+var _lastActivityAt = 0;                 // 최근 송수신 시각 → 활성 판정
+function markActivity(){ _lastActivityAt = Date.now(); }
+// 활성(최근 15초 내 송수신) 1초 / 유휴 3초 / 백그라운드 5초
+function pollDelay(){
+  if(document.hidden || document.visibilityState==='hidden') return 5000;
+  if(Date.now() - _lastActivityAt < 15000) return 1000;
+  return 3000;
+}
+function isNearBottom(){
+  try{ var el=document.getElementById('chatMessages'); if(!el) return true;
+    return (el.scrollHeight - el.scrollTop - el.clientHeight) < 140; }catch(e){ return true; }
+}
+// SSE/롱폴링 우선 시도 지점(전환 포인트): api/chat-room-sse.js 가 준비되어 USE_LONGPOLL=true 면
+// 롱폴링을 쓰고, 실패하면 아래 적응형 폴링으로 폴백. 기본은 안정성 위해 적응형 폴링.
+var USE_LONGPOLL = false;
+// 자기 스케줄링 폴링: 매 틱마다 pollDelay()로 다음 간격을 재계산(상태 변화 즉시 반영).
 function startPolling(){
   stopPolling();
-  // 현재: 3초 폴링 방식
-  _pollTimer = setInterval(async function(){
-    if(!_cur || _cur.isMyChat) return;
-    try{ await syncRoomFromServer(false); }catch(e){}
-  }, 2000);
+  (function loop(){
+    _pollTimer = setTimeout(async function(){
+      if(_cur && !_cur.isMyChat){ try{ await syncRoomFromServer(false); }catch(e){} }
+      loop();
+    }, pollDelay());
+  })();
 }
 function stopPolling(){
-  if(_pollTimer){ clearInterval(_pollTimer); _pollTimer=null; }
+  if(_pollTimer){ clearTimeout(_pollTimer); _pollTimer=null; }
 }
-// 향후 SSE 전환 시 이 함수를 교체:
-// function startPolling(){ const es=new EventSource('/api/chat-room-sse?roomId='+_cur.id); es.onmessage=e=>{ ... }; }
 
 // 서버 메시지를 로컬 형식으로 변환
 function serverMsgToLocal(m){
@@ -1054,34 +1076,48 @@ function mergeReadsMonotonic(roomObj, incoming){
   roomObj.reads=cur;
 }
 
-async function syncRoomFromServer(scrollAfter){
+// STAGE 1: 증분 동기화. opts.full=true 면 since 무시하고 최근 100개 전체 재조정(첫 진입/포커스 복귀).
+// 그 외에는 since=_lastSyncAt 로 새 메시지만 받아 union 병합(기존 dedup/clientId/FIX-LOCK 로직 유지).
+async function syncRoomFromServer(scrollAfter, opts){
   if(!_cur||_cur.isMyChat)return;
+  opts=opts||{};
+  const roomId=_cur.id;
+  const idx=_rooms.findIndex(x=>x.id===roomId);
+  if(idx<0)return;
+  const since=(!opts.full && _lastSyncAt[roomId]) ? _lastSyncAt[roomId] : 0;
+  let url='/api/chat-room?action=get&roomId='+encodeURIComponent(roomId);
+  if(since>0) url+='&since='+since;     // 증분: 새 메시지만
+  else url+='&limit=100';               // 첫 진입/풀 재조정: 최근 100개
   try{
-    const r=await fetch('/api/chat-room?action=get&roomId='+encodeURIComponent(_cur.id),{cache:'no-store'});
+    const r=await fetch(url,{cache:'no-store'});
     const d=await r.json();
     if(!d.ok)return;
-    // id 기준 중복 제거하여 서버 메시지로 교체
+    // 다음 폴링은 이 serverTime 이후 메시지만 받음 (lastMessageAt 폴백)
+    if(d.serverTime) _lastSyncAt[roomId]=d.serverTime;
+    else if(d.lastMessageAt) _lastSyncAt[roomId]=d.lastMessageAt;
+    // 과거 메시지 추가 로드용: hasMore/total 보관 (STAGE 5)
+    if(typeof d.hasMore!=='undefined') _rooms[idx]._hasMore=d.hasMore;
+    if(typeof d.total!=='undefined') _rooms[idx]._serverTotal=d.total;
+    // id 기준 중복 제거
     const serverMsgs=(d.messages||[]).map(serverMsgToLocal);
     const seen=new Set();
     const dedupedMsgs=serverMsgs.filter(m=>{ if(!m.id||seen.has(m.id)) return false; seen.add(m.id); return true; });
-    const idx=_rooms.findIndex(x=>x.id===_cur.id);
-    if(idx<0)return;
     const existingMsgs=(_rooms[idx].messages||[]);
     const prevCount=existingMsgs.length;
-    // FIX-LOCK [4] 빈 응답으로 기존 확정 메시지를 덮어쓰지 않음 (메시지 나왔다 사라지는 race 방지)
+    const wasNearBottom=isNearBottom();
+    // FIX-LOCK [4] 빈 응답으로 기존 확정 메시지를 덮어쓰지 않음 (증분 모드에선 "새 메시지 없음"이 정상)
     if(dedupedMsgs.length===0 && prevCount>0){
-      // 메시지는 보존하고 메타데이터(멤버/읽음/타이핑)만 갱신
       if(d.room&&d.room.members) _rooms[idx].members=d.room.members;
-      // FIX-LOCK [1] 단조 병합(되돌림 금지)
-      mergeReadsMonotonic(_rooms[idx], d.reads);
+      mergeReadsMonotonic(_rooms[idx], d.reads);   // FIX-LOCK [1] 단조 병합(되돌림 금지)
       showTypingIndicator(d.typing);
       _rooms[idx].lastReadAt=Date.now();
       _cur=_rooms[idx];
       saveRooms();
       reportRead(_cur.id);
+      renderRooms();
       return;
     }
-    // FIX-LOCK [4] id 기준 union 병합 (서버 우선) — 서버가 일부만 반환해도 기존 확정 메시지 보존 (빈배열 덮어쓰기 금지)
+    // FIX-LOCK [4] id 기준 union 병합 (서버 우선) — 증분이라도 기존 확정 메시지 보존
     const byId=new Map();
     existingMsgs.forEach(function(m){ if(m.id) byId.set(m.id, m); });   // 기존 baseline 보존
     dedupedMsgs.forEach(function(m){ if(m.id) byId.set(m.id, m); });    // 서버로 덮어쓰기(삭제/수정 반영)
@@ -1096,44 +1132,48 @@ async function syncRoomFromServer(scrollAfter){
       }
       return true;
     });
-    // 시간순 정렬
     merged.sort(function(a,b){ return (a.at||0) - (b.at||0); });
+    const newCount=merged.length-prevCount;   // 순증가분(임시→확정 교체는 0)
     _rooms[idx].messages = merged;
     if(d.room&&d.room.members) _rooms[idx].members=d.room.members;
-    // 상대방 읽음 정보 저장 (카톡 "1" 표시용)
-    // FIX-LOCK [1] 단조 병합(되돌림 금지)
-      mergeReadsMonotonic(_rooms[idx], d.reads);
-    // 상대방 타이핑 상태 표시
+    mergeReadsMonotonic(_rooms[idx], d.reads); // FIX-LOCK [1] 단조 병합(되돌림 금지)
     showTypingIndicator(d.typing);
-    // 현재 방을 보고 있으므로 읽음 처리
     _rooms[idx].lastReadAt=Date.now();
     _cur=_rooms[idx];
     saveRooms();
-    // 서버에 내가 읽었다고 보고
     reportRead(_cur.id);
-    // 키 기반 증분 렌더는 깜빡임이 없으므로 폴링마다 안전하게 호출 가능
-    // (변경 없으면 노드 전부 재사용 → 사실상 no-op, 삭제/수정/읽음표시도 반영)
     renderMessages();renderRooms();
-    if(serverMsgs.length!==prevCount){
-      if(scrollAfter||serverMsgs.length>prevCount) scrollBottom();
-      // 새 메시지 알림 (내가 보낸 게 아닐 때)
-      if(serverMsgs.length>prevCount){
-        const last=serverMsgs[serverMsgs.length-1];
-        const myId=getMyId();
-        if(last && last.from!==myId){
-          // ★ 알림 재생 (설정 모드: 소리/진동/무음 - 진동도 모드 내부에서 처리)
-          playNotifySound();
-          // 백그라운드면 푸시 알림
-          if(document.hidden || document.visibilityState==='hidden'){
-            notify(_cur.name, last.text||'📎 파일');
-          }
-          // 탭/파비콘 뱃지 즉시 갱신
-          updateAppBadge();
-        }
+    if(newCount>0){
+      const last=merged[merged.length-1];
+      const myId=getMyId();
+      const fromOther=last && last.from!==myId;
+      markActivity();   // 새 메시지 수신 → 활성(1초 폴링)
+      // STAGE 7: 과거 메시지 보는 중이면 강제 스크롤 금지 → "새 메시지" 칩만 표시
+      if(scrollAfter || !fromOther || wasNearBottom) scrollBottom();
+      else showNewMsgChip(newCount);
+      if(fromOther){
+        playNotifySound(last && last.id);
+        if(document.hidden || document.visibilityState==='hidden') notify(_cur.name, last.text||'📎 파일');
+        updateAppBadge();
       }
     }
   }catch(e){}
 }
+// STAGE 7: "새 메시지" 칩 (과거 메시지 보는 중 새 메시지 도착 시 하단에 표시, 탭하면 최하단으로)
+function showNewMsgChip(n){
+  try{
+    var chip=document.getElementById('newMsgChip');
+    if(!chip){
+      chip=document.createElement('div'); chip.id='newMsgChip';
+      chip.style.cssText='position:absolute;left:50%;bottom:84px;transform:translateX(-50%);background:var(--accent,#7c3aed);color:#fff;padding:8px 16px;border-radius:20px;font-size:.82rem;font-weight:700;box-shadow:0 4px 14px rgba(0,0,0,.25);cursor:pointer;z-index:50';
+      chip.onclick=function(){ scrollBottom(); hideNewMsgChip(); };
+      var host=document.getElementById('chatRoom')||document.body; host.appendChild(chip);
+    }
+    chip.textContent='▼ 새 메시지 '+(n>0?n+'개':'');
+    chip.style.display='block';
+  }catch(e){}
+}
+function hideNewMsgChip(){ try{ var c=document.getElementById('newMsgChip'); if(c) c.style.display='none'; }catch(e){} }
 function reportRead(roomId){
   const myId=getMyId();
   if(!myId||myId==='나')return;
@@ -1193,21 +1233,35 @@ function clearTalkNotifications(){
   try{ updateAppBadge(); }catch(e){}
 }
 // C4: 앱이 다시 보이고 방을 보고 있으면 알림 닫기
+// STAGE 1: 포커스/가시성 복귀 시 즉시 1회 풀 동기화 → 백그라운드에 쌓인 메시지 즉시 표시.
+// STAGE 2: 복귀 시 오디오/음성 큐 깨우기(다시 안 울림 방지).
+function _wakeAudio(){
+  try{ if(_audioCtx && _audioCtx.state==='suspended') _audioCtx.resume(); }catch(e){}
+  try{ if('speechSynthesis' in window) window.speechSynthesis.resume(); }catch(e){}
+}
 document.addEventListener('visibilitychange', function(){
-  if(document.visibilityState==='visible' && _cur && !_cur.isMyChat) clearTalkNotifications();
+  if(document.visibilityState==='visible'){
+    _wakeAudio();
+    if(_cur && !_cur.isMyChat){ clearTalkNotifications(); markActivity(); syncRoomFromServer(false,{full:true}); }
+  }
 });
-window.addEventListener('focus', function(){ if(_cur && !_cur.isMyChat) clearTalkNotifications(); });
+window.addEventListener('focus', function(){
+  _wakeAudio();
+  if(_cur && !_cur.isMyChat){ clearTalkNotifications(); markActivity(); syncRoomFromServer(false,{full:true}); }
+});
 
 // ── 알림 (Web Speech API - 실제 음성) ──
 // FIX-LOCK [2] 5종 옵션. 귀여운 8살 여아 톤을 위해 pitch 1.6~1.8 / rate ~1.05로 조정.
 // ko-KR voice 우선 → 없으면 기본 voice → 그것도 불가면 비프음.
+// STAGE 2: melody = [주파수Hz, 시작오프셋s, 길이s] 배열 — WebAudio 합성 알림음(파일 불필요, 항상 동작).
+//          음성키별로 짧고(0.3~0.5초) 구분되는 멜로디. TTS는 미리듣기 전용으로 강등.
 var TALK_VOICES = {
-  's1':        {emoji:'⭐', label:'스텔라~',      phrase:'스텔라',     rate:1.05, pitch:1.75},
-  's2':        {emoji:'✨', label:'스텔라~톡',    phrase:'스텔라 톡',  rate:1.08, pitch:1.70},
-  'byeolping': {emoji:'💫', label:'우리 별핑~',   phrase:'우리 별핑',  rate:1.05, pitch:1.80},
-  'gongju':    {emoji:'👸', label:'별하 공주님~', phrase:'별하 공주님',rate:1.02, pitch:1.65},
-  'byeolha':   {emoji:'🌟', label:'김별하~',      phrase:'김별하',     rate:1.05, pitch:1.72},
-  'queen':     {emoji:'👑', label:'앵쥬 왕비님~', phrase:'앵쥬 왕비님',rate:1.0,  pitch:1.55} // D1: 가족 음성 옵션
+  's1':        {emoji:'⭐', label:'스텔라~',      phrase:'스텔라',     rate:1.05, pitch:1.75, melody:[[659.25,0,0.18],[987.77,0.16,0.26]]},                 // 밝은 상승 2음(E5→B5)
+  's2':        {emoji:'✨', label:'스텔라~톡',    phrase:'스텔라 톡',  rate:1.08, pitch:1.70, melody:[[523.25,0,0.14],[659.25,0.13,0.14],[783.99,0.26,0.24]]}, // 3음 아르페지오(C5-E5-G5)
+  'byeolping': {emoji:'💫', label:'우리 별핑~',   phrase:'우리 별핑',  rate:1.05, pitch:1.80, melody:[[783.99,0,0.16],[1046.50,0.15,0.26]]},                // G5→C6 통통
+  'gongju':    {emoji:'👸', label:'별하 공주님~', phrase:'별하 공주님',rate:1.02, pitch:1.65, melody:[[880.00,0,0.15],[1108.73,0.14,0.15],[783.99,0.28,0.26]]}, // A5-C#6-G5 우아
+  'byeolha':   {emoji:'🌟', label:'김별하~',      phrase:'김별하',     rate:1.05, pitch:1.72, melody:[[698.46,0,0.16],[932.33,0.15,0.28]]},                // F5→A#5
+  'queen':     {emoji:'👑', label:'앵쥬 왕비님~', phrase:'앵쥬 왕비님',rate:1.0,  pitch:1.55, melody:[[392.00,0,0.22],[523.25,0.22,0.30]]}                  // 낮고 우아한 2음(G4→C5)
 };
 // FIX-LOCK [2] 실제 녹음(mp3) 교체 지점 — key별 mp3 경로를 넣으면 TTS 대신 우선 재생.
 // 예: { s1:'/sounds/stella.mp3', queen:'/sounds/queen.mp3', ... }. 파일 없으면 TTS 폴백.
@@ -1315,7 +1369,31 @@ function beepFallback(){
   }catch(e){}
 }
 
-// 선택 음성 문구를 실제로 읽기 (ko-KR → 기본 voice → 비프음)
+// STAGE 2: WebAudio 합성 멜로디 재생 — 주 알림음. 독립 oscillator 로 생성(cancel 의존 X)이라
+//          직전 재생이 안 끝나도 막히지 않음. 재생 직전 반드시 ctx.resume().
+function playMelody(key){
+  if(!TALK_VOICES[key]) key='s1';
+  var notes=(TALK_VOICES[key]&&TALK_VOICES[key].melody)||[[659.25,0,0.18],[987.77,0.16,0.26]];
+  try{
+    if(!_audioCtx){ _audioCtx=new (window.AudioContext||window.webkitAudioContext)(); }
+    var ctx=_audioCtx;
+    if(ctx.state==='suspended'){ try{ ctx.resume(); }catch(e){} }
+    var t0=ctx.currentTime+0.01;
+    notes.forEach(function(n){
+      var freq=n[0], off=n[1]||0, dur=n[2]||0.2;
+      var o=ctx.createOscillator(), g=ctx.createGain();
+      o.type='sine'; o.frequency.setValueAtTime(freq, t0+off);
+      o.connect(g); g.connect(ctx.destination);
+      g.gain.setValueAtTime(0.0001, t0+off);
+      g.gain.exponentialRampToValueAtTime(0.30, t0+off+0.02);
+      g.gain.exponentialRampToValueAtTime(0.0001, t0+off+dur);
+      o.start(t0+off); o.stop(t0+off+dur+0.03);
+    });
+    return true;
+  }catch(e){ return false; }
+}
+
+// 선택 음성 문구를 실제로 읽기 (ko-KR → 기본 voice → 비프음). STAGE 2: 미리듣기 전용.
 // FIX-LOCK [2] mp3 우선 → 없거나 실패하면 TTS → 그것도 불가면 비프음
 function speakVoice(key){
   if(!TALK_VOICES[key]) key='s1';
@@ -1350,12 +1428,27 @@ function ttsVoice(key){
 }
 
 // 메시지 수신 시 호출 - 설정 모드대로 소리/진동/무음
-function playNotifySound(){
+// STAGE 2: 주 알림음 = WebAudio 멜로디. 우선순위 (옵션)mp3 → 멜로디. TTS는 실알림에서 제외(미리듣기 전용).
+//          연타 방지: 250ms 디바운스, 단 메시지 id 다르면 항상 재생.
+var _lastNotifAt=0, _lastNotifMsgId='';
+function playNotifySound(msgId){
   try{
     var mode=getNotifMode();
     if(mode==='silent') return;
     if(mode==='vibrate'){ try{ if(navigator.vibrate) navigator.vibrate([120,60,120]); }catch(e){} return; }
-    speakVoice(getVoiceKey()); // sound 모드
+    var now=Date.now();
+    if(msgId){ if(msgId===_lastNotifMsgId && (now-_lastNotifAt)<250) return; }
+    else if((now-_lastNotifAt)<250) return;
+    _lastNotifAt=now; if(msgId) _lastNotifMsgId=msgId;
+    // 재생 직전 큐 깨우기(다시 안 울림 방지)
+    try{ if(_audioCtx && _audioCtx.state==='suspended') _audioCtx.resume(); }catch(e){}
+    var key=getVoiceKey();
+    var mp3=TALK_VOICE_MP3 && TALK_VOICE_MP3[key];
+    if(mp3){
+      try{ var a=_voiceAudioCache[key]||(_voiceAudioCache[key]=new Audio(mp3)); a.currentTime=0;
+        var p=a.play(); if(p&&p.catch) p.catch(function(){ playMelody(key); }); return; }catch(e){}
+    }
+    playMelody(key);   // 주 알림음
   }catch(e){}
 }
 
@@ -1366,15 +1459,17 @@ function setNotifyMode(mode){
   syncSoundUI();
   unlockAudio();
   if(mode==='vibrate'){ try{ if(navigator.vibrate) navigator.vibrate([120,60,120]); }catch(e){} }
-  else if(mode==='sound'){ speakVoice(getVoiceKey()); }
+  else if(mode==='sound'){ playMelody(getVoiceKey()); }   // 멜로디로 즉시 피드백
 }
 
 // 음성 선택 + 즉시 미리듣기 (선택 시 자동으로 소리 모드)
+// STAGE 2: 미리듣기는 멜로디 + TTS 둘 다 허용(설정 화면 한정).
 function previewSound(key){
   if(!TALK_VOICES[key]) key='s1';
   saveNotif({voiceKey:key, mode:'sound'});
   syncSoundUI();
   unlockAudio();
+  playMelody(key);
   speakVoice(key);
 }
 
@@ -2001,6 +2096,7 @@ async function sendMsg(){
     const tempId = 'm_'+Date.now()+'_'+Math.random().toString(36).slice(2,5);
     const tempMsg = {id:tempId, from:myId, fromName:myName, type:'text', text:finalText, at:Date.now(), sendState:'sending'};
     _rooms[idx].messages.push(tempMsg);
+    markActivity();   // STAGE 1: 전송 직후 1초 폴링(빠른 확정/수신)
     // 메시지 보냈으니 타이핑 중단
     if(_typingTimer)clearTimeout(_typingTimer);
     stopTyping();
@@ -2073,7 +2169,24 @@ function sendTextToServer(roomId, roomName, myId, myName, text, members, tempId)
     return r.json();
   }).then(function(d){
     if(!d.ok) throw new Error(d.message||'전송 실패');
-    // 성공 → 전송중 상태 제거
+    markActivity();
+    // STAGE 1: 폴링 안 기다리고 send 응답의 확정 message 로 즉시 교체(체감 실시간 + 정확한 id/시각).
+    if(d.message){
+      const i2=_rooms.findIndex(function(r){return r.id===roomId;});
+      if(i2>=0){
+        const arr=_rooms[i2].messages||[];
+        const confirmed=serverMsgToLocal(d.message);
+        confirmed.sendState='sent';
+        const ti=arr.findIndex(function(x){return x.id===tempId;});
+        if(ti>=0){ arr[ti]=confirmed; }                                  // 임시본 → 확정본 교체
+        else if(!arr.some(function(x){return x.id===confirmed.id;})){ arr.push(confirmed); }
+        _rooms[i2].messages=arr;
+        if(_cur && _cur.id===roomId){ _cur=_rooms[i2]; saveRooms(); renderMessages(); renderRooms(); }
+        else { saveRooms(); }
+        return;
+      }
+    }
+    // 확정 message 없으면 상태만 sent 처리
     updateMsgState(roomId, tempId, 'sent');
   }).catch(function(e){
     console.warn('[Talk] 전송 실패:', e.message);
@@ -2106,7 +2219,7 @@ function retryMsg(msgId){
   sendTextToServer(_cur.id, _cur.name, myId, myName, m.text, _cur.members||[myId], msgId);
 }
 
-function scrollBottom(){setTimeout(function(){const el=document.getElementById('chatMessages');el.scrollTop=el.scrollHeight;},50);}
+function scrollBottom(){setTimeout(function(){const el=document.getElementById('chatMessages');if(el)el.scrollTop=el.scrollHeight;hideNewMsgChip();},50);}
 
 // ── 설정 패널 ──
 function openSettings(){document.getElementById('settingsPanel').classList.add('on');document.getElementById('settingsOverlay').classList.add('on');}
