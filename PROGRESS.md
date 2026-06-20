@@ -231,3 +231,28 @@ STATUS: IN_PROGRESS
 ### 서비스워커 캐시: v35 → v36
 ### 검증: index/abap/hub 임베드 스크립트 new Function 파싱 OK. cc는 <script type=module>(import)
   이라 정적 파서 예외이나 편집은 HTML(스타일/span)만 → 영향 없음.
+
+---
+
+## 2026-06-20 restore.html 검토·수정
+
+### API 정합성 확인 (grep으로 실제 응답 확인 후 코드 검증)
+- /api/workspace GET ?owner= → {ok, owner, rooms, projects, posts, updated_at}. POST {owner, rooms, projects, posts}. → restore.html 필드명 일치(이미 정확).
+- /api/note ?action=list&userId= → {ok, notes, total}. ?action=save POST {id, userId(body 허용), title, body}. → 일치.
+- /api/hybrid-chat-list ?userId= → {ok, items:[{room_id,title,project_id,drive_file_id,drive_link,message_count,created_at,updated_at}]}. → restore의 (d.rooms||d.items) + room_id/title/drive_file_id/project_id/created_at 일치.
+  ⇒ 코드 가정이 실제 API와 일치하여 필드명 변경 불필요.
+
+### 수정 결과
+1. owner/세션 id 정합성: 단일 기준 id ownerId()(세션 user.id 우선)로 조회·복원·저장 전부 통일.
+   로드 시 세션 id로 입력칸 자동 동기화 + checkIdSync()로 "세션 id(X) 기준 저장" 안내/경고(입력≠세션 시).
+2. 중복 workspace 호출 제거: restoreAll에서 /api/workspace를 1회만 호출해 rooms/posts/projects 함께 재사용(기존 3회→1회). (검증: 전체 파일 내 workspace fetch = scan 1 + restore 1 = 2회)
+3. 테마 대응: body #0f172a 하드코딩 다크 유지 + @media (prefers-color-scheme: light) 로 라이트=밝은 배경/어두운 글자. (수동 토글 없는 독립 페이지라 시스템 설정 추종)
+4. UX/안전장치: 실행 중 버튼 비활성화+"⏳ 처리 중...", 빈 id 경고 후 중단, "기존 로컬과 병합" 명시, 모든 fetch cache:'no-store'.
+5. 오류 가시성/접근성: ok:false·네트워크 실패 시 다음 행동(재로그인/모바일 선저장/네트워크 확인) 안내, localStorage 차단 시 친절한 메시지, vercel.json에 {source:/restore} rewrite 추가.
+
+### 검증/배포
+- restore.html 임베드 스크립트 new Function 파싱 OK. vercel.json 유효 JSON.
+- 서비스워커 캐시 v36 → v37.
+
+### 남은 과제(다음 단계)
+- 세션이 있는데 사용자가 일부러 다른 id를 조회하려는 시나리오: 현재는 세션 id 우선(경고 표시). 필요 시 "입력 id 강제 조회" 토글 추가 검토.

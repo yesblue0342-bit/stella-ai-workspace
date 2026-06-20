@@ -20,6 +20,23 @@ button{width:100%;border:none;border-radius:10px;padding:12px;font-size:.95rem;c
 .ok{color:#34d399}.err{color:#f87171}.warn{color:#fbbf24}.info{color:#94a3b8}
 .badge{display:inline-block;background:#7c3aed;color:#fff;border-radius:20px;padding:2px 10px;font-size:.78rem;margin-left:6px}
 .step{color:#a78bfa;font-weight:700}
+.notice{font-size:.8rem;line-height:1.5;border-radius:10px;padding:10px 12px;margin-bottom:10px}
+.notice.id{background:#1e3a5f;color:#bfdbfe}
+.notice.warn{background:#422006;color:#fcd34d}
+button:disabled{opacity:.55;cursor:not-allowed}
+/* 라이트 모드 대응 (수동 토글 없음 → 시스템 설정 따름). 다크는 위 기본값 유지. */
+@media (prefers-color-scheme: light){
+  body{background:#f6f8fa;color:#0f172a}
+  h1{color:#7c3aed}
+  .sub{color:#64748b}
+  .card{background:#fff;border:1px solid #e5e7eb;box-shadow:0 2px 10px rgba(15,23,42,.05)}
+  .card h3{color:#475569}
+  input{background:#fff;border:1px solid #cbd5e1;color:#0f172a}
+  .log{background:#f8fafc;border:1px solid #e5e7eb}
+  .info{color:#475569}
+  .notice.id{background:#eef2ff;color:#3730a3}
+  .notice.warn{background:#fef3c7;color:#92400e}
+}
 </style>
 </head>
 <body>
@@ -28,7 +45,9 @@ button{width:100%;border:none;border-radius:10px;padding:12px;font-size:.95rem;c
 
 <div class="card">
   <h3>로그인 아이디</h3>
-  <input id="userId" placeholder="yesblue0342" value="yesblue0342">
+  <input id="userId" placeholder="yesblue0342" value="yesblue0342" oninput="checkIdSync()">
+  <div id="idNotice" class="notice id" style="display:none"></div>
+  <div class="notice warn">ℹ️ 복원은 기존 로컬 데이터에 <b>병합</b>됩니다(같은 id는 건너뜀, 기존 데이터는 유지).</div>
 </div>
 
 <div class="card">
@@ -86,7 +105,7 @@ async function saveToServer(rooms, posts, projects){
 
 // ── 노트를 Drive에도 저장 ──
 async function saveNotesToDrive(posts){
-  const userId = getId();
+  const userId = ownerId();   // 조회/복원과 동일 기준 id로 저장
   let saved = 0;
   for(const p of posts){
     if(!p.id || !p.title) continue;
@@ -113,6 +132,57 @@ function getOwner(){
   // 세션의 user.id가 있으면 그걸 owner로 사용 (loadData 필터와 일치시키기)
   return getSessionUserId() || getId();
 }
+// ★ 조회·복원·저장 전체가 쓰는 단일 기준 id (세션 우선). scan/restore/save 모두 이걸 사용해
+//   "입력 id로 읽고 세션 id로 쓰는" 어긋남을 제거한다.
+function ownerId(){ return getOwner(); }
+
+// localStorage 사용 가능 여부 (사생활 모드 등 차단 대응)
+function lsAvailable(){
+  try{ const k='__stella_probe__'; localStorage.setItem(k,'1'); localStorage.removeItem(k); return true; }catch(e){ return false; }
+}
+
+// 세션 id와 입력 id가 다르면 안내/경고 표시
+function checkIdSync(){
+  const box = document.getElementById('idNotice');
+  if(!box) return;
+  const sess = getSessionUserId();
+  const input = getId();
+  if(!sess){
+    box.className = 'notice id';
+    box.style.display = 'block';
+    box.innerHTML = '⚠️ 로그인 세션이 없습니다. 입력한 id(<b>'+ (input||'(빈값)') +'</b>)로 조회/저장합니다. 정확한 복원을 위해 메인에서 먼저 로그인하세요.';
+    return;
+  }
+  if(input && input !== sess){
+    box.className = 'notice warn';
+    box.style.display = 'block';
+    box.innerHTML = '⚠️ 입력 id(<b>'+input+'</b>)와 세션 id(<b>'+sess+'</b>)가 다릅니다. <b>세션 id('+sess+')</b> 기준으로 조회·저장됩니다.';
+  } else {
+    box.className = 'notice id';
+    box.style.display = 'block';
+    box.innerHTML = '✅ 세션 id <b>'+sess+'</b> 기준으로 조회·저장됩니다.';
+  }
+}
+
+// 실행 중 버튼 잠금 + "처리 중..." 표시
+function setBusy(on){
+  document.querySelectorAll('button').forEach(function(b){
+    if(b.getAttribute('onclick') && /scanAll|restoreAll/.test(b.getAttribute('onclick'))){
+      if(on){ if(!b.dataset.orig) b.dataset.orig=b.textContent; b.disabled=true; b.textContent='⏳ 처리 중...'; }
+      else { b.disabled=false; if(b.dataset.orig) b.textContent=b.dataset.orig; }
+    }
+  });
+}
+
+// 페이지 로드 시 세션 id로 입력칸 동기화 + 안내
+window.addEventListener('DOMContentLoaded', function(){
+  if(!lsAvailable()){
+    log('scanLog','❌ 브라우저 저장소(localStorage)가 차단되어 있습니다. 사생활(시크릿) 모드를 끄거나 브라우저 설정에서 쿠키/사이트 데이터를 허용한 뒤 다시 시도하세요.','err');
+  }
+  const sess = getSessionUserId();
+  if(sess){ const el=document.getElementById('userId'); if(el && el.value.trim()!==sess) el.value=sess; }
+  checkIdSync();
+});
 
 function log(logId, msg, cls='info'){
   const el = document.getElementById(logId);
@@ -125,28 +195,30 @@ function log(logId, msg, cls='info'){
 }
 
 async function scanAll(){
-  const userId = getId(); if(!userId) return;
   const el = document.getElementById('scanLog');
   el.innerHTML = ''; el.style.display = 'block';
+  const owner = ownerId();
+  if(!owner){ log('scanLog','⚠️ 아이디를 입력하거나 메인에서 로그인하세요. (빈 아이디로는 조회할 수 없습니다)','err'); return; }
   const sessionUid = getSessionUserId();
-  log('scanLog', '👤 세션 user.id: ' + (sessionUid||'없음(미로그인)') + ' | 입력 userId: ' + userId, 'info');
-  log('scanLog', '🔍 Azure SQL 확인 중...', 'warn');
+  setBusy(true);
+  log('scanLog', '👤 세션 user.id: ' + (sessionUid||'없음(미로그인)') + ' | 입력: ' + getId() + ' | 조회 기준 id: ' + owner, 'info');
+  log('scanLog', '🔍 서버·Drive 확인 중...', 'warn');
 
   // 1. workspace_state
   try{
-    const r = await fetch(`/api/workspace?owner=${encodeURIComponent(userId)}`);
+    const r = await fetch(`/api/workspace?owner=${encodeURIComponent(owner)}`, {cache:'no-store'});
     const d = await r.json();
     if(d.ok){
       log('scanLog', `✅ workspace_state: 채팅 ${(d.rooms||[]).length}개 / 노트 ${(d.posts||[]).length}개 / 프로젝트 ${(d.projects||[]).length}개`, 'ok');
       if(d.updated_at) log('scanLog', `   마지막 저장: ${new Date(d.updated_at).toLocaleString('ko-KR')}`, 'info');
     } else {
-      log('scanLog', '⚠️ workspace_state 없음 - 저장된 적 없거나 빈 상태', 'warn');
+      log('scanLog', '⚠️ workspace_state 없음 - 저장된 적 없거나 빈 상태 (모바일/기존 기기에서 먼저 저장이 필요할 수 있습니다)', 'warn');
     }
-  }catch(e){ log('scanLog', '❌ workspace 조회 실패: '+e.message, 'err'); }
+  }catch(e){ log('scanLog', '❌ workspace 조회 실패: '+e.message+' — 네트워크 확인 후 재시도하세요.', 'err'); }
 
   // 2. chat_index
   try{
-    const r = await fetch(`/api/hybrid-chat-list?userId=${encodeURIComponent(userId)}`);
+    const r = await fetch(`/api/hybrid-chat-list?userId=${encodeURIComponent(owner)}`, {cache:'no-store'});
     const d = await r.json();
     const items = d.rooms || d.items || [];
     log('scanLog', `✅ chat_index: ${items.length}개 채팅방`, 'ok');
@@ -156,7 +228,7 @@ async function scanAll(){
 
   // 3. Drive 노트
   try{
-    const r = await fetch(`/api/note?action=list&userId=${encodeURIComponent(userId)}`);
+    const r = await fetch(`/api/note?action=list&userId=${encodeURIComponent(owner)}`, {cache:'no-store'});
     const d = await r.json();
     const notes = d.notes || [];
     log('scanLog', `✅ Drive 노트: ${notes.length}개`, notes.length > 0 ? 'ok' : 'warn');
@@ -166,65 +238,59 @@ async function scanAll(){
 
   log('scanLog', '─────────────────', 'info');
   log('scanLog', '▶ 2단계 [전체 복원] 버튼을 눌러 복원하세요', 'warn');
+  setBusy(false);
 }
 
 async function restoreAll(){
-  const userId = getId(); if(!userId) return;
   const el = document.getElementById('restoreLog');
   el.innerHTML = ''; el.style.display = 'block';
+  const owner = ownerId();
+  if(!owner){ log('restoreLog','⚠️ 아이디를 입력하거나 메인에서 로그인하세요. (빈 아이디로는 복원할 수 없습니다)','err'); return; }
+  if(!lsAvailable()){ log('restoreLog','❌ 브라우저 저장소(localStorage)가 차단되어 복원 결과를 저장할 수 없습니다. 시크릿/사생활 모드를 끄고 다시 시도하세요.','err'); return; }
+  setBusy(true);
+  log('restoreLog', 'ℹ️ 기준 id: ' + owner + ' (조회·저장 동일). 기존 로컬 데이터에 병합합니다.', 'info');
 
   let totalRestored = 0;
+
+  // ★ workspace_state는 1회만 조회해 rooms/posts/projects 함께 재사용 (중복 호출 제거)
+  let wsRooms=[], wsPosts=[], wsProjects=[];
+  try{
+    const ws = await fetch(`/api/workspace?owner=${encodeURIComponent(owner)}`, {cache:'no-store'});
+    const wd = await ws.json();
+    if(wd.ok){
+      wsRooms    = Array.isArray(wd.rooms)    ? wd.rooms    : [];
+      wsPosts    = Array.isArray(wd.posts)    ? wd.posts    : [];
+      wsProjects = Array.isArray(wd.projects) ? wd.projects : [];
+    } else {
+      log('restoreLog', '⚠️ workspace_state 없음 - chat_index/Drive 노트만으로 복원합니다.', 'warn');
+    }
+  }catch(e){ log('restoreLog', '❌ workspace 조회 실패: '+e.message+' — 네트워크 확인 후 재시도하세요.', 'err'); }
 
   // ── 채팅 복원 ──
   log('restoreLog', '💬 채팅 복원 중...', 'warn');
   try{
-    // workspace_state에서 rooms
-    const ws = await fetch(`/api/workspace?owner=${encodeURIComponent(userId)}`);
-    const wd = await ws.json();
-    const wsRooms = (wd.ok && Array.isArray(wd.rooms)) ? wd.rooms : [];
-
-    // chat_index에서 목록
-    const ci = await fetch(`/api/hybrid-chat-list?userId=${encodeURIComponent(userId)}`);
+    const ci = await fetch(`/api/hybrid-chat-list?userId=${encodeURIComponent(owner)}`, {cache:'no-store'});
     const cd = await ci.json();
     const ciItems = cd.rooms || cd.items || [];
 
-    // 현재 localStorage
     let rooms = [];
     try{ rooms = JSON.parse(localStorage.getItem(K.rooms)||'[]'); }catch(e){}
     const existIds = new Set(rooms.map(r=>r.id));
 
-    // workspace_state의 rooms 복원
     wsRooms.forEach(sr => {
       if(!sr.id || existIds.has(sr.id)) return;
-      rooms.push({
-        id: sr.id, owner: getOwner(),
-        name: sr.name||'복원된 채팅',
-        messages: Array.isArray(sr.messages) ? sr.messages : [],
-        projectId: sr.projectId||'',
-        createdAt: sr.createdAt||new Date().toISOString()
-      });
-      existIds.add(sr.id);
-      totalRestored++;
+      rooms.push({ id: sr.id, owner, name: sr.name||'복원된 채팅', messages: Array.isArray(sr.messages)?sr.messages:[], projectId: sr.projectId||'', createdAt: sr.createdAt||new Date().toISOString() });
+      existIds.add(sr.id); totalRestored++;
     });
-
-    // chat_index에서 추가 (workspace에 없는 것)
     ciItems.forEach(item => {
       const id = item.room_id || item.id;
       if(!id || existIds.has(id)) return;
-      rooms.push({
-        id, owner: getOwner(),
-        name: item.title||'복원된 채팅',
-        messages: [],
-        driveFileId: item.drive_file_id||'',
-        projectId: item.project_id||'',
-        createdAt: item.created_at||new Date().toISOString()
-      });
-      existIds.add(id);
-      totalRestored++;
+      rooms.push({ id, owner, name: item.title||'복원된 채팅', messages: [], driveFileId: item.drive_file_id||'', projectId: item.project_id||'', createdAt: item.created_at||new Date().toISOString() });
+      existIds.add(id); totalRestored++;
     });
 
     localStorage.setItem(K.rooms, JSON.stringify(rooms));
-    log('restoreLog', `✅ 채팅 ${rooms.length}개 복원 완료`, 'ok');
+    log('restoreLog', `✅ 채팅 ${rooms.length}개 (로컬 병합 후 총계)`, 'ok');
   }catch(e){ log('restoreLog', '❌ 채팅 복원 실패: '+e.message, 'err'); }
 
   // ── 노트 복원 ──
@@ -234,31 +300,26 @@ async function restoreAll(){
     try{ posts = JSON.parse(localStorage.getItem(K.posts)||'[]'); }catch(e){}
     const existIds = new Set(posts.map(p=>p.id||p.postId));
 
-    // workspace_state의 posts
-    const ws2 = await fetch(`/api/workspace?owner=${encodeURIComponent(userId)}`);
-    const wd2 = await ws2.json();
-    const wsPosts = (wd2.ok && Array.isArray(wd2.posts)) ? wd2.posts : [];
     wsPosts.forEach(p => {
       const id = p.id||p.postId;
       if(!id || existIds.has(id) || p.deleted) return;
-      posts.unshift({ id, owner: getOwner(), title: p.title||'(제목없음)', body: p.body||p.content||'', category: p.category||'노트', createdAt: p.createdAt, updatedAt: p.updatedAt });
+      posts.unshift({ id, owner, title: p.title||'(제목없음)', body: p.body||p.content||'', category: p.category||'노트', createdAt: p.createdAt, updatedAt: p.updatedAt });
       existIds.add(id); totalRestored++;
     });
 
-    // Drive 노트 (note.js - Board/boards/users 모두 탐색)
-    const nr = await fetch(`/api/note?action=list&userId=${encodeURIComponent(userId)}`);
+    // Drive 노트 (note.js - users/Board/boards 모두 탐색)
+    const nr = await fetch(`/api/note?action=list&userId=${encodeURIComponent(owner)}`, {cache:'no-store'});
     const nd = await nr.json();
     (nd.notes||[]).forEach(n => {
       const id = n.id||n.postId;
       if(!id || existIds.has(id) || n.deleted) return;
-      posts.unshift({ id, owner: getOwner(), title: n.title||'(제목없음)', body: n.body||n.content||'', category: n.category||'노트', createdAt: n.createdAt, updatedAt: n.updatedAt });
+      posts.unshift({ id, owner, title: n.title||'(제목없음)', body: n.body||n.content||'', category: n.category||'노트', createdAt: n.createdAt, updatedAt: n.updatedAt });
       existIds.add(id); totalRestored++;
     });
 
     localStorage.setItem(K.posts, JSON.stringify(posts));
-    log('restoreLog', `✅ 노트 ${posts.length}개 복원 완료`, 'ok');
+    log('restoreLog', `✅ 노트 ${posts.length}개 (로컬 병합 후 총계)`, 'ok');
     posts.slice(0,5).forEach(p => log('restoreLog', `   📝 ${p.title}`, 'info'));
-    // ★ Drive에 노트 저장 (영구 보존)
     if(posts.length > 0){
       log('restoreLog', '💾 Drive에 노트 저장 중...', 'warn');
       await saveNotesToDrive(posts);
@@ -268,28 +329,23 @@ async function restoreAll(){
   // ── 프로젝트 복원 ──
   log('restoreLog', '📁 프로젝트 복원 중...', 'warn');
   try{
-    const ws3 = await fetch(`/api/workspace?owner=${encodeURIComponent(userId)}`);
-    const wd3 = await ws3.json();
-    const wsProj = (wd3.ok && Array.isArray(wd3.projects)) ? wd3.projects : [];
-
     let projects = [];
     try{ projects = JSON.parse(localStorage.getItem(K.projects)||'[]'); }catch(e){}
     const existIds = new Set(projects.map(p=>p.id));
-    wsProj.forEach(p => {
+    wsProjects.forEach(p => {
       if(!p.id || existIds.has(p.id)) return;
-      projects.push({ id: p.id, owner: getOwner(), name: p.name||p.id, createdAt: p.createdAt||new Date().toISOString() });
+      projects.push({ id: p.id, owner, name: p.name||p.id, createdAt: p.createdAt||new Date().toISOString() });
       existIds.add(p.id); totalRestored++;
     });
     localStorage.setItem(K.projects, JSON.stringify(projects));
-    log('restoreLog', `✅ 프로젝트 ${projects.length}개 복원 완료`, 'ok');
+    log('restoreLog', `✅ 프로젝트 ${projects.length}개 (로컬 병합 후 총계)`, 'ok');
   }catch(e){ log('restoreLog', '❌ 프로젝트 복원 실패: '+e.message, 'err'); }
 
-  // ★ 전체 복원 완료 후 서버(workspace_state)에 저장 - 재로그인해도 유지됨
+  // ★ 복원 후 서버(workspace_state)에 저장 - 재로그인해도 유지
   log('restoreLog', '─────────────────', 'info');
   if(totalRestored > 0){
-    log('restoreLog', `🎉 총 ${totalRestored}개 항목 복원 완료!`, 'ok');
+    log('restoreLog', `🎉 총 ${totalRestored}개 신규 항목 복원!`, 'ok');
     log('restoreLog', '💾 서버에 저장 중... (재로그인해도 유지되도록)', 'warn');
-    // localStorage에서 전체 데이터 가져와서 서버에 저장
     let allRooms=[],allPosts=[],allProjects=[];
     try{ allRooms=JSON.parse(localStorage.getItem(K.rooms)||'[]'); }catch(e){}
     try{ allPosts=JSON.parse(localStorage.getItem(K.posts)||'[]'); }catch(e){}
@@ -297,10 +353,11 @@ async function restoreAll(){
     await saveToServer(allRooms, allPosts, allProjects);
     log('restoreLog', '▶ 3단계: 메인 페이지로 이동하세요', 'warn');
   } else {
-    log('restoreLog', '⚠️ 복원할 데이터가 없습니다', 'warn');
-    log('restoreLog', '→ 서버에 저장이 안 됐을 수 있습니다', 'info');
-    log('restoreLog', '→ 모바일에서 채팅/노트 저장을 먼저 해주세요', 'info');
+    log('restoreLog', '⚠️ 새로 복원할 데이터가 없습니다 (이미 로컬에 있거나 서버에 저장된 적 없음)', 'warn');
+    log('restoreLog', '→ 다른 기기(모바일 등)에서 채팅/노트를 먼저 저장했는지 확인하세요', 'info');
+    log('restoreLog', '→ 로그인 세션이 없으면 메인에서 로그인 후 다시 시도하세요', 'info');
   }
+  setBusy(false);
 }
 </script>
 </body>
