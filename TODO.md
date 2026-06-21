@@ -32,5 +32,5 @@
 
 ## 성능·알림·전송 (iter 8, autopilot)
 - [x] G1. (Stella GPT) 응답 속도: api/chat.js에 구간 타이밍(memory/context/model/total) 계측 추가 → 응답 `timings`+서버 로그. 병목인 메모리 로드(Azure SQL+Drive, 매 요청)를 (a)검색/Drive와 병렬화, (b)warm 인스턴스 60s 캐시로 반복 fetch 제거(업데이트 시 무효화). 구조적 개선: 반복요청 메모리준비 180ms→~0, 검색+Drive 케이스 준비 501→321ms. (스트리밍은 SSE 라이브검증 불가로 후속, PROGRESS.md)
-- [ ] T1. (Stella Talk) 알림이 대화창 안에서만 뜨는 문제 → 앱 열려있는 동안 전역 폴링으로 모든 방 새 메시지 since 감지 + Notification/소리. SW background sync 폴백, OS 완전종료 푸시는 제약 시 `[!]`.
+- [x] T1. (Stella Talk) 알림이 대화창 안에서만 뜨던 문제 수정 → 전역 폴링(syncRoomListFromServer, 3s)을 **since(lastMessageAt) 기반**으로 재작성. 앱 열려있는 동안 대화목록·다른 화면 포함 모든 방의 상대 발신 새 메시지 감지 → Notification+소리. 최초 1회 baseline 프라이밍(앱 열 때 과거메시지 폭주 방지), 보고있는 방/내 발신 제외, 재알림 방지(per-room ts 저장). 백엔드 list에 lastMessageAt 추가. (로직 유닛테스트 7/7) · [!] 완전종료(앱 kill) 푸시는 Web Push(VAPID) 인프라 필요 = 후속, iOS는 OS 제약.
 - [ ] T2. (Stella Talk) 전송 속도: 낙관적 UI(즉시 표시)+백그라운드 영속화, Azure 우선·Drive 비동기, 실패 롤백/재시도, ID upsert 중복방지.

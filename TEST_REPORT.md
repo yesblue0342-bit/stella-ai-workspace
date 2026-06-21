@@ -146,6 +146,16 @@
 2. 효과 큰 것부터: 메모리 로드를 검색/Drive와 병렬화(준비시간에서 숨김) + warm 인스턴스 60s 캐시(반복요청 fetch 제거, 업데이트 시 무효화).
 3. 스트리밍은 SSE end-to-end를 샌드박스에서 검증 불가(작동 중인 채팅 회귀 위험)라 후속으로 보류, 근거 PROGRESS.md. 모델 호출 자체 지연은 streaming이 '체감'만 개선.
 
+## 2026-06-21 (iter 8) · T1 Stella Talk 전역 알림(대화창 밖) · pass 7/7+62/62
+- node --check api/chat-room.js OK · talk.html 인라인 스크립트 new Function bad=0 · npm test 62/62
+- T1 알고리즘 유닛테스트 7/7: 최초 baseline 무알림 / 더 최신 상대메시지 알림 / 동일ts 재알림X / 내발신 무시 / 보는방 무시 / 목록화면 타방 알림 / 내이름=self
+- grep: talk.html _notifyLastAt·_notifyPrimed·lastMessageAt·NOTIFY_AT_KEY 13 hit, chat-room lastMessageAt 3 hit
+
+요약 3줄:
+1. 원인: 전역 방목록 폴링이 messageCount 델타로만 감지 → count desync/baseline 문제로 대화창 밖 알림이 잘 안 떴음.
+2. 수정: lastMessageAt(서버 list에 추가) since 기반으로 재작성 — 앱 열린 동안 모든 방의 상대 발신 새 메시지를 화면 무관하게 감지해 Notification+소리. 최초 baseline 프라이밍·보는방/내발신 제외·per-room ts로 재알림 방지.
+3. [!] 앱 완전종료 상태 푸시는 Web Push(VAPID 구독/서버발송) 인프라 필요로 후속 보류(iOS는 OS 제약). 앱 열림/백그라운드 탭은 본 폴링으로 커버.
+
 ## FINAL (iter 7) — T1·T2·T3 전체 완료
 - npm test (`node --test test/*.test.js`): **62/62 pass**, fail 0.
 - 백엔드 node --check: chat.js · cc/_maclient.mjs · cc/start.js · cc/turn.js OK.

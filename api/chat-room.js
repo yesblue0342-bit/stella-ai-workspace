@@ -198,6 +198,8 @@ export default async function handler(req, res) {
           if (!shouldListRoom(d, userId)) continue;
           const msgs = d.messages || [];
           const lastMsg = msgs[msgs.length - 1];
+          // 마지막 메시지 시각(ms) — since 기반 전역 알림 감지용. createdAt/at/time 폴백.
+          const lastAt = lastMsg ? (function(m){ const t = new Date(m.createdAt || m.at || m.time || 0).getTime(); return isNaN(t) ? (Number(m.at) || 0) : t; })(lastMsg) : 0;
           rooms.push({
             roomId: d.roomId,
             title: d.title,
@@ -205,6 +207,7 @@ export default async function handler(req, res) {
             lastMessage: d.lastMessage || "",
             updatedAt: d.updatedAt,
             messageCount: msgs.length,
+            lastMessageAt: lastAt,
             lastMessageFrom: lastMsg ? String(lastMsg.userId || lastMsg.sender || "") : ""
           });
         } catch (e) {}

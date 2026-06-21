@@ -2560,6 +2560,13 @@ function talkLoginKeydown(e){
 }
 
 // 서버에서 방 목록 가져와 병합
+// T1: since(lastMessageAt) 기반 전역 알림. 앱이 열려 있는 한(대화목록·다른 화면 포함) 모든 방의
+// 새 메시지를 감지해 Notification+소리. 카운트 델타 대신 타임스탬프로 desync에 강함.
+// _notifyLastAt[roomId] = 마지막으로 알림 처리한 메시지 시각. 최초 1회는 baseline만 잡고 알림 안 함(앱 열 때 폭주 방지).
+const NOTIFY_AT_KEY='stella_talk_notify_at';
+let _notifyLastAt=(function(){ try{ return JSON.parse(localStorage.getItem(NOTIFY_AT_KEY)||'{}')||{}; }catch(e){ return {}; } })();
+let _notifyPrimed=false;
+function _saveNotifyAt(){ try{ localStorage.setItem(NOTIFY_AT_KEY, JSON.stringify(_notifyLastAt)); }catch(e){} }
 async function syncRoomListFromServer(){
   const myId=getMyId();
   if(!myId||myId==='나')return;
@@ -2568,36 +2575,40 @@ async function syncRoomListFromServer(){
     const d=await r.json();
     if(!d.ok||!Array.isArray(d.rooms))return;
     let changed=false;
-    let newMsgRoom=null;
+    const newRooms=[]; // 이번 폴링에서 새 메시지가 감지된 방들
     for(const sr of d.rooms){
       if(sr.deleted)continue;
       if(isLeftRoom(sr.roomId))continue; // C3: 나간 방은 재추가 금지(부활 방지)
       const exists=_rooms.find(x=>x.id===sr.roomId);
-      // 알림은 "상대가 보낸" 메시지에만 (내가 보낸 메시지의 count 증가로 본인에게 알림 가던 버그 수정)
-      const fromOtherRoom = sr.lastMessageFrom && String(sr.lastMessageFrom)!==String(myId);
+      // 알림은 "상대가 보낸" 메시지에만 (내가 보낸 것에 본인 알림 가던 버그 방지)
+      const fromOtherRoom = sr.lastMessageFrom && String(sr.lastMessageFrom)!==String(myId)
+        && String(sr.lastMessageFrom)!==String(getMyName()) && String(sr.lastMessageFrom)!==String(getMyEmail());
+      const lastAt = Number(sr.lastMessageAt||0);
+      const seenAt = Number(_notifyLastAt[sr.roomId]||0);
       if(!exists){
-        // 새 방 - 메시지가 이미 있고 상대가 보낸 거면 알림 (상대가 먼저 말 검)
         _rooms.push({id:sr.roomId,name:sr.title||'채팅방',members:sr.members||[],messages:[],createdAt:Date.now(),_srvCount:sr.messageCount||0});
-        if((sr.messageCount||0) > 0 && fromOtherRoom){ newMsgRoom=sr; }
         changed=true;
       } else {
-        const srvCount = sr.messageCount || 0;
-        const prevCount = exists._srvCount || 0;
-        if(srvCount > prevCount && fromOtherRoom){
-          if(!_cur || _cur.id !== sr.roomId){ newMsgRoom=sr; }
-        }
-        exists._srvCount = srvCount;
+        exists._srvCount = sr.messageCount || 0;
+      }
+      // since 기반 새 메시지 판정: 서버 마지막 메시지가 내가 마지막으로 본 것보다 최신 + 상대 발신 + 현재 보고 있는 방 아님
+      const viewing = _cur && _cur.id===sr.roomId && document.visibilityState==='visible';
+      if(lastAt>0 && lastAt>seenAt && fromOtherRoom && !viewing){
+        newRooms.push(sr);
+      }
+      // 항상 baseline 갱신(재알림 방지). 보고 있는 방도 갱신.
+      if(lastAt>0 && lastAt>seenAt) _notifyLastAt[sr.roomId]=lastAt;
+    }
+    _saveNotifyAt();
+    // 최초 폴링은 baseline만 잡고 알림하지 않음(앱 열 때 과거 메시지 폭주 방지)
+    if(_notifyPrimed){
+      for(const sr of newRooms){
+        playNotifySound();
+        try{ notify(sr.title||'새 메시지', sr.lastMessage||'새 메시지가 도착했습니다'); }catch(e){}
+        changed=true;
       }
     }
-    if(newMsgRoom){
-      // 알림 재생 (설정 모드: 소리/진동/무음)
-      playNotifySound();
-      // ★ 브라우저 알림 (백그라운드에서도 뜸)
-      try{
-        notify(newMsgRoom.title||'새 메시지', newMsgRoom.lastMessage||'새 메시지가 도착했습니다');
-      }catch(e){}
-      changed=true;
-    }
+    _notifyPrimed=true;
     if(changed){saveRooms();renderRooms();updateAppBadge();}
   }catch(e){}
 }
