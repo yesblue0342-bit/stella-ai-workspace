@@ -367,3 +367,9 @@ STATUS: IN_PROGRESS
   - 파일명 {앱명}_{YYYYMMDD_HHMMSS}.txt(KST), 위치는 0download 직하(날짜 하위폴더 없음 — 단일 .txt 요구사항), 내용=[요청] 헤더 한 줄+빈 줄+결과 전문.
   - codex(StellaCodex): 매 어시스턴트 응답마다 저장. cc(StellaAgentCode): 세션 완료(finish, 비실패) 시 buildTranscript 전문 저장. 성공/실패 토스트.
   - 한계: 실제 Drive 업로드는 OAuth 자격증명 있는 라이브에서만. 샌드박스는 순수헬퍼 유닛 7/7 + jsdom으로 저장 호출 페이로드/토스트까지 검증.
+
+## [autopilot iter 11] A1 인증 복구
+- 근본원인: auth.js/admin-approvals.js가 회원계정을 Google Drive(auth/users/*.json)에서만 조회 → Drive OAuth 토큰 만료/콜드스타트 시 전원 로그인·관리자 인증 동시 장애. yesblue0342는 하드코딩/ENV 비번이 없어(admin/admin만 존재) Drive 레코드 부재 시 관리자 로그인 불가.
+- 수정(ADD-only, 기존 데이터 보존): (1) approval.adminPasswordOk(env ADMIN_PASSWORD/STELLA_ADMIN_PASSWORD) → auth.js·admin-approvals.js에 관리자 env 통과 경로(콜드스타트·토큰만료 내성). (2) Azure SQL dbo.users에 password_hash 컬럼(ALTER ADD 가드) + 가입 시 Drive+Azure 이중 저장 + 로그인 Drive우선→Azure폴백 + Drive로그인 성공 시 Azure 백필.
+- [!] Vercel 환경변수 `ADMIN_PASSWORD` 설정 필요: 설정 시 yesblue0342가 Drive/Azure 없이도 관리자 로그인 가능. 미설정이면 코드는 정상이나 env-admin 경로는 비활성(admin/admin + Drive/Azure 레코드 폴백만). 에이전트는 대시보드 env를 설정할 수 없어 [!] 보류로 남김.
+- 검증 한계: Azure/Drive 실연결은 라이브에서만. 샌드박스는 관리자 env 경로를 실제 핸들러 호출로 검증(75/75), Azure 분기는 node --check + 로직 단위까지.

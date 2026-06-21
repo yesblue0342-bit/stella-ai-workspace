@@ -219,3 +219,11 @@
 - jsdom: 모바일 햄버거 풀-토글 양 앱 검증(default 최소화 → 펼침 → 최소화).
 - SW 캐시 v55→**v56**.
 - 배포: main 푸시 → Vercel 자동 배포(team: stella-gpt). 정식 stella-ai-workspace 기준(중복 g1st 미사용/무시).
+
+## 2026-06-21 (iter 11) · A1 인증(전원 로그인·관리자) 복구 · pass 75/75
+- node --check api/auth.js·admin-approvals.js·lib/approval.js OK · npm test 75/75(auth-admin 6건 신규)
+- 실핸들러 테스트: yesblue0342+ADMIN_PASSWORD(env)→200 approved(Drive/Azure 불필요), admin/admin 유지, adminPasswordOk env set/unset, canLogin 하위호환
+요약 3줄:
+1. 근본원인=Drive 단독 회원저장 → 토큰만료/콜드스타트 시 전원 로그인 실패 + yesblue0342 env/하드코딩 비번 부재. 
+2. 수정: ADMIN_PASSWORD(env) 관리자 통과경로 + Azure SQL password_hash 영속 저장(ALTER ADD, ADD-only) + 로그인 Drive우선→Azure폴백+백필. 기존 계정 데이터 보존.
+3. [!] Vercel에 ADMIN_PASSWORD 설정 필요(미설정 시 env-admin 비활성, admin/admin·Drive폴백만). Azure 실연결은 라이브 검증.
