@@ -187,6 +187,29 @@ export default async function handler(req, res) {
       return res.status(200).json({ ok: true, members: newMembers, left: newLeft });
     }
 
+    // ── 이모지 반응 토글 (append/remove 방식) ── STAGE 8
+    if (action === "react") {
+      const body = req.body || {};
+      const roomId = makeRoomId(body.roomId);
+      const messageId = clean(body.messageId);
+      const userId = clean(body.userId);
+      const emoji = clean(body.emoji).slice(0, 8);
+      if (!roomId || !messageId || !userId || !emoji) return res.status(400).json({ ok: false, message: "roomId, messageId, userId, emoji 필요" });
+      const existing = await readJsonFromDrive({ folderPath: ["MemberChat"], fileName: roomId }).catch(() => null);
+      if (!existing?.data) return res.status(404).json({ ok: false, message: "방 없음" });
+      if (!isCodeRoom(roomId) && !isMember(existing.data, userId)) return res.status(403).json({ ok: false, message: "이 방의 멤버가 아닙니다." });
+      const messages = existing.data.messages || [];
+      const idx = messages.findIndex((m) => m.id === messageId);
+      if (idx === -1) return res.status(404).json({ ok: false, message: "메시지 없음" });
+      const reactions = { ...(messages[idx].reactions || {}) };
+      const users = Array.isArray(reactions[emoji]) ? reactions[emoji].map(String) : [];
+      reactions[emoji] = users.includes(userId) ? users.filter((u) => u !== userId) : [...users, userId];  // 토글
+      if (reactions[emoji].length === 0) delete reactions[emoji];
+      messages[idx] = { ...messages[idx], reactions };
+      await saveJsonToDrive({ folderPath: ["MemberChat"], fileName: roomId, data: { ...existing.data, messages } });
+      return res.status(200).json({ ok: true, reactions });
+    }
+
     // ── 내가 속한 방 목록 ──
     if (action === "list") {
       const userId = clean(req.query.userId || req.body?.userId);

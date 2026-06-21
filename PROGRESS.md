@@ -344,3 +344,18 @@ STATUS: IN_PROGRESS
   복구 시 현재 방 full 동기화 + 목록 동기화 + 실패 메시지 자동 재발송(flushFailedQueue).
 - (기존 유지) 타이핑/재전송 ⟳/낙관적 상태/새 메시지 칩.
 ### 서비스워커 캐시: v52 → v53
+
+---
+
+## 2026-06-20 Stella Talk STAGE 8 — 메시지 기능 확장 (선택)
+- 길게 눌러 메뉴: 복사/삭제(본인)/답장/전달은 기존 구현 유지. "😊 반응" 항목 추가.
+- 이모지 빠른 반응(👍❤️😂😮😢🎉): 
+  - 백엔드 api/chat-room.js action="react" — 메시지 reactions{emoji:[userIds]} 토글(append/remove), 멤버 검증.
+  - 프런트: 낙관적 토글 + 서버 반영(reactToMsg), 버블 하단 반응 칩(내 반응 강조, 탭하면 토글), openReactionPicker.
+  - serverMsgToLocal에 reactions 전달, msgSig에 반응 포함(증분 렌더 갱신).
+- 방 내부 메시지 검색: 헤더 🔍 토글 → 검색바. 쿼리 있으면 매칭 메시지만 렌더(윈도우/더보기 무시) + "N건" 표시.
+  방 전환 시 검색 초기화.
+### 서비스워커 캐시: v53 → v54
+### node --check: api/chat-room.js OK / talk.html 스크립트 3블록 OK
+
+## STAGE 5~8 완료. (STAGE 6 백그라운드: 앱 완전종료 수신은 Web Push(VAPID) 구독이 정석 → 후속 과제)

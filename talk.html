@@ -241,8 +241,14 @@ body.theme-dark .theme-btn.active{background:#1e3a5f}
         <h2 id="chatRoomName">채팅방</h2>
         <button class="icon-btn" onclick="copyRoomCode()" title="방 코드 복사" id="roomCodeBtn" style="display:none">🔑</button>
         <button class="icon-btn" onclick="openInvite()" title="친구 초대">👥</button>
+        <button class="icon-btn" onclick="toggleMsgSearch()" title="대화 내용 검색" id="msgSearchBtn">🔍</button>
         <button class="icon-btn" onclick="toggleCurMute()" title="이 방 알림" id="muteBtn" style="display:none">🔔</button>
         <button class="icon-btn" onclick="openRoomSettings()" title="방 설정">⋯</button>
+      </div>
+      <div id="msgSearchBar" style="display:none;padding:8px 12px;border-bottom:1px solid var(--border,#30363d);background:var(--bg2,#161b22);gap:8px;align-items:center">
+        <input id="msgSearchInput" placeholder="이 방에서 검색..." oninput="onMsgSearch(this.value)" style="flex:1;border:1px solid var(--border,#30363d);border-radius:10px;padding:7px 11px;background:var(--bg,#0d1117);color:var(--text,#e6edf3);font-size:.85rem;outline:none">
+        <span id="msgSearchCount" style="font-size:.78rem;color:var(--text2,#8b949e);white-space:nowrap"></span>
+        <button class="icon-btn" onclick="toggleMsgSearch()" title="검색 닫기">✕</button>
       </div>
       <div class="chat-messages" id="chatMessages">
         <div class="chat-bg-layer" id="chatBgLayer"></div>
@@ -973,6 +979,7 @@ let _pollTimer=null;
 function openRoom(id){
   _cur=_rooms.find(r=>r.id===id);if(!_cur)return;
   _shownCount=MSG_WINDOW;   // STAGE 5: 방 진입 시 렌더 윈도우 초기화(최근 100개)
+  _msgSearchQuery=''; var _sb=document.getElementById('msgSearchBar'); if(_sb)_sb.style.display='none';  // STAGE 8: 방 전환 시 검색 초기화
   // 방 열면 읽음 처리 (현재 시각으로 lastReadAt 갱신)
   const idx=_rooms.findIndex(r=>r.id===id);
   if(idx>=0){_rooms[idx].lastReadAt=Date.now();_cur=_rooms[idx];saveRooms();}
@@ -1084,6 +1091,7 @@ function serverMsgToLocal(m){
     type: m.deleted ? 'deleted' : msgType,
     data: m.deleted ? null : fUrl,
     deleted: !!m.deleted,
+    reactions: m.reactions || null,   // STAGE 8: 이모지 반응
     at: m.createdAt ? new Date(m.createdAt).getTime() : Date.now()
   };
 }
@@ -1753,9 +1761,57 @@ function buildMsgRow(m, myId){
     }
   }
   col.appendChild(tmWrap);
+  // STAGE 8: 이모지 반응 칩 (탭하면 토글)
+  if(m.reactions && Object.keys(m.reactions).length){
+    var rWrap=document.createElement('div');
+    rWrap.style.cssText='display:flex;gap:4px;flex-wrap:wrap;margin-top:3px;'+(isMe?'justify-content:flex-end':'');
+    var myId2=getMyId();
+    Object.keys(m.reactions).forEach(function(emo){
+      var users=m.reactions[emo]||[]; if(!users.length) return;
+      var mine=users.indexOf(myId2)>=0;
+      var chip=document.createElement('button'); chip.type='button';
+      chip.style.cssText='border:1px solid '+(mine?'var(--primary,#1f6feb)':'var(--border,#30363d)')+';background:'+(mine?'rgba(31,111,235,.15)':'var(--bg2,#161b22)')+';color:var(--text,#e6edf3);border-radius:12px;padding:1px 7px;font-size:.78rem;cursor:pointer;line-height:1.6';
+      chip.textContent=emo+' '+users.length;
+      chip.onclick=function(){ reactToMsg(m, emo); };
+      rWrap.appendChild(chip);
+    });
+    col.appendChild(rWrap);
+  }
   if(isMe){row.appendChild(col);row.appendChild(av);}
   else{row.appendChild(av);row.appendChild(col);}
   return row;
+}
+// STAGE 8: 반응 토글(낙관적) + 서버 반영, 빠른 반응 피커
+var REACTION_EMOJIS=['👍','❤️','😂','😮','😢','🎉'];
+function reactToMsg(m, emoji){
+  if(!_cur || _cur.isMyChat) return;
+  var myId=getMyId(); if(!myId) return;
+  var idx=_rooms.findIndex(function(r){return r.id===_cur.id;}); if(idx<0) return;
+  var msg=(_rooms[idx].messages||[]).find(function(x){return x.id===m.id;}); if(!msg) return;
+  msg.reactions=msg.reactions||{};
+  var users=Array.isArray(msg.reactions[emoji])?msg.reactions[emoji]:[];
+  msg.reactions[emoji] = (users.indexOf(myId)>=0) ? users.filter(function(u){return u!==myId;}) : users.concat([myId]);  // 토글
+  if(!msg.reactions[emoji].length) delete msg.reactions[emoji];
+  _cur=_rooms[idx]; saveRooms(); renderMessages();
+  fetch('/api/chat-room?action=react',{method:'POST',headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({roomId:_cur.id, messageId:m.id, userId:myId, emoji:emoji})}).catch(function(){});
+}
+function openReactionPicker(m, evt){
+  var pick=document.createElement('div'); pick.id='reactPicker';
+  pick.style.cssText='position:fixed;z-index:9999;background:var(--card,#fff);border:1px solid var(--border,#e5e7eb);border-radius:20px;box-shadow:0 8px 30px rgba(0,0,0,.25);padding:6px 8px;display:flex;gap:4px';
+  REACTION_EMOJIS.forEach(function(emo){
+    var b=document.createElement('button'); b.type='button';
+    b.style.cssText='border:none;background:none;font-size:1.3rem;cursor:pointer;padding:3px 5px;border-radius:10px';
+    b.textContent=emo; b.onclick=function(){ if(pick.parentNode)pick.remove(); reactToMsg(m, emo); };
+    pick.appendChild(b);
+  });
+  document.body.appendChild(pick);
+  var x=(evt&&(evt.touches?evt.touches[0].clientX:evt.clientX))||window.innerWidth/2;
+  var y=(evt&&(evt.touches?evt.touches[0].clientY:evt.clientY))||window.innerHeight/2;
+  var pw=pick.offsetWidth, vw=window.innerWidth;
+  pick.style.left=Math.max(10,Math.min(x-pw/2, vw-pw-10))+'px';
+  pick.style.top=Math.max(10, y-54)+'px';
+  setTimeout(function(){ document.addEventListener('click', function _c(){ if(pick.parentNode)pick.remove(); document.removeEventListener('click',_c); }, {once:true}); }, 60);
 }
 
 // 한 메시지의 표시 상태 서명(변경 감지용) — 동일하면 DOM 재사용(깜빡임/이미지 재로딩 방지)
@@ -1764,8 +1820,20 @@ function msgSig(m, myId){
   const unread=(isMe&&_cur&&!_cur.isMyChat)?countUnreadByOthers(m):0;
   return [m.deleted?1:0, m.type||'text', m.text||'', m.data||m.fileUrl||'',
           m.fileName||'', m.fileSize||'', m.from||'', m.at||0,
-          unread, m.sendState||''].join('␟');
+          unread, m.sendState||'', m.reactions?JSON.stringify(m.reactions):''].join('␟');  // STAGE 8: 반응 변경 감지
 }
+
+// STAGE 8: 방 내부 메시지 검색
+var _msgSearchQuery='';
+function toggleMsgSearch(){
+  var bar=document.getElementById('msgSearchBar');
+  if(!bar) return;
+  var show=(bar.style.display==='none'||!bar.style.display);
+  bar.style.display=show?'flex':'none';
+  if(show){ var inp=document.getElementById('msgSearchInput'); if(inp){ inp.value=''; setTimeout(function(){ inp.focus(); },50); } _msgSearchQuery=''; }
+  else { _msgSearchQuery=''; var c=document.getElementById('msgSearchCount'); if(c) c.textContent=''; renderMessages(); scrollBottom(); }
+}
+function onMsgSearch(q){ _msgSearchQuery=q||''; renderMessages(); }
 
 // STAGE 5: 렌더 윈도우(최근 N개) + "이전 메시지 더보기" lazy load
 var MSG_WINDOW=100, _shownCount=null;
@@ -1807,15 +1875,22 @@ function renderMessages(){
     el.appendChild(e);return;
   }
   const myId=getMyId();
-  // STAGE 5: 최근 _shownCount 개만 렌더(메시지 누적 대비 성능). 위로 "이전 메시지 더보기"로 확장.
-  if(_shownCount==null) _shownCount=MSG_WINDOW;
-  const total=allMsgs.length;
-  const startIdx=Math.max(0, total-_shownCount);
-  const msgs=allMsgs.slice(startIdx);
-  const hasOlder=startIdx>0;
+  // STAGE 8: 방 내부 검색 — 쿼리가 있으면 매칭 메시지만(윈도우/더보기 무시)
+  var _q=(_msgSearchQuery||'').trim().toLowerCase();
+  let msgs, hasOlder=false, _startIdx=0;
+  if(_q){
+    msgs=allMsgs.filter(function(m){ return m.type!=='system' && String(m.text||m.fileName||'').toLowerCase().indexOf(_q)>=0; });
+    var _cnt=document.getElementById('msgSearchCount'); if(_cnt) _cnt.textContent=msgs.length+'건';
+  } else {
+    // STAGE 5: 최근 _shownCount 개만 렌더(메시지 누적 대비 성능). 위로 "이전 메시지 더보기"로 확장.
+    if(_shownCount==null) _shownCount=MSG_WINDOW;
+    _startIdx=Math.max(0, allMsgs.length-_shownCount);
+    msgs=allMsgs.slice(_startIdx);
+    hasOlder=_startIdx>0;
+  }
   // 표시할 단위(날짜 구분선 + 메시지) 목록을 키/서명과 함께 구성
   const units=[];
-  if(hasOlder){ units.push({key:'__loadmore', sig:'loadmore␟'+startIdx, kind:'loadmore'}); }
+  if(hasOlder){ units.push({key:'__loadmore', sig:'loadmore␟'+_startIdx, kind:'loadmore'}); }
   let lastDate='';
   msgs.forEach(function(m){
     const dateStr=new Date(m.at).toLocaleDateString('ko-KR',{year:'numeric',month:'long',day:'numeric'});
@@ -1892,6 +1967,10 @@ function showMsgMenu(m, isMe, evt){
   }
   // 3) 답장
   items.push({ label: '↩ 답장', fn: function(){ replyToMsg(m); } });
+  // 3.5) 이모지 반응 (나와의 채팅 제외) — STAGE 8
+  if(!(_cur&&_cur.isMyChat) && !m.deleted){
+    items.push({ label: '😊 반응', fn: function(){ openReactionPicker(m, evt); } });
+  }
   // 4) 이미지 저장 (이미지 메시지만)
   if(m.type === 'image'){
     const url = m.data || m.fileUrl || '';
