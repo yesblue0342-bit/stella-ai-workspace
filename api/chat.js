@@ -1,8 +1,8 @@
 import { detectSmartIntent, getSmartContextForMessage } from "../lib/place-weather-utils.js";
 import { saveJsonToDrive, readJsonFromDrive, listJsonFromDrive, buildDriveContextForChat } from "../lib/drive-utils.js";
 import { buildMemoryContext, saveMemory as saveMemoryAzure } from "../lib/memory-db.mjs";
-// Stella GPT 답변 유형 라우팅(루트 / 전용, body.route 게이트). 다른 앱(ABAP/Codex)은 미전송 → 영향 없음.
-import { needsWebSearch, wantsTable, buildSystemPrompt as routeSystemPrompt, pickModel, extractText } from "../lib/router.mjs";
+// Stella GPT 답변 라우팅(루트 / 전용, body.route 게이트). 다른 앱(ABAP/Codex)은 미전송 → 영향 없음.
+import { wantsTable, buildSystemPrompt as routeSystemPrompt, extractText } from "../lib/router.mjs";
 
 // OpenAI Responses API + web_search 호출 (실시간 질문). 응답 contract(text)는 호출부에서 유지.
 async function callResponses({ model, system, history, message, images = [], search = false }) {
@@ -459,13 +459,15 @@ export default async function handler(req, res) {
     let provider;
     const _modelStart = Date.now();
     if (routed) {
-      const wantSearch = needsWebSearch(message);
       const wantTable = wantsTable(message);
       // 메모리 노드(kh_memory) + Drive 컨텍스트는 extra 로 합쳐 보존. 표는 온디맨드.
+      // 검색 게이트 제거: web_search를 항상 제공해 모델이 필요할 때 검색(맛집·장소·실시간 정확도 ↑, 환각 제거).
       const routeSys = routeSystemPrompt({ table: wantTable, extra: [memoryPrompt, driveContext].filter(Boolean).join("\n\n") });
-      provider = wantSearch ? "openai-search" : "openai";
-      answer = await callResponses({ model: pickModel({ search: wantSearch }), system: routeSys, history, message: aiMessage, images, search: wantSearch });
-      timings.routed = true; timings.searchUsed = wantSearch; timings.tableUsed = wantTable;
+      // #구글드라이브/드라이브 명령은 web_search보다 우선 → 그땐 검색 미제공(Drive 내용으로 답). 그 외엔 항상 web_search.
+      const useSearch = !needsDrive;
+      provider = useSearch ? "openai-search" : "openai";
+      answer = await callResponses({ model: "gpt-4o", system: routeSys, history, message: aiMessage, images, search: useSearch });
+      timings.routed = true; timings.searchAlways = useSearch; timings.driveFirst = needsDrive; timings.tableUsed = wantTable;
     } else if (isClaudeModel) {
       provider = "claude";
       answer = await callClaude({ model, system: prompt, history, message: aiMessage, images });

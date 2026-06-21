@@ -407,3 +407,10 @@ STATUS: IN_PROGRESS
 - 메모리 주입(kh_memory)+driveContext는 routeSystemPrompt({table, extra})의 extra로 합쳐 보존. 표는 wantsTable일 때만(강제 [표+요약] 프리픽스 미사용).
 - 모델: needsWebSearch→gpt-4o(+web_search), 아니면 gpt-4o-mini. 응답 contract(text 키) 유지.
 - 마크다운: renderAnswer가 renderMarkdownLite로 **굵게가 별표로 새던** 것 → marked+DOMPurify(js/stella-md.js, CDN) 우선, 실패 시 기존 폴백.
+
+## [autopilot] Stella GPT 회귀복원 + 검색 모델결정화
+- baseline: c28a928(직전 2 auto 커밋 1c238e1·b4f2009 이전). diff 결과 index.html은 3줄만 변경 → 복사/내보내기 함수는 잔존, marked 전환으로 코드블록 복사 버튼만 미호출(회귀).
+- 복원: js/stella-md.js가 marked 렌더 후 코드블록 복사 버튼 + 표 TSV 복사 부착(기존 stellaCopyText 재사용). Excel(.xlsx)은 이미 SheetJS 실파일(renderAnswer)이라 유지, lib/exporters.mjs는 테스트 가드.
+- 검색: needsWebSearch 게이트 삭제 → web_search 상시 제공, 모델이 결정(gpt-4o). 맛집/장소/실시간 추측→실검색+출처. #구글드라이브는 web_search보다 우선(needsDrive면 검색 미제공).
+- 유지: 표 온디맨드(wantsTable), body.route로 Stella GPT만 적용(ABAP/Codex 미전송), 메모리/날씨/Drive/이미지 보존.
+- STEP6 라이브 스모크: 샌드박스 OPENAI_API_KEY 없음 → 실호출 불가, 배포 후 사용자 환경 확인 필요.

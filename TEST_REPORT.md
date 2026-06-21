@@ -328,3 +328,17 @@
 ## FINAL (iter 17)
 - node --test 101/101 PASS. 변경: lib/router.mjs(신규), api/chat.js(callResponses+라우팅 게이트), index.html(route:true+marked/DOMPurify CDN+renderAnswer), js/stella-md.js(신규), test/router.test.mjs(신규), sw 캐시 +1.
 - 한 줄: Stella GPT만 실시간↔일반 라우팅+표 온디맨드+마크다운 정상 렌더, 다른 앱 무영향.
+
+## 2026-06-21 (iter 18) · 회귀복원(복사/표) + 검색 모델결정화(web_search 상시) · pass 104/104
+- node --test router 5/5 + exporters 5/5 + 전체 104/104 · node --check api/chat.js·lib/router.mjs·lib/exporters.mjs OK · stella-md 파싱 OK
+- 검색: needsWebSearch 게이트 제거→web_search 상시(gpt-4o), #구글드라이브 우선분기(needsDrive면 검색 미제공). 표 온디맨드·body.route 한정 유지(회귀 없음).
+- 복원: marked 렌더 후 코드블록 복사 버튼+표 TSV 복사(stella-md.js addCopyButtons). Excel 실.xlsx 유지.
+- STEP6 라이브 스모크: OPENAI_API_KEY 없어 실호출 불가 — "송도 맛집/월드컵/안녕/표" 실검증은 배포 후. 순수함수·파서·게이트는 테스트 통과.
+요약 3줄:
+1. 검색 정확도: 좁은 키워드 게이트 폐기, web_search를 모델이 항상 쓸 수 있게(맛집·장소 환각 제거, 출처 표기). #구글드라이브는 우선 분기.
+2. 회귀복원: 마크다운 정상 렌더(marked) 위에 코드블록/표 복사 버튼 재부착. Excel은 이미 SheetJS 실파일이라 유지, lib/exporters.mjs로 테스트 가드.
+3. 직전 개선 유지: 표 온디맨드·body.route Stella GPT 한정. 다른 앱 무영향.
+
+## FINAL (iter 18)
+- node --test 104/104 PASS. 변경: lib/router.mjs(v2), api/chat.js(검색 상시+drive 우선), js/stella-md.js(복사버튼 복원), lib/exporters.mjs(신규), test/router.test.mjs(v2)+test/exporters.test.mjs(신규), REGRESSION_AUDIT.md, sw +1.
+- 한 줄: 맛집/실시간은 web_search로 정확히, 복사/엑셀 복원, 표 온디맨드 유지 — Stella GPT 한정.
