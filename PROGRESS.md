@@ -392,3 +392,10 @@ STATUS: IN_PROGRESS
 - lib/approval.js: 파일 보존(allowlist 유틸 등 미사용으로 남김), approval.test.js 무수정.
 - 클라이언트(index.html): 미수정 — 서버가 pending/403승인/503을 더는 반환하지 않아 승인대기 분기가 inert가 됨(자동 정상화). 거대한 인라인 JS 편집 회귀 위험 회피 위해 비활성 분기는 그대로 둠(가정).
 - 데이터: 조회/표기/상태만 단순화, 저장·중복검사·Drive 보존(ADD-only, 무삭제).
+
+## [autopilot iter 16] 하드코딩 화이트리스트 로그인
+- 가정: 화이트리스트 판정/권한은 서버리스(api/auth.js + lib/login-allow.js)에서 처리 → 클라 소스에 명단 미노출(구조 노출 회피). 클라는 서버가 준 isAdmin/role만 사용.
+- ALLOWLIST(yesblue0342/dmswn8712/mjlee)는 비번 무관 즉시 로그인(빈 비번도) + Drive 호출 0. yesblue0342만 admin.
+- 내부 에러 노출 제거: 금칙어(Drive/환경변수/env/경로/스택/토큰/error필드)를 사용자 화면에서 제거, console.* 내부 로그만. 회원가입 Drive 실패도 일반 문구.
+- 유저 ID=username 고정(난수 재생성 없음) → SW 캐시 bump/배포 시 채팅·프로젝트·게시판 orphan 방지.
+- 데이터/기능 회귀 없음(기존 Drive/Azure 경로는 비-allowlist에 그대로 유지).

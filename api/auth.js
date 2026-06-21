@@ -4,6 +4,7 @@
 import crypto from "crypto";
 import { saveJsonToDrive, readJsonFromDrive } from "../lib/drive-utils.js";
 import { isAdmin, effectiveStatus, adminPasswordOk } from "../lib/approval.js";
+import { isAllowlisted, allowlistUser } from "../lib/login-allow.js";
 
 function clean(v){ return String(v || "").trim(); }
 function lower(v){ return clean(v).toLowerCase(); }
@@ -24,8 +25,10 @@ function verify(secret, stored){
 }
 function publicUser(u){
   const id = u.user_id || u.id || u.email;
-  // status/approvedAt 포함: 클라이언트가 "승인됨" 알림을 1회 표시할 수 있도록 노출.
+  const admin = isAdmin(id);
+  // role/isAdmin 포함: 권한 판정은 클라이언트가 이 값을 직접 사용(Drive 권한 조회 없음).
   return { id, email: u.email || id, name: u.name || id, birth: u.birth || "", created_at: u.created_at || new Date().toISOString(),
+    role: admin ? "admin" : "user", isAdmin: admin,
     status: effectiveStatus(u), approvedAt: u.approvedAt || null };
 }
 
@@ -129,15 +132,23 @@ export default async function handler(req, res){
     const password = String(b.password || b.code || "");
 
     if(!rawId && !email) return res.status(400).json({ ok:false, message:"아이디 또는 이메일을 입력하세요." });
+
+    // ★ 하드코딩 화이트리스트 — 비밀번호 무관(틀려도/비어도) 즉시 로그인 성공. Drive 조회/저장 호출 없음. ★
+    //   (비밀번호 필수 검사보다 먼저 둔다 → 빈 비번도 통과)
+    if(isAllowlisted(rawId) || isAllowlisted(email)){
+      const who = isAllowlisted(rawId) ? rawId : email;
+      return res.status(200).json({ ok:true, message:"로그인 성공", user: allowlistUser(who) });
+    }
+
     if(!password) return res.status(400).json({ ok:false, message:"비밀번호를 입력하세요." });
 
     // admin/admin 무조건 통과 (관리자는 항상 승인 상태)
     if(lower(rawId) === "admin" && password === "admin"){
-      return res.status(200).json({ ok:true, message:"관리자 로그인", user:{ id:"admin", email:"admin@stella.local", name:"관리자", birth:"", created_at:new Date().toISOString(), status:"approved", approvedAt:null } });
+      return res.status(200).json({ ok:true, message:"관리자 로그인", user:{ id:"admin", email:"admin@stella.local", name:"관리자", birth:"", created_at:new Date().toISOString(), role:"admin", isAdmin:true, status:"approved", approvedAt:null } });
     }
     // 관리자 + ADMIN_PASSWORD(env) 통과 (env 설정 시에만, 선택)
     if(isAdmin(rawId) && adminPasswordOk(password)){
-      return res.status(200).json({ ok:true, message:"관리자 로그인", user:{ id: rawId||"admin", email: email||"admin@stella.local", name: name||"관리자", birth:"", created_at:new Date().toISOString(), status:"approved", approvedAt:null } });
+      return res.status(200).json({ ok:true, message:"관리자 로그인", user:{ id: rawId||"admin", email: email||"admin@stella.local", name: name||"관리자", birth:"", created_at:new Date().toISOString(), role:"admin", isAdmin:true, status:"approved", approvedAt:null } });
     }
 
     // ===== 로그인 ===== (단순 로그인: 조회 → 비번 검증 → 성공. 승인 게이트/503 없음)
@@ -185,7 +196,8 @@ export default async function handler(req, res){
         await saveJsonToDrive({ folderPath:["auth","users"], fileName: emailKey, data: { ...userData, aliasOf: idKey } });
       }
     }catch(driveErr){
-      return res.status(500).json({ ok:false, message:"회원가입 실패 (Google Drive 저장 오류). 환경변수를 확인하세요.", error: driveErr.message });
+      console.error("[auth] signup persist failed:", driveErr && driveErr.message); // 내부 로그만
+      return res.status(500).json({ ok:false, message:"잠시 후 다시 시도해주세요." });
     }
 
     // Azure 인덱스는 부가 (실패해도 가입 성공)
@@ -194,6 +206,7 @@ export default async function handler(req, res){
     // 즉시 가입 완료 → 바로 로그인 가능 (승인 대기 없음)
     return res.status(201).json({ ok:true, pending:false, status:"approved", message:"회원가입이 완료되었습니다. 로그인하세요.", user:publicUser(userData) });
   }catch(e){
-    return res.status(500).json({ ok:false, message:"인증 처리 실패", error:e.message });
+    console.error("[auth] handler error:", e && e.message); // 내부 로그만 — 화면엔 일반 문구
+    return res.status(500).json({ ok:false, message:"잠시 후 다시 시도해주세요." });
   }
 }

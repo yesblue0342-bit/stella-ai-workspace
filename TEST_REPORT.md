@@ -302,3 +302,15 @@
 ## FINAL (iter 15)
 - npm test **84/84 PASS**. 변경: api/auth.js(단순 로그인/가입), api/admin-approvals.js(503/부트스트랩가드 원복), test/auth-admin.test.js(단순동작 반영), test/auth-resilience.test.js 삭제, sw.js v61.
 - 한 줄: 오늘 추가한 승인게이트·503·pending·allowlist를 제거해 오늘 이전의 단순 로그인으로 원복(자격증명/Drive 정상 전제).
+
+## 2026-06-21 (iter 16) · 하드코딩 화이트리스트 로그인 + admin + 내부에러 노출제거 + 유저ID 고정 · pass 94/94
+- node --check api/auth.js·lib/login-allow.js OK · npm test 94/94(login-allow 10건 신규)
+- a~e 결과: (a)allowlist 3개 ID 틀린/빈 비번 200✓ (b)yesblue0342 isAdmin true·role admin✓ (c)dmswn8712·mjlee isAdmin false✓ (d)에러 매핑/실패 메시지 금칙어 0·내부 error 필드 미노출✓ (e)동일 username→동일 user.id(대문자도 정규화 고정)✓
+요약 3줄:
+1. lib/login-allow.js(서버 전용): ALLOWLIST 3개 ID는 비번 무관(빈/틀림 포함) 즉시 200, Drive 호출 0. yesblue0342만 role:admin/isAdmin:true. 클라 소스에 명단 미노출.
+2. 내부 노출 제거: auth.js 회원가입/핸들러 에러를 일반 문구("잠시 후 다시 시도해주세요.")+console.* 내부로그로 전환(금칙어 Drive/환경변수/env/경로/error필드 제거). 클라 authMsg도 일반화.
+3. 권한: publicUser·admin 응답에 role/isAdmin 추가, 클라는 apiUser.isAdmin 직접 사용(Drive 권한조회 없음). 유저ID=username 고정(난수 없음)으로 채팅/프로젝트 orphan 방지. 회귀 0(기존 기능 무변경).
+
+## FINAL (iter 16)
+- npm test **94/94 PASS**(a~e 전수 통과). 변경: lib/login-allow.js(신규), api/auth.js(화이트리스트+에러 일반화+role/isAdmin), index.html(서버 isAdmin 사용+에러 일반화), test/login-allow.test.js(신규), sw.js v62.
+- 한 줄: 정해진 3개 ID는 Drive 없이 비번 무관 즉시 로그인(yesblue0342=admin), 내부 구조 에러 비노출, 유저ID=username 고정.
