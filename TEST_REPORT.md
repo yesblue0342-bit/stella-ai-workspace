@@ -197,3 +197,10 @@
 1. lib/drive-files.mjs에 saveTextToDrive + 순수헬퍼(txtFileName/txtContent/tsKST) 추가 — 파일명 {앱명}_{YYYYMMDD_HHMMSS}.txt, 내용=[요청]헤더+결과 전문, StellaGPT/0download 직하 저장.
 2. /api/cc/save-drive에 text 모드 추가(세션 불필요) — 신규 키·라우트 0, 기존 Drive OAuth 재사용. codex 매 응답·cc 세션완료 시 자동 호출 + 성공/실패 토스트.
 3. 헬퍼 유닛 7/7 + jsdom으로 저장 호출 페이로드·토스트 검증. 실제 Drive 업로드는 라이브 OAuth에서만.
+
+## FINAL (iter 9) — C1·C2 전체 완료
+- npm test: **69/69 pass**(drive-text 7건 추가), fail 0. node --check(drive-files.mjs·save-drive.js·chat.js) OK. cc/codex 파싱 bad=0.
+- C1 사이드바 기본 접힘+상태기억(jsdom 데스크톱/모바일 검증) / C2 결과 .txt Drive(0download) 자동저장+토스트(헬퍼 7/7+jsdom) — 전부 `[x]`.
+- SW 캐시 v54→**v55**.
+- 배포: main 푸시 → Vercel 자동 배포(team: stella-gpt). 정식 stella-ai-workspace 프로젝트 기준(중복 g1st는 미사용/무시).
+- 한계: 실제 Drive 업로드는 라이브 OAuth(GOOGLE_* 토큰)에서만. 샌드박스는 순수헬퍼 유닛+jsdom 호출검증까지.
