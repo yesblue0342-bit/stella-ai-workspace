@@ -12,3 +12,23 @@
 - **검증**: 실제 핸들러 호출 테스트 — 저장소 장애 시 503(구 401 둔갑) / admin·admin·ADMIN_PASSWORD 200 (Drive 불필요). 84/84.
 - **회원 데이터**: 조회·표기만 수정, 저장/삭제 로직 무변경 — 데이터 무손상.
 - `[!]` 인프라(에이전트 적용 불가, Vercel 대시보드): 셋 중 하나 — `GOOGLE_DRIVE_FOLDER_ID` 설정 확인 / `GOOGLE_REFRESH_TOKEN` 재발급(만료·폐기 시) / `ADMIN_PASSWORD` 설정(Drive 없이 관리자 로그인). 코드는 정상이며 이 값들이 갖춰지면 즉시 통과.
+
+## P1 구문·정적 검사 — 발견 0 / 수정 0
+- api/lib 전 `.js/.mjs` `node --check` 통과(0 fail). HTML 12개 인라인 스크립트 19개 new Function/module 파싱 bad=0. 깨진/중복 함수·끊어진 구문 없음.
+
+## P2 시크릿 스캔 — 발견 0 / 수정 0
+- sk-/sk-ant-/ghp_/github_pat_/AIza/xox*/PRIVATE KEY 패턴 소스 0건. 모든 자격증명은 process.env.* 참조(키 이름 일치). 하드코딩 비번 리터럴은 테스트 픽스처/node_modules뿐(실 시크릿 아님). admin/admin은 문서화된 폴백.
+
+## P3 공용 인프라 — 발견 0 / 수정 0 (env 외)
+- Drive OAuth: getDrive()가 호출마다 OAuth2 클라이언트 재생성 + setCredentials(refresh_token) → googleapis가 access token 자동 리프레시(1시간 401 자동 처리, 스테일 토큰 캐시 없음). refresh token 자체 폐기만 인프라 이슈(A1 [!]).
+- Azure SQL: connectionTimeout/requestTimeout 60000 + getPool withRetry(지수백오프) + warmup(SELECT 1). 타임아웃/콜드스타트 가드 정상.
+- 서비스워커: 단일 sw.js, 단일 CACHE 상수(일관). HTML network-first라 캐시 bump로 사용자 스트랜딩/데이터 소실 없음(localStorage는 SW 캐시와 무관).
+
+## P4 앱별 스모크 — 발견 0 / 수정 0
+- HTML 12앱이 호출하는 /api 엔드포인트 전수 존재 확인(71개 라우트, 끊어진 호출 0). Stella GPT 로그인+관리자 인증은 실핸들러 테스트로 통과 검증(A1).
+
+## P5 전체 테스트 — 84/84 PASS
+
+## 요약: 발견 1건 / 수정 1건 / 보류 1건(인프라 env)
+- 발견·수정: A1 회귀 — Drive 저장소 오류를 "가입 정보 없음"으로 둔갑시키던 readUser catch{} 마스킹 → not-found(401)/저장소오류(503) 구분 + env-admin·Azure 폴백으로 로그인 복구.
+- 보류[!]: Vercel env(GOOGLE_DRIVE_FOLDER_ID / GOOGLE_REFRESH_TOKEN 재발급 / ADMIN_PASSWORD) — 대시보드 작업이라 에이전트 적용 불가. 코드는 정상이며 값 갖춰지면 즉시 통과.

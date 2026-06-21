@@ -258,3 +258,10 @@
 1. 회귀 근본=공용 Drive 조회 실패(토큰/FOLDER_ID)를 readUser catch{}가 "가입 정보 없음"으로 둔갑 → 관리자·회원 동시 장애 원인 은폐.
 2. 수정: not-found(401)와 저장소오류(503)를 구분(auth.js·admin-approvals.js), env-admin/Azure 폴백으로 로그인 복구. 데이터 무손상.
 3. [!] Vercel env: GOOGLE_DRIVE_FOLDER_ID/GOOGLE_REFRESH_TOKEN/ADMIN_PASSWORD 중 누락분 설정 시 즉시 정상.
+
+## FINAL (iter 12) — 전수 검사 P1~P5 완료
+- npm test: **84/84 pass**. node --check 전 api/lib OK. HTML 19 인라인 스크립트 파싱 bad=0. /api 엔드포인트 71개 끊김 0.
+- P1 구문 0/0 · P2 시크릿 0/0 · P3 인프라 0/0(env 외) · P4 스모크 0/0 · P5 84/84.
+- A1 회귀 수정(저장소 오류 마스킹 제거) 포함. SW 캐시 v57→**v58**.
+- 배포: main 푸시 → Vercel 자동 배포(team: stella-gpt, 정식 stella-ai-workspace / 중복 g1st 무시).
+- 보류[!]: Vercel env GOOGLE_DRIVE_FOLDER_ID/GOOGLE_REFRESH_TOKEN/ADMIN_PASSWORD(인프라).
