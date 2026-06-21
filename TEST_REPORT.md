@@ -290,3 +290,15 @@
 ## FINAL (iter 14)
 - npm test **99/99 PASS**. 변경: lib/approval.js(allowlist 유틸), api/auth.js(Drive독립 로그인+signup차단+부트스트랩 보안), api/admin-approvals.js(부트스트랩 보안), test/auth-resilience.test.js(신규), test/auth-admin.test.js(부트스트랩 차단 반영), sw.js v60.
 - 한 줄: 정해진 ID는 Drive 안 읽고 env 비번으로 로그인 → 구글 토큰 만료에도 로그인 항상 가능.
+
+## 2026-06-21 (iter 15) · 단순 로그인 원복(승인/권한 체크 제거) · pass 84/84
+- node --check api/auth.js·api/admin-approvals.js OK · npm test 84/84
+- 핸들러 검증: admin/admin→200, 미존재/저장소오류→401(503 제거), yesblue0342+ADMIN_PASSWORD(선택)→200
+요약 3줄:
+1. readUser 오류 삼키기 원복(throw→null)로 503 AUTH_STORE_UNAVAILABLE 원천 제거. login의 driveErr/503 분기·canLogin 승인게이트 삭제 → 단순 조회→비번검증→성공.
+2. signup status pending→approved + 즉시 성공 반환(중복검사·Drive 저장 유지). admin/admin 무조건 통과로 원복. iter14 allowlist/SIGNUP_DISABLED 블록 제거(단순 로그인 차단 요인).
+3. 반영해 obsolete된 핸들러 테스트 정리(allowlist 테스트 파일 삭제, auth-admin 2건 단순동작으로 수정). approval.test.js 무수정. 데이터 ADD-only.
+
+## FINAL (iter 15)
+- npm test **84/84 PASS**. 변경: api/auth.js(단순 로그인/가입), api/admin-approvals.js(503/부트스트랩가드 원복), test/auth-admin.test.js(단순동작 반영), test/auth-resilience.test.js 삭제, sw.js v61.
+- 한 줄: 오늘 추가한 승인게이트·503·pending·allowlist를 제거해 오늘 이전의 단순 로그인으로 원복(자격증명/Drive 정상 전제).

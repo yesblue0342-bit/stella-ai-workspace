@@ -385,3 +385,10 @@ STATUS: IN_PROGRESS
 - 설정되면 공개 레포의 admin/admin 부트스트랩은 자동 비활성(구멍 차단).
 - (선택) Drive 기능(채팅/파일/메모) 사용 시 GOOGLE_REFRESH_TOKEN 재발급 + OAuth 앱 Production 게시 — 로그인 자체는 Drive와 무관하게 동작.
 - 설계 가정: 로그인 판정은 Drive 호출 0회(allowlist 분기 최우선). 비-allowlist + STELLA_MEMBERS 미설정 흐름만 기존 Drive 경로 하위호환 유지. 회원 데이터 ADD-only(무삭제).
+
+## [autopilot iter 15] 단순 로그인 원복
+- api/auth.js: readUser catch{}→null(503 제거), login 503/driveErr·canLogin 승인게이트·iter14 allowlist·SIGNUP_DISABLED 제거, signup pending→approved 즉시성공(중복검사·Drive저장 유지), admin/admin 무조건 통과.
+- api/admin-approvals.js: readUser 오류 삼키기·admin/admin 무조건·503 제거(부트스트랩 가드 원복).
+- lib/approval.js: 파일 보존(allowlist 유틸 등 미사용으로 남김), approval.test.js 무수정.
+- 클라이언트(index.html): 미수정 — 서버가 pending/403승인/503을 더는 반환하지 않아 승인대기 분기가 inert가 됨(자동 정상화). 거대한 인라인 JS 편집 회귀 위험 회피 위해 비활성 분기는 그대로 둠(가정).
+- 데이터: 조회/표기/상태만 단순화, 저장·중복검사·Drive 보존(ADD-only, 무삭제).

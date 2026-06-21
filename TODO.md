@@ -64,3 +64,10 @@
 - [x] T5. test/auth-resilience.test.js 신설(순수함수+핸들러 allowlist 경로, 네트워크 없음, 비밀값 미포함).
 - [x] T6. node --check 전 변경분 + npm test 99/99.
 - [!] (사용자 액션) Vercel env STELLA_MEMBERS 설정 — 미설정 시 allowlist 로그인 503(실패-안전). PROGRESS.md 참조.
+
+## 단순 로그인 원복 (iter 15, autopilot)
+- [x] R1. readUser 오류 삼키기 원복(throw→null) → 503 원천 제거.
+- [x] R2. login 503/driveErr 분기 삭제 + canLogin 승인 게이트 삭제(단순 조회→비번→성공). iter14 allowlist 블록 제거.
+- [x] R3. signup pending→approved 즉시 성공(중복검사·Drive 저장 유지), SIGNUP_DISABLED 제거.
+- [x] R4. admin/admin 무조건 통과 원복(auth.js·admin-approvals.js). lib/approval.js 파일 보존.
+- [x] R5. obsolete 테스트 정리(auth-resilience 삭제, auth-admin 단순동작 반영) — approval.test.js 무수정. 84/84.

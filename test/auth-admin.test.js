@@ -50,26 +50,23 @@ test("auth 핸들러: admin/admin 하드코딩 경로 유지", async () => {
   assert.equal(res.body.user.id, "admin");
 });
 
-test("회귀 un-masking: 저장소(Drive) 장애를 401 '가입 정보 없음'이 아닌 503으로 명확히 알림", async () => {
-  // 샌드박스엔 GOOGLE_DRIVE_FOLDER_ID 등 미설정 → readJsonFromDrive가 throw → readUser throw → 503.
-  // 과거(catch{} 마스킹)엔 이 경우가 401 "가입 정보 없음"으로 둔갑해 관리자/회원 동시 장애의 원인이 안 보였음.
+test("단순 로그인: 미존재/저장소 오류는 모두 401 '가입 정보 없음' (503 없음)", async () => {
+  // 단순 로그인 원복: readUser가 오류를 조용히 null 반환 → 미존재든 저장소오류든 401.
   delete process.env.ADMIN_PASSWORD; delete process.env.STELLA_ADMIN_PASSWORD;
   const { default: handler } = await import("../api/auth.js");
   const res = mockRes();
   await handler({ method: "POST", url: "/api/login", body: { mode: "login", id: "normaluser", password: "secret" } }, res);
-  assert.equal(res.statusCode, 503);
-  assert.equal(res.body.code, "AUTH_STORE_UNAVAILABLE");
+  assert.equal(res.statusCode, 401);
 });
 
-test("ADMIN_PASSWORD 설정 시: yesblue0342 관리자 통과 + admin/admin 구멍 차단(Drive 불필요)", async () => {
-  delete process.env.STELLA_MEMBERS; // members 미설정 상태에서 admin/admin 차단은 ADMIN_PASSWORD 설정만으로
+test("admin/admin은 무조건 통과 + (선택)yesblue0342+ADMIN_PASSWORD 통과 (Drive 불필요)", async () => {
   process.env.ADMIN_PASSWORD = "kh-secret-1234";
   const { default: handler } = await import("../api/auth.js");
-  // admin/admin 은 ADMIN_PASSWORD가 설정되면 비활성(공개 구멍 차단) → 200 아님
+  // admin/admin 은 항상 통과(단순 로그인 원복)
   const res1 = mockRes();
   await handler({ method: "POST", url: "/api/login", body: { mode: "login", id: "admin", password: "admin" } }, res1);
-  assert.notEqual(res1.statusCode, 200);
-  // yesblue0342 + ADMIN_PASSWORD 는 통과(Drive 불필요)
+  assert.equal(res1.statusCode, 200);
+  // yesblue0342 + ADMIN_PASSWORD 도 통과(env 설정 시)
   const res2 = mockRes();
   await handler({ method: "POST", url: "/api/login", body: { mode: "login", id: "yesblue0342", password: "kh-secret-1234" } }, res2);
   assert.equal(res2.statusCode, 200);

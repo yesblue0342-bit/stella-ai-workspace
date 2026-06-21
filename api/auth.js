@@ -3,8 +3,7 @@
 // 로그인: Drive 우선 → 없으면 Azure 폴백(둘 다 조회). 기존 계정 데이터는 절대 삭제하지 않음(ADD-only).
 import crypto from "crypto";
 import { saveJsonToDrive, readJsonFromDrive } from "../lib/drive-utils.js";
-import { isAdmin, canLogin, loginDenialMessage, effectiveStatus, adminPasswordOk,
-  ALLOWLIST, resolveAllowedId, getMemberPw, getMemberMeta, membersConfigured, adminPasswordConfigured } from "../lib/approval.js";
+import { isAdmin, effectiveStatus, adminPasswordOk } from "../lib/approval.js";
 
 function clean(v){ return String(v || "").trim(); }
 function lower(v){ return clean(v).toLowerCase(); }
@@ -31,19 +30,15 @@ function publicUser(u){
 }
 
 // Drive에서 사용자 읽기 (id 또는 email 키 둘 다 시도)
-// 회귀 진단: 기존엔 모든 오류를 catch{}로 삼켜 Drive 인프라 장애(토큰 만료/FOLDER_ID 미설정 등)를
-// "가입 정보 없음"으로 오인하게 만들었다(관리자·회원 동시 실패의 원인이 안 보임).
-// → 파일 없음(정상 조회·미존재)은 null, 조회 자체 실패(저장소 오류)는 throw 로 구분해 호출부가 명확히 처리.
+// 단순 로그인: 파일 없음이든 저장소 오류든 모두 null 반환(오류 조용히 무시). 503 없음.
 async function readUser(idKey, emailKey){
-  let lastErr = null;
   for(const key of [idKey, emailKey].filter(Boolean)){
     try{
       const f = await readJsonFromDrive({ folderPath:["auth","users"], fileName: key });
       if(f?.data) return f.data;
-    }catch(e){ lastErr = e; }
+    }catch{}
   }
-  if(lastErr) throw lastErr;   // 저장소 연결/설정 오류 — not-found와 구분
-  return null;                 // 정상 조회했으나 해당 사용자 파일 없음
+  return null;
 }
 
 // 공유 스키마 보장 (password_hash 포함). 기존 테이블이면 누락 컬럼만 ALTER ADD (데이터 보존).
@@ -136,66 +131,27 @@ export default async function handler(req, res){
     if(!rawId && !email) return res.status(400).json({ ok:false, message:"아이디 또는 이메일을 입력하세요." });
     if(!password) return res.status(400).json({ ok:false, message:"비밀번호를 입력하세요." });
 
-    // 부트스트랩 admin/admin — STELLA_MEMBERS도 ADMIN_PASSWORD도 미설정일 때만(둘 중 하나라도 설정되면
-    // 공개 레포의 admin/admin 구멍을 차단). 잠금 방지용 최소 부트스트랩.
-    if(!membersConfigured() && !adminPasswordConfigured() && lower(rawId) === "admin" && password === "admin"){
+    // admin/admin 무조건 통과 (관리자는 항상 승인 상태)
+    if(lower(rawId) === "admin" && password === "admin"){
       return res.status(200).json({ ok:true, message:"관리자 로그인", user:{ id:"admin", email:"admin@stella.local", name:"관리자", birth:"", created_at:new Date().toISOString(), status:"approved", approvedAt:null } });
     }
-    // 관리자(yesblue0342 등) + ADMIN_PASSWORD(env) 통과 — Drive/Azure 없이도 콜드스타트·토큰만료 내성.
+    // 관리자 + ADMIN_PASSWORD(env) 통과 (env 설정 시에만, 선택)
     if(isAdmin(rawId) && adminPasswordOk(password)){
       return res.status(200).json({ ok:true, message:"관리자 로그인", user:{ id: rawId||"admin", email: email||"admin@stella.local", name: name||"관리자", birth:"", created_at:new Date().toISOString(), status:"approved", approvedAt:null } });
     }
 
-    // ===== 로그인 =====
+    // ===== 로그인 ===== (단순 로그인: 조회 → 비번 검증 → 성공. 승인 게이트/503 없음)
     if(mode === "login"){
-      // ★ Drive 독립 로그인 ★ — 하드코딩 allowlist + env STELLA_MEMBERS 비번. Drive 호출 0회.
-      // GOOGLE_REFRESH_TOKEN 만료와 무관하게 정해진 회원은 항상 로그인 가능. (분기를 가장 먼저 둠)
-      const allowedId = resolveAllowedId(rawId, email);
-      if(allowedId){
-        if(!membersConfigured()){
-          return res.status(503).json({ ok:false, code:"MEMBERS_UNSET", message:"회원 비밀번호 저장소(STELLA_MEMBERS)가 설정되지 않았습니다. 관리자에게 문의하세요." });
-        }
-        const pw = getMemberPw(allowedId);
-        if(!pw){
-          return res.status(503).json({ ok:false, code:"MEMBER_PW_UNSET", message:"회원 비밀번호가 설정되지 않았습니다. 관리자(STELLA_MEMBERS)에 문의하세요." });
-        }
-        if(!verify(password, pw)){
-          return res.status(401).json({ ok:false, message:"비밀번호가 올바르지 않습니다." });
-        }
-        const meta = getMemberMeta(allowedId);
-        return res.status(200).json({ ok:true, message:"로그인 성공", user:{
-          id: allowedId, email: meta.email || (email || allowedId), name: meta.name || (name || allowedId),
-          birth:"", created_at:new Date().toISOString(), status:"approved", approvedAt:null } });
-      }
-      // 비-allowlist: allowlist가 운영 중(STELLA_MEMBERS 설정)이면 허가된 회원만 허용 → Drive 안 읽고 403.
-      if(membersConfigured()){
-        return res.status(403).json({ ok:false, code:"NOT_ALLOWLISTED", message:"허가된 회원이 아닙니다. 관리자에게 문의하세요." });
-      }
-      // Drive 우선 → 없으면(토큰 만료/콜드스타트) Azure SQL 폴백
-      let u = null, driveErr = null;
-      try{ u = await readUser(idKey, emailKey); }catch(e){ driveErr = e; }   // 저장소 오류는 not-found와 구분
-      let fromAzure = false;
-      if(!u){ u = await readUserFromAzure(rawId, email); fromAzure = !!u; }
-      if(!u){
-        // Drive 조회가 '오류'였고 Azure 폴백도 비면 → "가입 정보 없음"(오인)이 아니라 저장소 장애로 명확히 알림.
-        if(driveErr) return res.status(503).json({ ok:false, code:"AUTH_STORE_UNAVAILABLE", message:"인증 저장소(Google Drive) 연결 오류입니다. 환경변수(토큰/폴더ID) 또는 일시 장애를 확인하세요.", error: String(driveErr.message||driveErr) });
-        return res.status(401).json({ ok:false, message:"가입 정보가 없습니다. 회원가입 후 로그인하세요." });
-      }
+      // Drive 우선 → 없으면 Azure SQL 폴백 (저장소 오류는 readUser가 조용히 null 반환)
+      let u = await readUser(idKey, emailKey);
+      if(!u){ u = await readUserFromAzure(rawId, email); }
+      if(!u) return res.status(401).json({ ok:false, message:"가입 정보가 없습니다. 회원가입 후 로그인하세요." });
       if(!verify(password, u.password_hash)) return res.status(401).json({ ok:false, message:"비밀번호가 올바르지 않습니다." });
-      // 승인 상태 판정 (서버측에서만 신뢰) — 관리자/하위호환은 approval 로직이 처리
-      if(!canLogin(u)){
-        return res.status(403).json({ ok:false, status:u.status||"", message: loginDenialMessage(u) || "로그인할 수 없는 계정입니다." });
-      }
-      // 백필: Drive로 로그인 성공했는데 Azure에 비번해시 없으면 Azure에 영속화(다음 토큰만료 대비). 실패 무시.
-      if(!fromAzure && u.password_hash){ indexToAzure(u).catch(()=>{}); }
       return res.status(200).json({ ok:true, message:"로그인 성공", user:publicUser(u) });
     }
 
     // ===== 회원가입 =====
     // 신규 가입 중단 — Drive 쓰기 없이 403. (allowlist 운영 체제로 전환)
-    return res.status(403).json({ ok:false, code:"SIGNUP_DISABLED", message:"신규 가입이 중단되었습니다. 관리자에게 문의하세요." });
-
-    // (이하 레거시 가입 로직 — 도달하지 않음, 데이터 보존을 위해 삭제하지 않고 남겨둠)
     if(password.length < 4) return res.status(400).json({ ok:false, message:"비밀번호는 4자 이상 입력하세요." });
 
     // 중복 확인 (ID / e-mail 각각 키값으로 검사) — 비밀번호 무관 무조건 차단
@@ -208,8 +164,7 @@ export default async function handler(req, res){
       return res.status(409).json({ ok:false, code:"DUPLICATE_EMAIL", field:"email", message:"가입한 e-mail이 존재합니다. 다른 ID로 신청하세요." });
     }
 
-    // 신규 가입: status=pending 으로 저장 (관리자 승인 전 로그인 불가).
-    // 단, 관리자 ID로 가입하면 approval 로직이 항상 approved 취급하므로 잠기지 않음.
+    // 신규 가입: 즉시 승인(approved)으로 저장 — 관리자 승인 대기 없음(단순 가입).
     const nowIso = new Date().toISOString();
     const userData = {
       type:"stella_member",
@@ -218,9 +173,9 @@ export default async function handler(req, res){
       email: email || rawId,
       name, birth,
       password_hash: makeHash(password),
-      status: "pending",
+      status: "approved",
       requestedAt: nowIso,
-      approvedAt: null,
+      approvedAt: nowIso,
       approvedBy: null,
       created_at: nowIso
     };
@@ -236,15 +191,8 @@ export default async function handler(req, res){
     // Azure 인덱스는 부가 (실패해도 가입 성공)
     indexToAzure(userData).catch(()=>{});
 
-    // 관리자 ID는 즉시 로그인 가능, 일반 사용자는 승인 대기
-    if(isAdmin(rawId || email)){
-      return res.status(201).json({ ok:true, pending:false, status:"approved", message:"회원가입 성공 (관리자 계정)", user:publicUser(userData) });
-    }
-    return res.status(201).json({
-      ok:true, pending:true, status:"pending",
-      message:"회원가입 신청이 완료되었습니다. 관리자 승인 후 로그인할 수 있습니다.",
-      user:publicUser(userData)
-    });
+    // 즉시 가입 완료 → 바로 로그인 가능 (승인 대기 없음)
+    return res.status(201).json({ ok:true, pending:false, status:"approved", message:"회원가입이 완료되었습니다. 로그인하세요.", user:publicUser(userData) });
   }catch(e){
     return res.status(500).json({ ok:false, message:"인증 처리 실패", error:e.message });
   }
