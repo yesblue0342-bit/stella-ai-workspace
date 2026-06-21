@@ -52,3 +52,6 @@
 - [x] P4 앱별 스모크 — 12앱 /api 엔드포인트 71개 끊김 0, GPT 로그인/관리자 실핸들러 통과.
 - [x] P5 전체 테스트 — 84/84.
 - [!] (인프라) Vercel env: GOOGLE_DRIVE_FOLDER_ID / GOOGLE_REFRESH_TOKEN 재발급 / ADMIN_PASSWORD — 대시보드 작업, 에이전트 적용 불가.
+
+## Agent Code/Codex 전송버튼 색상 (iter 13, autopilot)
+- [x] SB1. (cc.html·codex.html) 전송(녹색 #238636)·중단(빨강 #da3633) 버튼 강조색 제거 → 주변 아이콘처럼 다크/라이트 테마 중립색(var(--card)+var(--ink)+var(--line) 테두리). 양 모드에서 눈에 안 띄게 통일. (84/84)

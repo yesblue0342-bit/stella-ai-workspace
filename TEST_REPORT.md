@@ -265,3 +265,15 @@
 - A1 회귀 수정(저장소 오류 마스킹 제거) 포함. SW 캐시 v57→**v58**.
 - 배포: main 푸시 → Vercel 자동 배포(team: stella-gpt, 정식 stella-ai-workspace / 중복 g1st 무시).
 - 보류[!]: Vercel env GOOGLE_DRIVE_FOLDER_ID/GOOGLE_REFRESH_TOKEN/ADMIN_PASSWORD(인프라).
+
+## 2026-06-21 (iter 13) · SB1 Agent Code/Codex 전송버튼 중립색 · pass 84/84
+- cc.html/codex.html 파싱 bad=0 · npm test 84/84(회귀 없음, CSS 한정)
+- grep: var(--send)/var(--cancel) 0건(녹/빨 제거), #sendBtn neutral 규칙 양 파일 1건씩. 토큰 라이트(#f3f4f6/#111827/#e5e7eb)·다크(#161b22/#e6edf3/#21262d) 확인
+요약 3줄:
+1. 전송(녹색)·중단(빨강) 버튼을 var(--card) 표면+var(--ink) 텍스트+var(--line) 테두리 중립색으로 교체 — 주변 모노크롬 아이콘과 동일 톤.
+2. 라이트=연회색/검정텍스트, 다크=어두운표면/밝은텍스트로 테마 자동 전환, 강조 컬러 없음(눈에 안 띄게).
+3. cc.html·codex.html 동일 적용. SW 캐시 v58→v59.
+
+## FINAL (iter 13)
+- npm test 84/84. cc/codex 파싱 bad=0. 전송/중단 버튼 강조색 제거 완료(양 모드).
+- 배포: main 푸시 → Vercel 자동 배포(team: stella-gpt). SW v59.

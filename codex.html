@@ -55,9 +55,10 @@ select,#budget{padding:6px 8px}
 .iorow{display:flex;gap:8px;align-items:flex-end;border:1px solid var(--line);border-radius:22px;padding:6px 6px 6px 14px;background:var(--input-bg)}
 #prompt{flex:1;resize:none;padding:8px 2px;min-height:40px;max-height:160px;line-height:1.5;border:none;background:transparent;outline:none}
 button.act{cursor:pointer;font-weight:800;padding:0 16px;height:42px;border:none;border-radius:14px}
-#sendBtn{background:var(--send);color:var(--on-accent)}
+/* 전송/중단 버튼: 녹색/빨강 강조색 제거 → 주변 아이콘처럼 다크/라이트 테마 중립색(눈에 안 띄게) */
+#sendBtn{background:var(--card);color:var(--ink);border:1px solid var(--line)}
 #sendBtn:disabled{background:var(--line);color:var(--muted);cursor:not-allowed}
-#cancelBtn{background:var(--cancel);color:var(--on-accent);display:none}
+#cancelBtn{background:var(--card);color:var(--ink);border:1px solid var(--line);display:none}
 #saveGhBtn{background:var(--card);color:var(--ink);border:1px solid var(--line);font-weight:700;font-size:.78rem;padding:5px 9px;border-radius:8px;cursor:pointer}
 .status{font-size:.78rem;color:var(--muted)}
 .status .err{color:var(--err)}
