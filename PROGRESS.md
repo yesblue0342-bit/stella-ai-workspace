@@ -359,3 +359,11 @@ STATUS: IN_PROGRESS
 ### node --check: api/chat-room.js OK / talk.html 스크립트 3블록 OK
 
 ## STAGE 5~8 완료. (STAGE 6 백그라운드: 앱 완전종료 수신은 Web Push(VAPID) 구독이 정석 → 후속 과제)
+
+## [autopilot iter 9] C1/C2 Agent Code·Codex
+- C1: 데스크톱 사이드바 기본 접힘(메인 넓게)+localStorage 상태기억(cc_sidecollapsed/codex_sidecollapsed). 모바일은 CSS(body.side-collapsed .side{display:block})로 무효화해 드로어 회귀 방지. cc/codex 각각 편집(codex는 T3에서 분기되어 cc 재생성 불가).
+- C2: 결과 .txt를 StellaGPT/0download에 저장. 가정/결정:
+  - 신규 라우트 안 만들고 기존 /api/cc/save-drive에 text 모드 추가(text 있으면 세션 불필요). 기존 Drive OAuth(lib/drive-files.mjs) 재사용 = 신규 키 0.
+  - 파일명 {앱명}_{YYYYMMDD_HHMMSS}.txt(KST), 위치는 0download 직하(날짜 하위폴더 없음 — 단일 .txt 요구사항), 내용=[요청] 헤더 한 줄+빈 줄+결과 전문.
+  - codex(StellaCodex): 매 어시스턴트 응답마다 저장. cc(StellaAgentCode): 세션 완료(finish, 비실패) 시 buildTranscript 전문 저장. 성공/실패 토스트.
+  - 한계: 실제 Drive 업로드는 OAuth 자격증명 있는 라이브에서만. 샌드박스는 순수헬퍼 유닛 7/7 + jsdom으로 저장 호출 페이로드/토스트까지 검증.

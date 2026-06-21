@@ -226,6 +226,25 @@ $('themeToggle').addEventListener('click', toggleTheme);
 function esc(s){ return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
 function setStatus(html){ $('status').innerHTML = html || ''; }
 
+// C2: 작업 결과 전문을 Google Drive(StellaGPT/0download)에 {앱명}_{YYYYMMDD_HHMMSS}.txt로 자동 저장 + 토스트.
+function showToast(msg, ok){
+  const t=document.createElement('div');
+  t.textContent=msg;
+  t.style.cssText='position:fixed;left:50%;bottom:24px;transform:translateX(-50%);z-index:9999;background:'+(ok?'var(--ok,#1a7f37)':'var(--err,#b91c1c)')+';color:#fff;padding:9px 16px;border-radius:10px;font-size:.85rem;box-shadow:0 4px 16px rgba(0,0,0,.3);max-width:80vw;word-break:break-all';
+  document.body.appendChild(t);
+  setTimeout(()=>{ t.style.transition='opacity .4s'; t.style.opacity='0'; setTimeout(()=>t.remove(),400); }, 2600);
+}
+async function saveResultToDrive(app, header, text){
+  if(!text || !String(text).trim()) return;
+  try{
+    const r=await fetch('/api/cc/save-drive',{method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({ app:app||'StellaAgentCode', header:header, text:text })});
+    const d=await r.json().catch(()=>({ok:false}));
+    if(r.ok && d.ok) showToast('Drive 저장 ✓ '+(d.name||''), true);
+    else showToast('Drive 저장 실패: '+((d&&(d.message||d.error))||('HTTP '+r.status)), false);
+  }catch(e){ showToast('Drive 저장 오류: '+(e&&e.message?e.message:e), false); }
+}
+
 function addUserBubble(text, attCount){
   const d = document.createElement('div'); d.className='bubble user'; d.textContent = text;
   if(attCount>0){ const b=document.createElement('div'); b.className='lbl'; b.style.marginTop='4px'; b.textContent='📎 이미지 '+attCount+'개 첨부'; d.appendChild(b); }
@@ -294,13 +313,15 @@ async function finish(failed){
   else setStatus('<span class="ok">완료 ✓</span>');
   // 트랜스크립트 Drive 저장 (best-effort)
   if(!failed){
+    const md = buildTranscript({ title:cur.title, model:cur.model, prompt:cur.prompt, run });
     try{
-      const md = buildTranscript({ title:cur.title, model:cur.model, prompt:cur.prompt, run });
       await fetch('/api/cc/save',{method:'POST',headers:{'Content-Type':'application/json'},
         body:JSON.stringify({ session:cur.sessionId, markdown:md, title:cur.title, status:run.status })});
     }catch(e){}
     // PART B: 세션 완료 시 산출물 GitHub 자동 저장 (best-effort) + 수동 버튼 노출
     if(cur && cur.sessionId){ $('saveGhBtn').style.display=''; saveToGithub(true); }
+    // C2: 결과 전문(.txt)도 StellaGPT/0download에 자동 저장
+    saveResultToDrive('StellaAgentCode', cur.prompt, md);
   }
   loadSessions();
 }

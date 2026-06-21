@@ -188,3 +188,12 @@
 1. 데스크톱 진입 시 세션/대화 패널을 기본 접힘으로 → 메인 코딩 영역을 넓게. 햄버거로 열고/닫기.
 2. 마지막 접힘/펼침 상태를 localStorage(cc_sidecollapsed/codex_sidecollapsed)에 기억, 재진입 시 복원.
 3. 모바일은 side-collapsed가 드로어 표시를 막지 않도록 CSS(body.side-collapsed .side{display:block})로 무효화 — 모바일 드로어 회귀 없음.
+
+## 2026-06-21 (iter 9) · C2 결과 .txt Drive 자동저장 · pass 69/69
+- node --check lib/drive-files.mjs · api/cc/save-drive.js OK · npm test 69/69(신규 drive-text 7건 포함)
+- jsdom codex: send 후 /api/cc/save-drive 호출 app=StellaCodex·header=요청·text=결과, 성공 토스트 "Drive 저장 ✓ ..." 렌더
+- cc.html/codex.html 파싱 bad=0
+요약 3줄:
+1. lib/drive-files.mjs에 saveTextToDrive + 순수헬퍼(txtFileName/txtContent/tsKST) 추가 — 파일명 {앱명}_{YYYYMMDD_HHMMSS}.txt, 내용=[요청]헤더+결과 전문, StellaGPT/0download 직하 저장.
+2. /api/cc/save-drive에 text 모드 추가(세션 불필요) — 신규 키·라우트 0, 기존 Drive OAuth 재사용. codex 매 응답·cc 세션완료 시 자동 호출 + 성공/실패 토스트.
+3. 헬퍼 유닛 7/7 + jsdom으로 저장 호출 페이로드·토스트 검증. 실제 Drive 업로드는 라이브 OAuth에서만.

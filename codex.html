@@ -225,6 +225,25 @@ $('themeToggle').addEventListener('click', toggleTheme);
 function esc(s){ return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
 function setStatus(html){ $('status').innerHTML = html || ''; }
 
+// C2: 작업 결과를 Google Drive(StellaGPT/0download)에 {앱명}_{YYYYMMDD_HHMMSS}.txt로 자동 저장 + 토스트.
+function showToast(msg, ok){
+  const t=document.createElement('div');
+  t.textContent=msg;
+  t.style.cssText='position:fixed;left:50%;bottom:24px;transform:translateX(-50%);z-index:9999;background:'+(ok?'var(--ok,#1a7f37)':'var(--err,#b91c1c)')+';color:#fff;padding:9px 16px;border-radius:10px;font-size:.85rem;box-shadow:0 4px 16px rgba(0,0,0,.3);max-width:80vw;word-break:break-all';
+  document.body.appendChild(t);
+  setTimeout(()=>{ t.style.transition='opacity .4s'; t.style.opacity='0'; setTimeout(()=>t.remove(),400); }, 2600);
+}
+async function saveResultToDrive(header, text){
+  if(!text || !String(text).trim()) return;
+  try{
+    const r=await fetch('/api/cc/save-drive',{method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({ app:'StellaCodex', header:header, text:text })});
+    const d=await r.json().catch(()=>({ok:false}));
+    if(r.ok && d.ok) showToast('Drive 저장 ✓ '+(d.name||''), true);
+    else showToast('Drive 저장 실패: '+((d&&(d.message||d.error))||('HTTP '+r.status)), false);
+  }catch(e){ showToast('Drive 저장 오류: '+(e&&e.message?e.message:e), false); }
+}
+
 // ── 마크다운 라이트 렌더 (코드블록/인라인코드/볼드) ──
 function inlineMd(s){ return s.replace(/`([^`]+)`/g,'<code style="background:var(--card);padding:1px 4px;border-radius:4px">$1</code>').replace(/\*\*([^*]+)\*\*/g,'<strong>$1</strong>'); }
 function renderMd(t){
@@ -350,6 +369,7 @@ async function send(){
     chat.model = model;
     persistCurrent();
     setStatus('<span class="ok">완료 ✓</span>');
+    saveResultToDrive(text, answer); // C2: 결과 전문 .txt 자동 저장(StellaGPT/0download)
   }catch(e){
     const msg = (e && e.name==='AbortError') ? '중단됨' : ('오류: '+(e&&e.message?e.message:e));
     thinking.innerHTML = '<span class="err">'+esc(msg)+'</span>';

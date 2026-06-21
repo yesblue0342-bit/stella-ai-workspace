@@ -2,7 +2,7 @@
 // 공개 GitHub 노출 회피: 에이전트 생성물은 비공개 Drive로. 기존 Drive 인증 재사용(새 키/라우트 없음).
 import { listEvents, normalizeEvents } from "./_maclient.mjs";
 import { extractFilesFromEvents } from "../../lib/cc-files.mjs";
-import { saveAgentFilesToDrive } from "../../lib/drive-files.mjs";
+import { saveAgentFilesToDrive, saveTextToDrive } from "../../lib/drive-files.mjs";
 import { getSessionRow, setSessionGithubUrl } from "../../lib/cc-db.mjs";
 
 export const config = { maxDuration: 60 };
@@ -10,7 +10,18 @@ export const config = { maxDuration: 60 };
 export default async function handler(req, res) {
   if (req.method !== "POST") return res.status(405).json({ ok: false, error: "POST only" });
   try {
-    const { session, files: bodyFiles, source } = req.body || {};
+    const { session, files: bodyFiles, source, text, header, app } = req.body || {};
+
+    // C2: 텍스트 전문 저장 모드 — {앱명}_{YYYYMMDD_HHMMSS}.txt 한 개를 StellaGPT/0download에 저장.
+    //     세션 불필요(코덱스 챗 등 비세션 앱도 사용). text가 있으면 이 경로 우선.
+    if (text != null && String(text).trim()) {
+      const r = await saveTextToDrive({ app: app || "Stella", header, text });
+      return res.status(r.ok ? 200 : 500).json({
+        ok: r.ok, storage: "google-drive", saved: r.ok ? 1 : 0, ...r,
+        message: r.ok ? `Google Drive(${r.folder})에 ${r.name} 저장됨` : "Drive 저장 실패",
+      });
+    }
+
     if (!session) return res.status(400).json({ ok: false, error: "session required" });
 
     const row = await getSessionRow(session).catch(() => null);
