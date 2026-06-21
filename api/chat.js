@@ -269,6 +269,23 @@ async function handleWeather(message) {
 }
 
 // ───────── 메인 핸들러 ─────────
+// ── G1 성능: 메모리 프롬프트 워밍 캐시 + 구간 타이밍 ──
+// warm 서버리스 인스턴스 내 반복 요청에서 Azure SQL/Drive 메모리 fetch를 제거(가장 큰 반복 병목).
+const _memCache = new Map(); // userId -> { prompt, ts }
+const MEM_TTL_MS = 60000;
+function invalidateMemoryCache(userId) { _memCache.delete(userId); }
+async function getMemoryPrompt(userId, needsFullMemory) {
+  const e = _memCache.get(userId);
+  if (e && (Date.now() - e.ts) < MEM_TTL_MS) return { prompt: e.prompt, cached: true };
+  let memoryPrompt = await buildMemoryContext(userId);        // Azure SQL 우선
+  if (!memoryPrompt) {                                         // 빈값이면 Drive 폴백
+    const memory = await loadMemory(userId, needsFullMemory);
+    memoryPrompt = memoryToPrompt(memory);
+  }
+  _memCache.set(userId, { prompt: memoryPrompt || "", ts: Date.now() });
+  return { prompt: memoryPrompt || "", cached: false };
+}
+
 export default async function handler(req, res) {
   if (req.method !== "POST") {
     return res.status(405).json({ error: "Method not allowed" });
@@ -283,6 +300,18 @@ export default async function handler(req, res) {
     const system = body.system || STELLA_SYSTEM_PROMPT;
     const images = Array.isArray(body.images) ? body.images.slice(0, 4) : [];
     const userId = String(body.userId || body.user_id || "").trim() || "anonymous";
+
+    // ── G1: 구간별 타이밍(병목 특정용). 응답 timings + 서버 로그로 남김 ──
+    const _t0 = Date.now();
+    const timings = {};
+    const mark = (k) => { timings[k] = Date.now() - _t0; };
+    // 메모리 로드를 검색/Drive와 병렬로 선(先)착수 (userId만 의존, 결과는 아래에서 await)
+    const needsFullMemoryEarly = history.length === 0
+      || /기억|메모리|이전|내 정보|나에 대해|알고 있|히스토리/.test(message.toLowerCase());
+    const _memStart = Date.now();
+    const memoryPromise = getMemoryPrompt(userId, needsFullMemoryEarly)
+      .then(r => { timings.memoryMs = Date.now() - _memStart; timings.memoryCached = r.cached; return r.prompt; })
+      .catch(() => { timings.memoryMs = Date.now() - _memStart; return ""; });
 
     // ① 날씨 직접 처리
     const weatherKw = ["날씨","기온","우산","weather","forecast"];
@@ -378,17 +407,12 @@ export default async function handler(req, res) {
       driveContext = await searchDriveContext(message);
     }
 
-    // ④ 메모리 로드
-    // - 첫 대화(history 없음) 또는 기억 관련 질문일 때만 전체 로드
-    // - 그 외엔 기본 파일만 빠르게 로드 (폴더 스캔 없음)
-    const needsFullMemory = history.length === 0
-      || /기억|메모리|이전|내 정보|나에 대해|알고 있|히스토리/.test(msg);
-    // 메모리: Azure SQL 우선 → 실패/빈값이면 기존 Drive 메모리로 폴백(데이터 유실 방지, soft 전환)
-    let memoryPrompt = await buildMemoryContext(userId);
-    if (!memoryPrompt) {
-      const memory = await loadMemory(userId, needsFullMemory);
-      memoryPrompt = memoryToPrompt(memory);
-    }
+    mark("contextMs"); // 검색+Drive 구간 종료 시점
+
+    // ④ 메모리 로드 — 위에서 검색/Drive와 병렬 착수한 promise를 여기서 회수(추가 대기 최소화)
+    // 메모리: Azure SQL 우선 → 빈값이면 Drive 폴백. warm 캐시(60s)로 반복 요청 fetch 제거.
+    const memoryPrompt = await memoryPromise;
+    mark("preModelMs"); // 모델 호출 직전까지 총 준비 시간
     const prompt = buildSystemPrompt(
       (memoryPrompt ? memoryPrompt + "\n\n" : "") + system,
       searchContext,
@@ -399,6 +423,7 @@ export default async function handler(req, res) {
     const isClaudeModel = model.toLowerCase().includes("claude") || model.toLowerCase().includes("fable");
     let answer;
     let provider;
+    const _modelStart = Date.now();
     if (isClaudeModel) {
       provider = "claude";
       answer = await callClaude({ model, system: prompt, history, message: aiMessage, images });
@@ -406,7 +431,10 @@ export default async function handler(req, res) {
       provider = "openai";
       answer = await callOpenAI({ model, system: prompt, history, message: aiMessage, images, bare: !!body.bare });
     }
-    
+    timings.modelMs = Date.now() - _modelStart;
+    timings.totalMs = Date.now() - _t0;
+    try { console.log("[chat timings]", provider, model, JSON.stringify(timings)); } catch(e) {}
+
     // ⑤ 메모리 업데이트 (비동기 - 응답 지연 없음)
     setImmediate(async () => {
       try {
@@ -415,6 +443,7 @@ export default async function handler(req, res) {
         });
         if (newItems && Object.values(newItems).some(a => Array.isArray(a) && a.length > 0)) {
           await updateMemory(userId, newItems, isClaudeModel); // Drive(폴백 보존)
+          invalidateMemoryCache(userId); // 새 메모리 반영 위해 워밍 캐시 무효화
           // Azure SQL에도 기록(우선 백엔드). 각 항목을 메모리 행으로 dedupe 저장. graceful.
           try {
             for (const [cat, arr] of Object.entries(newItems)) {
@@ -433,6 +462,7 @@ export default async function handler(req, res) {
       ok: true,
       text: answer,
       provider,
+      timings,
       searchContext,
       driveRead: actualDriveContext ? {
         path: actualDriveContext.path,

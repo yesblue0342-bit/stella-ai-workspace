@@ -29,3 +29,8 @@
 - [x] T1. cc.html·codex.html 프롬프트 placeholder에서 "(Enter 전송 / Shift+Enter 줄바꿈)" 제거 → "코딩 작업을 입력하세요"만.
 - [x] T2. 하단 툴바 컬러 이모지(🌙/☀️ 테마·🤖 OMC·파란 체크박스)를 사이드바와 동일한 흰색 모노크롬 라인 SVG(stroke=currentColor)+중립 체크박스(accent-color:var(--muted))로 교체. cc.html/codex.html 공통.
 - [x] T3. Stella Codex만 모델 목록 OpenAI 계열만 노출(Claude 제거) + OpenAI API 고정(`/api/chat` bare 모드, 기본 gpt-4.1-mini). 샌드박스 전용 기능 제거→채팅형 코딩 어시스턴트, 대화 localStorage 보관. Stella Agent Code(cc.html)는 Claude/Managed Agents 그대로. (가정: PROGRESS.md)
+
+## 성능·알림·전송 (iter 8, autopilot)
+- [x] G1. (Stella GPT) 응답 속도: api/chat.js에 구간 타이밍(memory/context/model/total) 계측 추가 → 응답 `timings`+서버 로그. 병목인 메모리 로드(Azure SQL+Drive, 매 요청)를 (a)검색/Drive와 병렬화, (b)warm 인스턴스 60s 캐시로 반복 fetch 제거(업데이트 시 무효화). 구조적 개선: 반복요청 메모리준비 180ms→~0, 검색+Drive 케이스 준비 501→321ms. (스트리밍은 SSE 라이브검증 불가로 후속, PROGRESS.md)
+- [ ] T1. (Stella Talk) 알림이 대화창 안에서만 뜨는 문제 → 앱 열려있는 동안 전역 폴링으로 모든 방 새 메시지 since 감지 + Notification/소리. SW background sync 폴백, OS 완전종료 푸시는 제약 시 `[!]`.
+- [ ] T2. (Stella Talk) 전송 속도: 낙관적 UI(즉시 표시)+백그라운드 영속화, Azure 우선·Drive 비동기, 실패 롤백/재시도, ID upsert 중복방지.

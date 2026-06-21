@@ -308,3 +308,8 @@ STATUS: IN_PROGRESS
 - chat.js callOpenAI의 "[표+요약]" 강제 프리픽스가 코딩답변엔 부적합 → 하위호환 additive 플래그 `bare` 추가(기본 off=GPT/ABAP 무영향), Codex만 bare:true.
 - Stella Agent Code(cc.html)는 Claude(Managed Agents) 그대로 유지.
 - 한계: 실제 OpenAI 응답은 OPENAI_API_KEY 있는 라이브에서만. 샌드박스는 jsdom으로 모델목록/기본값(gpt-4.1-mini)/전송 페이로드(model·bare·system)/렌더링까지 검증.
+
+## [autopilot iter 8] G1 Stella GPT 응답속도
+- 병목 특정: api/chat.js 핫패스에서 메모리 로드(buildMemoryContext=Azure SQL → 빈값 시 loadMemory=Drive)를 매 요청 직렬 호출. 일반대화는 검색/Drive 미사용이라 메모리가 모델 호출 前 최대 지연.
+- 적용(효과 큰 것·저위험): (1) 구간 타이밍 계측(timings 응답+로그)으로 라이브 실측 가능, (2) 메모리 로드를 검색/Drive와 병렬 착수, (3) userId별 60s warm 캐시(updateMemory 후 invalidate).
+- 스트리밍 보류 사유: SSE는 backend(res 스트림)+frontend(reader) 동시 변경이며 샌드박스에서 OPENAI_API_KEY/라이브 없이 end-to-end 검증 불가 → 작동 중 채팅 회귀 위험. 총 지연(모델 생성시간)은 streaming이 '체감 TTFT'만 개선하므로, 우선 준비단계 지연을 제거. 후속 반복에서 라이브 환경 확보 시 SSE 도입.

@@ -127,6 +127,25 @@
 2. chat.js에 하위호환 additive `bare` 플래그(표+요약 강제 프리픽스 생략) 추가 — GPT/ABAP 무영향.
 3. Stella Agent Code(cc.html)는 Claude/Managed Agents 그대로 유지. 실제 응답은 라이브(OPENAI_API_KEY)에서만, 샌드박스는 jsdom 정적·런타임 검증까지.
 
+## 2026-06-21 (iter 8) · G1 Stella GPT 응답속도(계측+병렬+캐시) · pass 62/62
+- node --check api/chat.js OK · npm test 62/62 통과(회귀 없음)
+- grep: timings/getMemoryPrompt/invalidateMemoryCache/memoryPromise/mark( 16 hit
+- 구조적 시뮬레이션(대표 지연값, 실측 아님):
+  - 일반대화(검색/Drive 미사용): 반복요청 메모리준비 180ms→**~3ms**(warm 캐시)
+  - 검색+Drive 사용: 준비단계 501ms→**321ms**(메모리 병렬화로 ~180ms 절감)
+
+| 구간 | 변경 | 효과 |
+|------|------|------|
+| 계측 | `timings{memoryMs,contextMs,preModelMs,modelMs,totalMs,memoryCached}` 응답+서버로그 | 라이브 병목 실측 가능 |
+| 메모리 병목 | buildMemoryContext(Azure)+loadMemory(Drive)를 매 요청 직렬 → **검색/Drive와 병렬 착수** | 준비시간에서 memory 숨김 |
+| 반복 fetch | userId별 60s warm 캐시(getMemoryPrompt), updateMemory 후 invalidate | 2번째+ 요청 메모리 fetch 0 |
+| 회귀 | 기존 폴백(Azure→Drive) 순서·로직 보존 | 62/62 |
+
+요약 3줄:
+1. 먼저 구간 타이밍을 심어 병목 특정 경로(메모리 로드=Azure SQL+Drive를 매 요청 직렬 호출)를 코드로 확인 → 응답 `timings`로 라이브 실측 가능하게 함.
+2. 효과 큰 것부터: 메모리 로드를 검색/Drive와 병렬화(준비시간에서 숨김) + warm 인스턴스 60s 캐시(반복요청 fetch 제거, 업데이트 시 무효화).
+3. 스트리밍은 SSE end-to-end를 샌드박스에서 검증 불가(작동 중인 채팅 회귀 위험)라 후속으로 보류, 근거 PROGRESS.md. 모델 호출 자체 지연은 streaming이 '체감'만 개선.
+
 ## FINAL (iter 7) — T1·T2·T3 전체 완료
 - npm test (`node --test test/*.test.js`): **62/62 pass**, fail 0.
 - 백엔드 node --check: chat.js · cc/_maclient.mjs · cc/start.js · cc/turn.js OK.
