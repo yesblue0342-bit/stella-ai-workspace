@@ -20,11 +20,10 @@ function verify(secret, stored){
   return String(secret) === s;
 }
 
+// 저장소 오류(토큰/설정)는 null이 아니라 throw 로 구분 — "관리자 인증 실패" 오인 방지.
 async function readUser(key){
-  try{
-    const f = await readJsonFromDrive({ folderPath:["auth","users"], fileName: key });
-    return f?.data || null;
-  }catch{ return null; }
+  const f = await readJsonFromDrive({ folderPath:["auth","users"], fileName: key });
+  return f?.data || null;
 }
 
 // ── 서버측 관리자 인증 (기존 인증 방식 재사용: id + password) ──
@@ -36,7 +35,9 @@ async function authenticateAdmin(adminId, adminPassword){
   // ADMIN_PASSWORD(env) 통과 — Drive 없이도 콜드스타트·토큰만료 내성(env 미설정 시 건너뜀)
   if(adminPasswordOk(adminPassword)) return { ok:true, id };
   // Drive 레코드의 password_hash 로 검증 (회원가입을 통해 저장된 관리자 계정)
-  const rec = await readUser(safeKey(id));
+  let rec = null;
+  try{ rec = await readUser(safeKey(id)); }
+  catch(e){ return { ok:false, code:503, message:"인증 저장소(Google Drive) 연결 오류입니다. 환경변수(토큰/폴더ID)를 확인하거나 ADMIN_PASSWORD로 로그인하세요." }; }
   if(rec && verify(String(adminPassword || ""), rec.password_hash)) return { ok:true, id };
   return { ok:false, code:401, message:"관리자 인증에 실패했습니다." };
 }

@@ -250,3 +250,11 @@
 - SW 캐시 v56→**v57**.
 - 배포: main 푸시 → Vercel 자동 배포(team: stella-gpt, 정식 stella-ai-workspace 기준 / 중복 g1st 미사용·무시).
 - 남은 [!]: (A1) Vercel `ADMIN_PASSWORD` env 설정 필요 — 미설정 시 env-admin 경로 비활성(admin/admin·Drive/Azure 레코드 폴백만). (A2) Drive refresh token 폐기 시 GOOGLE_REFRESH_TOKEN 재발급 필요(인프라). 둘 다 대시보드 작업이라 에이전트 적용 불가.
+
+## 2026-06-21 (iter 12) · A1 회귀 — 저장소 오류 마스킹 제거 · pass 84/84
+- node --check api/auth.js·admin-approvals.js OK · npm test 84/84(회귀 테스트 2건 신규)
+- 실핸들러: 저장소 장애 시 로그인 503 AUTH_STORE_UNAVAILABLE(구: 401 "가입 정보 없음" 둔갑) / admin·admin·ADMIN_PASSWORD 200(Drive 불필요)
+요약 3줄:
+1. 회귀 근본=공용 Drive 조회 실패(토큰/FOLDER_ID)를 readUser catch{}가 "가입 정보 없음"으로 둔갑 → 관리자·회원 동시 장애 원인 은폐.
+2. 수정: not-found(401)와 저장소오류(503)를 구분(auth.js·admin-approvals.js), env-admin/Azure 폴백으로 로그인 복구. 데이터 무손상.
+3. [!] Vercel env: GOOGLE_DRIVE_FOLDER_ID/GOOGLE_REFRESH_TOKEN/ADMIN_PASSWORD 중 누락분 설정 시 즉시 정상.

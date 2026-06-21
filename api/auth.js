@@ -30,14 +30,19 @@ function publicUser(u){
 }
 
 // Drive에서 사용자 읽기 (id 또는 email 키 둘 다 시도)
+// 회귀 진단: 기존엔 모든 오류를 catch{}로 삼켜 Drive 인프라 장애(토큰 만료/FOLDER_ID 미설정 등)를
+// "가입 정보 없음"으로 오인하게 만들었다(관리자·회원 동시 실패의 원인이 안 보임).
+// → 파일 없음(정상 조회·미존재)은 null, 조회 자체 실패(저장소 오류)는 throw 로 구분해 호출부가 명확히 처리.
 async function readUser(idKey, emailKey){
+  let lastErr = null;
   for(const key of [idKey, emailKey].filter(Boolean)){
     try{
       const f = await readJsonFromDrive({ folderPath:["auth","users"], fileName: key });
       if(f?.data) return f.data;
-    }catch{}
+    }catch(e){ lastErr = e; }
   }
-  return null;
+  if(lastErr) throw lastErr;   // 저장소 연결/설정 오류 — not-found와 구분
+  return null;                 // 정상 조회했으나 해당 사용자 파일 없음
 }
 
 // 공유 스키마 보장 (password_hash 포함). 기존 테이블이면 누락 컬럼만 ALTER ADD (데이터 보존).
@@ -143,10 +148,15 @@ export default async function handler(req, res){
     // ===== 로그인 =====
     if(mode === "login"){
       // Drive 우선 → 없으면(토큰 만료/콜드스타트) Azure SQL 폴백
-      let u = await readUser(idKey, emailKey);
+      let u = null, driveErr = null;
+      try{ u = await readUser(idKey, emailKey); }catch(e){ driveErr = e; }   // 저장소 오류는 not-found와 구분
       let fromAzure = false;
       if(!u){ u = await readUserFromAzure(rawId, email); fromAzure = !!u; }
-      if(!u) return res.status(401).json({ ok:false, message:"가입 정보가 없습니다. 회원가입 후 로그인하세요." });
+      if(!u){
+        // Drive 조회가 '오류'였고 Azure 폴백도 비면 → "가입 정보 없음"(오인)이 아니라 저장소 장애로 명확히 알림.
+        if(driveErr) return res.status(503).json({ ok:false, code:"AUTH_STORE_UNAVAILABLE", message:"인증 저장소(Google Drive) 연결 오류입니다. 환경변수(토큰/폴더ID) 또는 일시 장애를 확인하세요.", error: String(driveErr.message||driveErr) });
+        return res.status(401).json({ ok:false, message:"가입 정보가 없습니다. 회원가입 후 로그인하세요." });
+      }
       if(!verify(password, u.password_hash)) return res.status(401).json({ ok:false, message:"비밀번호가 올바르지 않습니다." });
       // 승인 상태 판정 (서버측에서만 신뢰) — 관리자/하위호환은 approval 로직이 처리
       if(!canLogin(u)){
