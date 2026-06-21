@@ -34,3 +34,7 @@
 - [x] G1. (Stella GPT) 응답 속도: api/chat.js에 구간 타이밍(memory/context/model/total) 계측 추가 → 응답 `timings`+서버 로그. 병목인 메모리 로드(Azure SQL+Drive, 매 요청)를 (a)검색/Drive와 병렬화, (b)warm 인스턴스 60s 캐시로 반복 fetch 제거(업데이트 시 무효화). 구조적 개선: 반복요청 메모리준비 180ms→~0, 검색+Drive 케이스 준비 501→321ms. (스트리밍은 SSE 라이브검증 불가로 후속, PROGRESS.md)
 - [x] T1. (Stella Talk) 알림이 대화창 안에서만 뜨던 문제 수정 → 전역 폴링(syncRoomListFromServer, 3s)을 **since(lastMessageAt) 기반**으로 재작성. 앱 열려있는 동안 대화목록·다른 화면 포함 모든 방의 상대 발신 새 메시지 감지 → Notification+소리. 최초 1회 baseline 프라이밍(앱 열 때 과거메시지 폭주 방지), 보고있는 방/내 발신 제외, 재알림 방지(per-room ts 저장). 백엔드 list에 lastMessageAt 추가. (로직 유닛테스트 7/7) · [!] 완전종료(앱 kill) 푸시는 Web Push(VAPID) 인프라 필요 = 후속, iOS는 OS 제약.
 - [x] T2. (Stella Talk) 전송 속도: 낙관적 UI(즉시 표시·sendState sending/sent/failed·retryMsg·clientId dedup)는 기구현 확인. 백엔드 send 응답이 매 전송마다 **전체 방 히스토리(room:data)**를 싣던 것을 제거 → 확정 메시지 1건만 반환(50/200/500 메시지 방에서 97~100% 페이로드 감소 = 확정 round-trip 단축). (가정: Drive 저장의 fire-and-forget는 Vercel 함수 응답 후 종료로 메시지 유실 위험 → 내구성 위해 동기 유지, PROGRESS.md)
+
+## Agent Code/Codex 사이드바·자동저장 (iter 9, autopilot)
+- [x] C1. (cc.html·codex.html) 데스크톱 사이드바(세션/대화 패널) **기본 접힘**으로 진입 → 메인 코딩 영역 넓게. 햄버거(☰) 토글, 마지막 상태 localStorage(cc_sidecollapsed/codex_sidecollapsed) 기억. 모바일 드로어는 영향 없도록 CSS 무효화. (jsdom 데스크톱 기본접힘·토글영속·모바일안전 검증)
+- [ ] C2. (cc.html·codex.html) 작업 완료 시 생성 결과를 Google Drive StellaGPT/0download에 `{앱명}_{YYYYMMDD_HHMMSS}.txt`로 자동 저장(요청 헤더+결과 전문), 성공/실패 토스트.

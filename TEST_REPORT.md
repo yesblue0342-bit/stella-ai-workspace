@@ -179,3 +179,12 @@
 - SW 캐시 v50→**v51**.
 - 배포: main 푸시 → Vercel 자동 배포(team: stella-gpt). 샌드박스 `vercel --prod` 자격증명 없어 main 푸시로 동등 배포.
 - 잔여 [!](항목 내 OS/인프라 제약): Talk 완전종료 푸시=Web Push(VAPID) 후속, iOS 진동/자동재생=OS. G1 스트리밍=라이브 SSE 검증 환경 확보 후속.
+
+## 2026-06-21 (iter 9) · C1 Agent Code/Codex 사이드바 기본 접힘 · pass 62/62
+- cc.html(모듈)/codex.html 인라인 스크립트 파싱 bad=0 · npm test 62/62
+- jsdom: 데스크톱 기본 side-collapsed=true / 햄버거 토글 false↔true + localStorage 0↔1 영속 / 모바일은 side-collapsed 미적용(드로어 정상)
+- grep: SIDECOLLAPSE_KEY·toggleSideDesktop·applySideCollapsed·모바일 CSS 무효화 각 7 hit(파일별)
+요약 3줄:
+1. 데스크톱 진입 시 세션/대화 패널을 기본 접힘으로 → 메인 코딩 영역을 넓게. 햄버거로 열고/닫기.
+2. 마지막 접힘/펼침 상태를 localStorage(cc_sidecollapsed/codex_sidecollapsed)에 기억, 재진입 시 복원.
+3. 모바일은 side-collapsed가 드로어 표시를 막지 않도록 CSS(body.side-collapsed .side{display:block})로 무효화 — 모바일 드로어 회귀 없음.

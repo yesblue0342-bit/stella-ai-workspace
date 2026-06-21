@@ -74,6 +74,8 @@ body.fullscreen-code #fsExit{display:block;position:fixed;top:8px;right:10px;z-i
 @media(max-width:760px){
   .resizer{display:none}
   .side{position:fixed;top:0;left:0;bottom:0;width:min(280px,82vw);z-index:10;transform:translateX(-110%);box-shadow:2px 0 18px rgba(0,0,0,.35)}
+  /* C1: 데스크톱 side-collapsed(기본 접힘)가 모바일 드로어를 막지 않게 무효화 */
+  body.side-collapsed .side{display:block}
   body.side-open .side{transform:translateX(0)}
   body.side-open .side-backdrop{display:block}
   /* 햄버거로 상단 접기 → 1줄(넓은 화면). 접힘 디폴트: 제목·🗂·⛶ 숨김, ☰+앱아이콘만 */
@@ -178,11 +180,16 @@ $('themeToggle').addEventListener('click', toggleTheme);
   const body=document.body, side=document.querySelector('.side'), main=document.querySelector('.main');
   const isMobile=()=>window.matchMedia('(max-width:760px)').matches;
   const closeMobile=()=>body.classList.remove('side-open');
-  function toggleSide(){ if(isMobile()) body.classList.toggle('side-open'); else body.classList.toggle('side-collapsed'); }
+  // C1: 데스크톱 사이드바(대화 패널) — 기본 접힘으로 진입(메인 영역 넓게), 마지막 상태 localStorage 기억.
+  const SIDECOLLAPSE_KEY='codex_sidecollapsed';
+  function setSideCollapsed(on){ body.classList.toggle('side-collapsed', !!on); try{ localStorage.setItem(SIDECOLLAPSE_KEY, on?'1':'0'); }catch(e){} }
+  (function applySideCollapsed(){ var on=true; try{ var v=localStorage.getItem(SIDECOLLAPSE_KEY); on=(v===null)?true:(v==='1'); }catch(e){} if(!isMobile()) body.classList.toggle('side-collapsed', !!on); })();
+  function toggleSideDesktop(){ setSideCollapsed(!body.classList.contains('side-collapsed')); }
+  function toggleSide(){ if(isMobile()) body.classList.toggle('side-open'); else toggleSideDesktop(); }
   const NAVHIDE_KEY='codex_navhidden';
   (function applyNavHidden(){ var on=true; try{ var v=localStorage.getItem(NAVHIDE_KEY); on=(v===null)?true:(v==='1'); }catch(e){} body.classList.toggle('cc-navhidden', !!on); })();
   function toggleNavHidden(){ var on=body.classList.toggle('cc-navhidden'); try{ localStorage.setItem(NAVHIDE_KEY, on?'1':'0'); }catch(e){} }
-  const hb=$('hambBtn'); if(hb) hb.addEventListener('click', e=>{ e.stopPropagation(); if(isMobile()) toggleNavHidden(); else body.classList.toggle('side-collapsed'); });
+  const hb=$('hambBtn'); if(hb) hb.addEventListener('click', e=>{ e.stopPropagation(); if(isMobile()) toggleNavHidden(); else toggleSideDesktop(); });
   const sessBtn=$('sessBtn'); if(sessBtn) sessBtn.addEventListener('click', e=>{ e.stopPropagation(); toggleSide(); });
   const bd=$('sideBackdrop'); if(bd) bd.addEventListener('click', closeMobile);
   if(main) main.addEventListener('click', ()=>{ if(isMobile()) closeMobile(); });
