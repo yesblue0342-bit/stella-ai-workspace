@@ -204,3 +204,18 @@
 - SW 캐시 v54→**v55**.
 - 배포: main 푸시 → Vercel 자동 배포(team: stella-gpt). 정식 stella-ai-workspace 프로젝트 기준(중복 g1st는 미사용/무시).
 - 한계: 실제 Drive 업로드는 라이브 OAuth(GOOGLE_* 토큰)에서만. 샌드박스는 순수헬퍼 유닛+jsdom 호출검증까지.
+
+## 2026-06-21 (iter 10) · C3 모바일 햄버거 풀-토글(☰만 남김) · pass 69/69
+- cc.html/codex.html 파싱 bad=0 · npm test 69/69
+- CSS 규칙 존재(양 파일 2건씩): `body.cc-navhidden .top h1{display:none}` + `body.cc-navhidden .barwrap .ctl{display:none}`
+- jsdom 토글: 모바일 햄버거 클릭 → cc-navhidden default(true)→show(false)→hide(true), 양 앱 toggles=true, 무에러
+요약 3줄:
+1. 모바일에서 햄버거(☰)를 누르면 상단 제목·앱아이콘·nav·세션·풀스크린 버튼 + 하단 컨트롤(모델/테마/예산/OMC, 스크린샷 빨강 표시)까지 전부 숨겨 ☰만 남김 → 개발 영역 최대화.
+2. 다시 누르면 원래 화면 복귀(토글). 프롬프트 입력줄은 유지해 접힌 상태에서도 입력/전송 가능.
+3. 데스크톱(@media 밖)은 영향 없음 — 기존 C1 사이드바 접힘 동작 유지. cc.html·codex.html 동일 적용.
+
+## FINAL (iter 10) — C3 완료
+- npm test: **69/69 pass**, fail 0. cc/codex 파싱 bad=0. node --check 백엔드 무변경(이번 항목은 CSS 한정).
+- jsdom: 모바일 햄버거 풀-토글 양 앱 검증(default 최소화 → 펼침 → 최소화).
+- SW 캐시 v55→**v56**.
+- 배포: main 푸시 → Vercel 자동 배포(team: stella-gpt). 정식 stella-ai-workspace 기준(중복 g1st 미사용/무시).

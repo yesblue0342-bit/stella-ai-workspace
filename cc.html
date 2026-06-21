@@ -78,12 +78,12 @@ body.fullscreen-code #fsExit{display:block;position:fixed;top:8px;right:10px;z-i
   body.side-collapsed .side{display:block}
   body.side-open .side{transform:translateX(0)}
   body.side-open .side-backdrop{display:block}
-  /* 햄버거로 상단 접기 → 1줄(넓은 화면). 접힘 디폴트: 제목·🗂·⛶ 숨김, ☰+앱아이콘만 */
+  /* 햄버거 접힘(모바일): ☰ 단추만 남기고 — 제목·앱아이콘·nav·세션·풀스크린 + 하단 컨트롤(모델/테마/예산/OMC) 전부 숨김 → 개발 영역 최대화. 다시 누르면 복귀 */
+  body.cc-navhidden .top h1{display:none}
   body.cc-navhidden .top .nav a{display:none}
-  body.cc-navhidden .top .app-title-text{display:none}
   body.cc-navhidden .top #sessBtn,body.cc-navhidden .top #fsBtn{display:none}
+  body.cc-navhidden .barwrap .ctl{display:none}
   body.cc-navhidden .top{padding-top:7px;padding-bottom:7px}
-  body.cc-navhidden .top h1{font-size:1rem}
   /* 하단 컨트롤 1줄(모델/예산/테마/OMC) */
   .ctl{flex-wrap:nowrap;overflow-x:auto;-webkit-overflow-scrolling:touch}
   #model{min-width:0}

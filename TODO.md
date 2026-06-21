@@ -38,3 +38,4 @@
 ## Agent Code/Codex 사이드바·자동저장 (iter 9, autopilot)
 - [x] C1. (cc.html·codex.html) 데스크톱 사이드바(세션/대화 패널) **기본 접힘**으로 진입 → 메인 코딩 영역 넓게. 햄버거(☰) 토글, 마지막 상태 localStorage(cc_sidecollapsed/codex_sidecollapsed) 기억. 모바일 드로어는 영향 없도록 CSS 무효화. (jsdom 데스크톱 기본접힘·토글영속·모바일안전 검증)
 - [x] C2. (cc.html·codex.html) 작업 완료 시 결과 전문을 Google Drive **StellaGPT/0download**에 `{앱명}_{YYYYMMDD_HHMMSS}.txt`(내용=`[요청] 헤더`+빈줄+결과)로 자동 저장 + 성공/실패 토스트. 기존 Drive OAuth 재사용: lib/drive-files.mjs에 `saveTextToDrive`(+순수헬퍼 txtFileName/txtContent/tsKST) 추가, `/api/cc/save-drive`에 text 모드 추가(세션 불필요, 신규 라우트 0). codex=StellaCodex(매 응답), cc=StellaAgentCode(세션 완료 시 transcript). (헬퍼 유닛 7/7 + jsdom codex 페이로드/토스트 검증)
+- [x] C3. (cc.html·codex.html) 모바일 햄버거(☰) 풀-토글: 누르면 **☰만 남기고** 상단(제목·앱아이콘·nav·세션·풀스크린)+하단 컨트롤(모델/테마/예산/OMC, 빨강 표시)까지 전부 숨겨 개발 영역 최대화, 다시 누르면 원래대로 복귀. 프롬프트 입력줄은 유지(사용성). cc-navhidden 상태에 `.top h1`·`.barwrap .ctl` display:none 추가. (jsdom 토글 default→show→hide 검증, 양 앱)
