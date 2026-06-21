@@ -2356,15 +2356,25 @@ function showTypingIndicator(typingData){
 }
 
 // ── 텍스트 서버 전송 (상태 추적 + 실패 시 재시도 버튼) ──
-function sendTextToServer(roomId, roomName, myId, myName, text, members, tempId){
+// A2: 전송 재시도 정책 — 네트워크 끊김(0)/타임아웃(408/504)/일시 서버오류(5xx)/과부하(429)는 재시도 가능.
+//     인증·권한(401/403) 등 4xx와 앱 거절(d.ok=false)은 재시도 무의미 → 즉시 '재전송' 표시.
+function isRetryableStatus(s){ return s===0 || s===408 || s===429 || (s>=500 && s<=599); }
+function sendBackoffMs(attempt){ return Math.min(1000 * Math.pow(2, attempt), 8000); } // 1s,2s,4s,8s
+var SEND_MAX_RETRY = 3;
+function sendTextToServer(roomId, roomName, myId, myName, text, members, tempId, attempt){
+  attempt = attempt || 0;
   fetch('/api/chat-room?action=send',{
     method:'POST', headers:{'Content-Type':'application/json'},
     body: JSON.stringify({ roomId, title:roomName, userId:myId, sender:myName, message:text, members, clientId:tempId })
   }).then(function(r){
-    if(!r.ok) throw new Error('status '+r.status);
+    if(!r.ok){
+      return r.text().catch(function(){return '';}).then(function(body){
+        var err=new Error('status '+r.status); err.status=r.status; err.body=String(body||'').slice(0,120); throw err;
+      });
+    }
     return r.json();
   }).then(function(d){
-    if(!d.ok) throw new Error(d.message||'전송 실패');
+    if(!d.ok){ var err=new Error(d.message||'전송 실패'); err.status=-1; throw err; } // 앱 거절 → 비재시도
     markActivity();
     // STAGE 1: 폴링 안 기다리고 send 응답의 확정 message 로 즉시 교체(체감 실시간 + 정확한 id/시각).
     if(d.message){
@@ -2385,9 +2395,16 @@ function sendTextToServer(roomId, roomName, myId, myName, text, members, tempId)
     // 확정 message 없으면 상태만 sent 처리
     updateMsgState(roomId, tempId, 'sent');
   }).catch(function(e){
-    console.warn('[Talk] 전송 실패:', e.message);
+    var st = (e && typeof e.status==='number') ? e.status : 0; // 0 = 네트워크/타임아웃(Failed to fetch)
+    console.warn('[Talk] 전송 실패 status='+st+' attempt='+attempt+(e&&e.body?(' body='+e.body):'')+' :', e&&e.message);
     if(!navigator.onLine) showOfflineBanner(true);   // STAGE 7: 오프라인이면 배너
-    // 실패 → 실패 상태로 표시 (재시도 가능 / online 복구 시 자동 재발송)
+    // A2: 일시 오류는 지수 백오프로 자동 재시도(상태 'sending' 유지). clientId 동일 → 서버 dedup으로 중복 없음.
+    if(isRetryableStatus(st) && attempt < SEND_MAX_RETRY){
+      updateMsgState(roomId, tempId, 'sending');
+      setTimeout(function(){ sendTextToServer(roomId, roomName, myId, myName, text, members, tempId, attempt+1); }, sendBackoffMs(attempt));
+      return;
+    }
+    // 재시도 소진 또는 비재시도(인증/권한/앱거절) → 그때만 '재전송' 표시
     updateMsgState(roomId, tempId, 'failed');
   });
 }

@@ -373,3 +373,9 @@ STATUS: IN_PROGRESS
 - 수정(ADD-only, 기존 데이터 보존): (1) approval.adminPasswordOk(env ADMIN_PASSWORD/STELLA_ADMIN_PASSWORD) → auth.js·admin-approvals.js에 관리자 env 통과 경로(콜드스타트·토큰만료 내성). (2) Azure SQL dbo.users에 password_hash 컬럼(ALTER ADD 가드) + 가입 시 Drive+Azure 이중 저장 + 로그인 Drive우선→Azure폴백 + Drive로그인 성공 시 Azure 백필.
 - [!] Vercel 환경변수 `ADMIN_PASSWORD` 설정 필요: 설정 시 yesblue0342가 Drive/Azure 없이도 관리자 로그인 가능. 미설정이면 코드는 정상이나 env-admin 경로는 비활성(admin/admin + Drive/Azure 레코드 폴백만). 에이전트는 대시보드 env를 설정할 수 없어 [!] 보류로 남김.
 - 검증 한계: Azure/Drive 실연결은 라이브에서만. 샌드박스는 관리자 env 경로를 실제 핸들러 호출로 검증(75/75), Azure 분기는 node --check + 로직 단위까지.
+
+## [autopilot iter 11] A2 Stella Talk 전송 복구
+- 진단: sendTextToServer 단일시도→즉시 'failed'. 실패 status 분류 안 함. Drive는 googleapis OAuth2 refresh_token로 access token 자동 리프레시(만료 자동 처리). 따라서 흔한 실패는 일시 타임아웃/끊김(0/504)이며 재시도로 회복 가능.
+- 수정: 지수 백오프 자동 재시도(1s/2s/4s·최대3, 대상 0/408/429/5xx), clientId 동일→서버 dedup(중복 0), 상태 sending 유지, 소진/비재시도(401·403·d.ok=false)만 '재전송'. status·attempt·body 진단 로깅. online 자동 flush 기존 유지.
+- A1과 공유 뿌리: Drive 토큰. refresh token 자체가 폐기되면 코드로 복구 불가 → [!] GOOGLE_REFRESH_TOKEN 재발급(인프라).
+- 미적용(가정): "타임아웃 시 Azure 메타데이터 우선 ack + Drive 비동기"는 Vercel 서버리스가 응답 직후 함수 동결→비동기 Drive 저장 유실 위험(T2와 동일 이유). 내구성 우선으로 클라 재시도로 해결.

@@ -227,3 +227,11 @@
 1. 근본원인=Drive 단독 회원저장 → 토큰만료/콜드스타트 시 전원 로그인 실패 + yesblue0342 env/하드코딩 비번 부재. 
 2. 수정: ADMIN_PASSWORD(env) 관리자 통과경로 + Azure SQL password_hash 영속 저장(ALTER ADD, ADD-only) + 로그인 Drive우선→Azure폴백+백필. 기존 계정 데이터 보존.
 3. [!] Vercel에 ADMIN_PASSWORD 설정 필요(미설정 시 env-admin 비활성, admin/admin·Drive폴백만). Azure 실연결은 라이브 검증.
+
+## 2026-06-21 (iter 11) · A2 Stella Talk 전송 실패 복구(백오프 재시도) · pass 82/82
+- talk.html 인라인 new Function bad=0 · npm test 82/82(talk-send-retry 7건 신규)
+- 정책: isRetryableStatus(0/408/429/5xx만)·sendBackoffMs(1/2/4/8s cap)·SEND_MAX_RETRY=3 실소스 추출 검증 + 재시도 루프 시뮬(503지속→4회 후 failed / 0,0,200→sent / 401·앱거절→즉시 failed)
+요약 3줄:
+1. 단일시도→즉시 재전송 표시를 지수 백오프 자동 재시도(최대3)로 교체 — 일시 타임아웃/끊김은 사용자 개입 없이 회복, clientId dedup로 중복 0.
+2. 재전송은 재시도 소진 또는 비재시도(401/403/앱거절)에서만 표시. status·attempt·body 진단 로깅 추가. online 복구 자동 flush 유지.
+3. [!] Drive refresh token 폐기는 인프라(GOOGLE_REFRESH_TOKEN 재발급). Azure-우선 ack는 서버리스 유실위험으로 미적용.
