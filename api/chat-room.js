@@ -151,7 +151,10 @@ export default async function handler(req, res) {
       };
 
       const saved = await saveJsonToDrive({ folderPath: ["MemberChat"], fileName: roomId, data });
-      return res.status(200).json({ ok: true, saved, message: messageItem, room: data });
+      // T2 속도: 응답에 전체 방(room: data = 모든 메시지)을 싣던 것을 제거 → 확정 메시지 1건만 반환(긴 방일수록 큰 절감).
+      // 클라는 d.message(clientId 에코)로 임시본을 확정본으로 교체하므로 전체 히스토리 불필요.
+      const lastAt = new Date(messageItem.createdAt).getTime();
+      return res.status(200).json({ ok: true, saved, message: messageItem, lastMessageAt: isNaN(lastAt) ? 0 : lastAt, messageCount: data.messages.length });
     }
 
     // ── 멤버 초대/합류 (메시지 없이 members 갱신, 재초대 시 left 해제) ── STAGE 4

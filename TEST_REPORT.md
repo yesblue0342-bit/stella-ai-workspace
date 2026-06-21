@@ -156,6 +156,14 @@
 2. 수정: lastMessageAt(서버 list에 추가) since 기반으로 재작성 — 앱 열린 동안 모든 방의 상대 발신 새 메시지를 화면 무관하게 감지해 Notification+소리. 최초 baseline 프라이밍·보는방/내발신 제외·per-room ts로 재알림 방지.
 3. [!] 앱 완전종료 상태 푸시는 Web Push(VAPID 구독/서버발송) 인프라 필요로 후속 보류(iOS는 OS 제약). 앱 열림/백그라운드 탭은 본 폴링으로 커버.
 
+## 2026-06-21 (iter 8) · T2 Stella Talk 전송속도(응답 페이로드 트림) · pass 62/62
+- node --check api/chat-room.js OK · npm test 62/62
+- 페이로드 데모: send 응답이 전체 방 히스토리→확정 메시지 1건. 50msg 9032B→254B(97%↓), 200msg 35334B→257B(99%↓), 500msg 88134B→257B(100%↓)
+요약 3줄:
+1. 텍스트 낙관적 UI(즉시 표시·sendState·retry·clientId dedup)는 기구현 확인 — 체감 전송은 이미 즉시.
+2. 확정 round-trip 단축: 백엔드 send 응답에서 매번 싣던 전체 방(room:data)을 제거하고 확정 메시지 1건만 반환(긴 방일수록 큰 절감, 클라는 d.message만 사용).
+3. Drive 저장 fire-and-forget는 Vercel 응답 후 종료로 메시지 유실 위험→동기 유지(가정 PROGRESS.md). 무손실 트림으로 속도 개선.
+
 ## FINAL (iter 7) — T1·T2·T3 전체 완료
 - npm test (`node --test test/*.test.js`): **62/62 pass**, fail 0.
 - 백엔드 node --check: chat.js · cc/_maclient.mjs · cc/start.js · cc/turn.js OK.

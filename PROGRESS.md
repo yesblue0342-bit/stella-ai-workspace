@@ -313,3 +313,9 @@ STATUS: IN_PROGRESS
 - 병목 특정: api/chat.js 핫패스에서 메모리 로드(buildMemoryContext=Azure SQL → 빈값 시 loadMemory=Drive)를 매 요청 직렬 호출. 일반대화는 검색/Drive 미사용이라 메모리가 모델 호출 前 최대 지연.
 - 적용(효과 큰 것·저위험): (1) 구간 타이밍 계측(timings 응답+로그)으로 라이브 실측 가능, (2) 메모리 로드를 검색/Drive와 병렬 착수, (3) userId별 60s warm 캐시(updateMemory 후 invalidate).
 - 스트리밍 보류 사유: SSE는 backend(res 스트림)+frontend(reader) 동시 변경이며 샌드박스에서 OPENAI_API_KEY/라이브 없이 end-to-end 검증 불가 → 작동 중 채팅 회귀 위험. 총 지연(모델 생성시간)은 streaming이 '체감 TTFT'만 개선하므로, 우선 준비단계 지연을 제거. 후속 반복에서 라이브 환경 확보 시 SSE 도입.
+
+## [autopilot iter 8] T1/T2 Stella Talk
+- T1 전역 알림: 방목록 폴링을 messageCount 델타→lastMessageAt(since) 기반으로 교체. 서버 list에 lastMessageAt 추가. 앱 열린 동안 모든 화면에서 상대 발신 새 메시지 감지→Notification+소리. 최초 baseline 프라이밍·보는방/내발신 제외·per-room ts 저장으로 재알림 방지. 로직 유닛 7/7.
+  - [!] 앱 완전종료 푸시: Web Push(VAPID 구독 저장+서버 발송) 인프라 필요 → 후속. sw.js에 push 핸들러는 이미 존재하나 구독/발송 백엔드 미구현. iOS는 OS 제약.
+- T2 전송 속도: 텍스트 낙관적 UI는 이미 구현됨(즉시 렌더+sendState+retry+clientId dedup). 백엔드 send 응답에서 전체 방 히스토리(room:data) 제거→확정 메시지 1건만(긴 방 97~100% 페이로드 감소).
+  - 가정: "Azure 우선·Drive 비동기" 중 Drive 저장을 응답 후 fire-and-forget로 돌리면 Vercel 서버리스가 응답 직후 함수를 동결/종료해 **메시지 유실** 위험 → 내구성 우선으로 Drive 저장은 동기 유지. 대신 무손실인 페이로드 트림으로 체감속도 개선. Azure 메시지 저장 일원화는 list/get/poll 동시 마이그레이션 필요한 대공사라 후속.
