@@ -314,3 +314,17 @@
 ## FINAL (iter 16)
 - npm test **94/94 PASS**(a~e 전수 통과). 변경: lib/login-allow.js(신규), api/auth.js(화이트리스트+에러 일반화+role/isAdmin), index.html(서버 isAdmin 사용+에러 일반화), test/login-allow.test.js(신규), sw.js v62.
 - 한 줄: 정해진 3개 ID는 Drive 없이 비번 무관 즉시 로그인(yesblue0342=admin), 내부 구조 에러 비노출, 유저ID=username 고정.
+
+## 2026-06-21 (iter 17) · Stella GPT 답변 유형 라우팅 + 표 온디맨드 + 마크다운 수정 · pass 101/101
+- node --test test/router.test.mjs 7/7 · 전체 101/101 · node --check api/chat.js·lib/router.mjs OK · index 인라인 파싱 bad=0
+- 라우팅: body.route(GPT 전용) 게이트 → needsWebSearch→gpt-4o+web_search(Responses API), 일반→gpt-4o-mini. 표는 wantsTable일 때만. ABAP/Codex route:true 0(영향 없음).
+- 마크다운: renderAnswer가 marked+DOMPurify(js/stella-md.js) 우선 렌더, 실패 시 renderMarkdownLite 폴백 → **굵게 별표 새는 버그 수정**.
+- STEP5 실증 스모크: 샌드박스에 OPENAI_API_KEY 없음 → 라이브 호출 불가. 순수함수/파싱(extractText '1승 1패')·게이트·파서까지 검증, 실제 검색 답변은 배포 후 사용자 환경에서 확인 필요.
+요약 3줄:
+1. /api/chat(공유)에 body.route 게이트로 Stella GPT만 답변 유형 라우팅 추가 — 실시간 질문은 web_search+gpt-4o로 환각 제거, 일반은 gpt-4o-mini로 빠르게.
+2. 표는 "표로/테이블/비교표" 요청 시에만(buildSystemPrompt table 분기), 그 외 대화형 산문. 강제 표 프리픽스 미사용. 메모리(kh_memory)·Drive 컨텍스트는 extra로 보존.
+3. 마크다운을 marked+DOMPurify로 렌더해 **굵게**가 별표로 새던 버그 수정(폴백 유지). 응답 키(text)·스트리밍 여부·타임아웃/에러 처리 보존.
+
+## FINAL (iter 17)
+- node --test 101/101 PASS. 변경: lib/router.mjs(신규), api/chat.js(callResponses+라우팅 게이트), index.html(route:true+marked/DOMPurify CDN+renderAnswer), js/stella-md.js(신규), test/router.test.mjs(신규), sw 캐시 +1.
+- 한 줄: Stella GPT만 실시간↔일반 라우팅+표 온디맨드+마크다운 정상 렌더, 다른 앱 무영향.

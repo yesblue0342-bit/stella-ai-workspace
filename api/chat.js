@@ -1,6 +1,38 @@
 import { detectSmartIntent, getSmartContextForMessage } from "../lib/place-weather-utils.js";
 import { saveJsonToDrive, readJsonFromDrive, listJsonFromDrive, buildDriveContextForChat } from "../lib/drive-utils.js";
 import { buildMemoryContext, saveMemory as saveMemoryAzure } from "../lib/memory-db.mjs";
+// Stella GPT 답변 유형 라우팅(루트 / 전용, body.route 게이트). 다른 앱(ABAP/Codex)은 미전송 → 영향 없음.
+import { needsWebSearch, wantsTable, buildSystemPrompt as routeSystemPrompt, pickModel, extractText } from "../lib/router.mjs";
+
+// OpenAI Responses API + web_search 호출 (실시간 질문). 응답 contract(text)는 호출부에서 유지.
+async function callResponses({ model, system, history, message, images = [], search = false }) {
+  const apiKey = process.env.OPENAI_API_KEY;
+  if (!apiKey) throw new Error("OPENAI_API_KEY not configured");
+  const input = [];
+  for (const m of (Array.isArray(history) ? history : []).slice(-12)) {
+    input.push({ role: m.role === "assistant" ? "assistant" : "user", content: String(m.content || "") });
+  }
+  const imgs = (Array.isArray(images) ? images : []).filter((u) => u && String(u).startsWith("data:"));
+  if (imgs.length) {
+    input.push({ role: "user", content: [{ type: "input_text", text: String(message || "") }, ...imgs.map((u) => ({ type: "input_image", image_url: u }))] });
+  } else {
+    input.push({ role: "user", content: String(message || "") });
+  }
+  const bodyObj = { model, instructions: system, input };
+  if (search) bodyObj.tools = [{ type: "web_search" }];
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(), 55000);
+  try {
+    const r = await fetch("https://api.openai.com/v1/responses", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Authorization: `Bearer ${apiKey}` },
+      body: JSON.stringify(bodyObj),
+      signal: ctrl.signal,
+    });
+    if (!r.ok) throw new Error(`OpenAI ${r.status}: ${(await r.text()).slice(0, 300)}`);
+    return extractText(await r.json());
+  } finally { clearTimeout(timer); }
+}
 
 // 이미지 base64 전송을 위해 body 크기 제한 상향
 export const config = {
@@ -421,10 +453,20 @@ export default async function handler(req, res) {
     
     // 모델 기반으로 API 완전 분리 (Claude 선택 시 OpenAI 절대 미호출)
     const isClaudeModel = model.toLowerCase().includes("claude") || model.toLowerCase().includes("fable");
+    // Stella GPT(루트 /) 라우팅: body.route 일 때만. 실시간 질문→web_search+gpt-4o, 일반→gpt-4o-mini.
+    const routed = !!body.route && !isClaudeModel;
     let answer;
     let provider;
     const _modelStart = Date.now();
-    if (isClaudeModel) {
+    if (routed) {
+      const wantSearch = needsWebSearch(message);
+      const wantTable = wantsTable(message);
+      // 메모리 노드(kh_memory) + Drive 컨텍스트는 extra 로 합쳐 보존. 표는 온디맨드.
+      const routeSys = routeSystemPrompt({ table: wantTable, extra: [memoryPrompt, driveContext].filter(Boolean).join("\n\n") });
+      provider = wantSearch ? "openai-search" : "openai";
+      answer = await callResponses({ model: pickModel({ search: wantSearch }), system: routeSys, history, message: aiMessage, images, search: wantSearch });
+      timings.routed = true; timings.searchUsed = wantSearch; timings.tableUsed = wantTable;
+    } else if (isClaudeModel) {
       provider = "claude";
       answer = await callClaude({ model, system: prompt, history, message: aiMessage, images });
     } else {

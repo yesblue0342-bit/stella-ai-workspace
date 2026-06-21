@@ -399,3 +399,11 @@ STATUS: IN_PROGRESS
 - 내부 에러 노출 제거: 금칙어(Drive/환경변수/env/경로/스택/토큰/error필드)를 사용자 화면에서 제거, console.* 내부 로그만. 회원가입 Drive 실패도 일반 문구.
 - 유저 ID=username 고정(난수 재생성 없음) → SW 캐시 bump/배포 시 채팅·프로젝트·게시판 orphan 방지.
 - 데이터/기능 회귀 없음(기존 Drive/Azure 경로는 비-allowlist에 그대로 유지).
+
+## [autopilot] Stella GPT 답변 유형 라우팅 (STEP 0 기록)
+- 엔드포인트: api/chat.js (루트 index.html이 API_URL='/api/chat'로 POST). **비스트리밍 JSON**, 프론트가 읽는 키 = `text`(data.text||data.answer||data.message).
+- /api/chat은 index.html(GPT)·abap.html·codex.html 공유 → 라우팅은 **body.route 게이트**로 Stella GPT만 적용(다른 앱 미전송→영향 0). 가정: PROGRESS 기록.
+- 경로 선택: **경로 A(Responses API + web_search)** — 비스트리밍이라 채택. callResponses() 추가, isClaudeModel/비-route는 기존 callOpenAI/callClaude 보존.
+- 메모리 주입(kh_memory)+driveContext는 routeSystemPrompt({table, extra})의 extra로 합쳐 보존. 표는 wantsTable일 때만(강제 [표+요약] 프리픽스 미사용).
+- 모델: needsWebSearch→gpt-4o(+web_search), 아니면 gpt-4o-mini. 응답 contract(text 키) 유지.
+- 마크다운: renderAnswer가 renderMarkdownLite로 **굵게가 별표로 새던** 것 → marked+DOMPurify(js/stella-md.js, CDN) 우선, 실패 시 기존 폴백.
