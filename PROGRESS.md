@@ -379,3 +379,9 @@ STATUS: IN_PROGRESS
 - 수정: 지수 백오프 자동 재시도(1s/2s/4s·최대3, 대상 0/408/429/5xx), clientId 동일→서버 dedup(중복 0), 상태 sending 유지, 소진/비재시도(401·403·d.ok=false)만 '재전송'. status·attempt·body 진단 로깅. online 자동 flush 기존 유지.
 - A1과 공유 뿌리: Drive 토큰. refresh token 자체가 폐기되면 코드로 복구 불가 → [!] GOOGLE_REFRESH_TOKEN 재발급(인프라).
 - 미적용(가정): "타임아웃 시 Azure 메타데이터 우선 ack + Drive 비동기"는 Vercel 서버리스가 응답 직후 함수 동결→비동기 Drive 저장 유실 위험(T2와 동일 이유). 내구성 우선으로 클라 재시도로 해결.
+
+## [autopilot iter 14] Drive 독립 로그인 — 사용자 액션 필요
+- **Vercel env `STELLA_MEMBERS`(JSON) 설정 필수**: 예) {"yesblue0342":"비번","dmswn8712":"비번","mjlee":"비번","stellanight":"비번"} 또는 확장형 {"yesblue0342":{"pw":"<평문 또는 salt:hash>","email":"yesblue0342@naver.com","name":"이후"}, ...}. 미설정이면 allowlist 회원 로그인 시 503 MEMBERS_UNSET(실패-안전). 기존 비번 보존하려면 Drive auth/users JSON의 password_hash 값을 pw로 복사.
+- 설정되면 공개 레포의 admin/admin 부트스트랩은 자동 비활성(구멍 차단).
+- (선택) Drive 기능(채팅/파일/메모) 사용 시 GOOGLE_REFRESH_TOKEN 재발급 + OAuth 앱 Production 게시 — 로그인 자체는 Drive와 무관하게 동작.
+- 설계 가정: 로그인 판정은 Drive 호출 0회(allowlist 분기 최우선). 비-allowlist + STELLA_MEMBERS 미설정 흐름만 기존 Drive 경로 하위호환 유지. 회원 데이터 ADD-only(무삭제).

@@ -277,3 +277,16 @@
 ## FINAL (iter 13)
 - npm test 84/84. cc/codex 파싱 bad=0. 전송/중단 버튼 강조색 제거 완료(양 모드).
 - 배포: main 푸시 → Vercel 자동 배포(team: stella-gpt). SW v59.
+
+## 2026-06-21 (iter 14) · Drive 독립 로그인(allowlist+env 비번) · pass 99/99
+- node --check lib/approval.js·api/auth.js·api/admin-approvals.js OK · npm test 99/99(auth-resilience 18건 신규)
+- 핸들러 실호출(Drive 0회): allowlist+평문→200 / allowlist+salt:hash→200 / 틀린비번→401 / MEMBERS 미설정→503 MEMBERS_UNSET / 비번없음→503 MEMBER_PW_UNSET / 비-allowlist→403 NOT_ALLOWLISTED / signup→403 SIGNUP_DISABLED / admin·admin은 env설정시 차단
+- 순수함수: resolveAllowedId(id·email매핑·null)·getMemberPw(문자열/객체.pw)·membersConfigured·adminPasswordConfigured·verify(평문/salt:hash)
+요약 3줄:
+1. 로그인 판정에서 Drive를 전혀 읽지 않도록 allowlist 분기를 login 최상단에 삽입 — GOOGLE_REFRESH_TOKEN 만료와 무관하게 정해진 회원 항상 로그인. 비번은 env STELLA_MEMBERS(평문/salt:hash) 조회.
+2. 신규 가입 403 SIGNUP_DISABLED(Drive 쓰기 제거). admin/admin 부트스트랩은 STELLA_MEMBERS/ADMIN_PASSWORD 설정 시 비활성(공개 레포 구멍 차단). 기존 Drive/Azure 경로는 비-allowlist·members미설정 시 하위호환으로 유지.
+3. 비밀값은 소스/테스트 미포함(허용 ID 식별자만 소스, 비번은 Vercel env). 기존 회원 데이터 ADD-only·무삭제.
+
+## FINAL (iter 14)
+- npm test **99/99 PASS**. 변경: lib/approval.js(allowlist 유틸), api/auth.js(Drive독립 로그인+signup차단+부트스트랩 보안), api/admin-approvals.js(부트스트랩 보안), test/auth-resilience.test.js(신규), test/auth-admin.test.js(부트스트랩 차단 반영), sw.js v60.
+- 한 줄: 정해진 ID는 Drive 안 읽고 env 비번으로 로그인 → 구글 토큰 만료에도 로그인 항상 가능.

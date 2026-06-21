@@ -55,3 +55,12 @@
 
 ## Agent Code/Codex 전송버튼 색상 (iter 13, autopilot)
 - [x] SB1. (cc.html·codex.html) 전송(녹색 #238636)·중단(빨강 #da3633) 버튼 강조색 제거 → 주변 아이콘처럼 다크/라이트 테마 중립색(var(--card)+var(--ink)+var(--line) 테두리). 양 모드에서 눈에 안 띄게 통일. (84/84)
+
+## Drive 독립 로그인 (iter 14, autopilot)
+- [x] T1. lib/approval.js allowlist 유틸(ALLOWLIST, getMembersEnv, resolveAllowedId, getMemberPw, getMemberMeta, membersConfigured, adminPasswordConfigured).
+- [x] T2. api/auth.js login 최상단 Drive 독립 allowlist 경로(절차 2~5, Drive 호출 0).
+- [x] T3. signup 모드 403 SIGNUP_DISABLED(Drive 쓰기 제거).
+- [x] T4. 부트스트랩 보안: admin/admin은 STELLA_MEMBERS·ADMIN_PASSWORD 미설정 시에만(auth.js·admin-approvals.js).
+- [x] T5. test/auth-resilience.test.js 신설(순수함수+핸들러 allowlist 경로, 네트워크 없음, 비밀값 미포함).
+- [x] T6. node --check 전 변경분 + npm test 99/99.
+- [!] (사용자 액션) Vercel env STELLA_MEMBERS 설정 — 미설정 시 allowlist 로그인 503(실패-안전). PROGRESS.md 참조.

@@ -5,7 +5,7 @@
 //   POST : 승인/거절 또는 목록                 (body: { action, adminId, adminPassword, targetId, status })
 import crypto from "crypto";
 import { readJsonFromDrive, saveJsonToDrive, listJsonFromDrive } from "../lib/drive-utils.js";
-import { isAdmin, isValidTransition, effectiveStatus, adminPasswordOk } from "../lib/approval.js";
+import { isAdmin, isValidTransition, effectiveStatus, adminPasswordOk, membersConfigured, adminPasswordConfigured } from "../lib/approval.js";
 
 function clean(v){ return String(v || "").trim(); }
 function lower(v){ return clean(v).toLowerCase(); }
@@ -30,8 +30,8 @@ async function readUser(key){
 async function authenticateAdmin(adminId, adminPassword){
   const id = clean(adminId);
   if(!isAdmin(id)) return { ok:false, code:403, message:"관리자 권한이 없습니다." };
-  // 하드코딩 admin/admin (기존 동작과 동일)
-  if(lower(id) === "admin" && String(adminPassword) === "admin") return { ok:true, id };
+  // 부트스트랩 admin/admin — STELLA_MEMBERS·ADMIN_PASSWORD 둘 다 미설정일 때만(공개 admin/admin 구멍 차단)
+  if(!membersConfigured() && !adminPasswordConfigured() && lower(id) === "admin" && String(adminPassword) === "admin") return { ok:true, id };
   // ADMIN_PASSWORD(env) 통과 — Drive 없이도 콜드스타트·토큰만료 내성(env 미설정 시 건너뜀)
   if(adminPasswordOk(adminPassword)) return { ok:true, id };
   // Drive 레코드의 password_hash 로 검증 (회원가입을 통해 저장된 관리자 계정)
