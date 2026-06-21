@@ -319,3 +319,15 @@ STATUS: IN_PROGRESS
   - [!] 앱 완전종료 푸시: Web Push(VAPID 구독 저장+서버 발송) 인프라 필요 → 후속. sw.js에 push 핸들러는 이미 존재하나 구독/발송 백엔드 미구현. iOS는 OS 제약.
 - T2 전송 속도: 텍스트 낙관적 UI는 이미 구현됨(즉시 렌더+sendState+retry+clientId dedup). 백엔드 send 응답에서 전체 방 히스토리(room:data) 제거→확정 메시지 1건만(긴 방 97~100% 페이로드 감소).
   - 가정: "Azure 우선·Drive 비동기" 중 Drive 저장을 응답 후 fire-and-forget로 돌리면 Vercel 서버리스가 응답 직후 함수를 동결/종료해 **메시지 유실** 위험 → 내구성 우선으로 Drive 저장은 동기 유지. 대신 무손실인 페이로드 트림으로 체감속도 개선. Azure 메시지 저장 일원화는 list/get/poll 동시 마이그레이션 필요한 대공사라 후속.
+
+---
+
+## 2026-06-20 Stella Talk STAGE 6 — 알림 고도화 + 백그라운드 수신(SW) [동시작업 베이스 v51 위 재적용]
+- 방별 뮤트 토글(헤더 🔔/🔕, per-room localStorage): 뮤트 방은 소리·푸시·인앱토스트 생략하되 뱃지/목록 유지. active/background 알림 경로 양쪽 적용.
+- 멘션(@아이디/@이름): 뮤트여도 알림 + 버블 하이라이트. mentionsMe() 공용.
+- 알림 합치기: notify(title,body,roomId) 방별 tag + 연속 시 "메시지 N개". 방 열면 카운트 리셋.
+- 인앱 토스트(현재 방 아님): 기존 since 기반 syncRoomListFromServer 의 newRooms 루프에 showRoomToast(탭→이동) 추가.
+- 딥링크: ?room=ID 진입/SW OPEN_ROOM 메시지로 방 자동 오픈. SW notificationclick=열린 탭 포커스+딥링크, periodicsync=탭에 PERIODIC_SYNC 전달.
+- 동시 작업(다른 세션)이 v40→v51로 전진 + '전역 알림 since 기반 재작성'을 이미 반영 → 충돌 회피 위해 origin/main(v51) 위에 STAGE6를 가산식으로 재적용.
+- [다음 단계] 앱 완전 종료 시 백그라운드 수신은 서버 Web Push(VAPID) 구독이 정석.
+### 서비스워커 캐시: v51 → v52

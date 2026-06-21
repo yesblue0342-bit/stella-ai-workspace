@@ -1,4 +1,4 @@
-const CACHE = 'stella-v51';
+const CACHE = 'stella-v52';
 
 self.addEventListener('install', e => self.skipWaiting());
 self.addEventListener('activate', e => {
@@ -71,15 +71,33 @@ self.addEventListener('push', e => {
 
 self.addEventListener('notificationclick', e => {
   e.notification.close();
-  const url = (e.notification.data && e.notification.data.url) || '/talk';
+  const data = e.notification.data || {};
+  const url = data.url || '/talk';
+  const roomId = data.roomId || '';
   e.waitUntil(
     clients.matchAll({ type: 'window', includeUncontrolled: true }).then(function(list) {
       for (var i = 0; i < list.length; i++) {
-        if (list[i].url.includes('/talk') && 'focus' in list[i]) return list[i].focus();
+        var c = list[i];
+        if (c.url.includes('/talk') && 'focus' in c) {
+          if (roomId) { try { c.postMessage({ type: 'OPEN_ROOM', roomId: roomId }); } catch (err) {} }   // STAGE 6: 딥링크
+          return c.focus();
+        }
       }
-      return clients.openWindow(url);
+      return clients.openWindow(url);   // 없으면 /talk?room=X 새로 열기
     })
   );
+});
+
+// STAGE 6: 주기적 백그라운드 동기화(지원 시). 열린 탭에 동기화 트리거 전달.
+//   앱이 완전히 종료된 상태의 백그라운드 수신은 서버 Web Push 구독(VAPID)이 정석 → 다음 단계.
+self.addEventListener('periodicsync', e => {
+  if (e.tag === 'talk-sync') {
+    e.waitUntil(
+      clients.matchAll({ type: 'window', includeUncontrolled: true }).then(function (list) {
+        list.forEach(function (c) { try { c.postMessage({ type: 'PERIODIC_SYNC' }); } catch (err) {} });
+      })
+    );
+  }
 });
 
 // 클라이언트가 강제 업데이트 요청 시

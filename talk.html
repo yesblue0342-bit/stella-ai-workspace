@@ -241,6 +241,7 @@ body.theme-dark .theme-btn.active{background:#1e3a5f}
         <h2 id="chatRoomName">채팅방</h2>
         <button class="icon-btn" onclick="copyRoomCode()" title="방 코드 복사" id="roomCodeBtn" style="display:none">🔑</button>
         <button class="icon-btn" onclick="openInvite()" title="친구 초대">👥</button>
+        <button class="icon-btn" onclick="toggleCurMute()" title="이 방 알림" id="muteBtn" style="display:none">🔔</button>
         <button class="icon-btn" onclick="openRoomSettings()" title="방 설정">⋯</button>
       </div>
       <div class="chat-messages" id="chatMessages">
@@ -990,6 +991,9 @@ function openRoom(id){
   const cr=document.getElementById('chatRoom');cr.style.display='flex';
   document.getElementById('chatRoomName').textContent=(_cur.isMyChat?'💛 ':'')+_cur.name;
   // 방 코드 버튼: 코드 기반 방이고 나와의 채팅이 아닐 때만 표시
+  var mBtn=document.getElementById('muteBtn');
+  if(mBtn){ if(_cur.isMyChat){ mBtn.style.display='none'; } else { mBtn.style.display='inline-flex'; var _mu=isMuted(_cur.id); mBtn.textContent=_mu?'🔕':'🔔'; mBtn.title=_mu?'알림 꺼짐 (탭하여 켜기)':'알림 켜짐 (탭하여 끄기)'; } }
+  clearNotifCount(_cur.id);   // STAGE 6: 방 열면 알림 합치기 카운트 리셋
   var rcBtn=document.getElementById('roomCodeBtn');
   if(rcBtn) rcBtn.style.display=(_cur.id.startsWith('room_code_')&&!_cur.isMyChat)?'inline-flex':'none';
   // 방 전환 시 타이핑 표시 초기화
@@ -1178,8 +1182,12 @@ async function syncRoomFromServer(scrollAfter, opts){
       if(scrollAfter || !fromOther || wasNearBottom) scrollBottom();
       else showNewMsgChip(newCount);
       if(fromOther){
-        playNotifySound(last && last.id);
-        if(document.hidden || document.visibilityState==='hidden') notify(_cur.name, last.text||'📎 파일');
+        // STAGE 6: 뮤트면 소리/푸시 생략(뱃지 유지), 멘션이면 무시하고 알림
+        var _mention=mentionsMe(last && last.text);
+        if(!isMuted(_cur.id) || _mention){
+          playNotifySound(last && last.id);
+          if(document.hidden || document.visibilityState==='hidden') notify(_cur.name, last.text||'📎 파일', _cur.id);
+        }
         updateAppBadge();
       }
     }
@@ -1208,39 +1216,56 @@ function reportRead(roomId){
       body:JSON.stringify({roomId:roomId,userId:myId})}).catch(function(){});
   }catch(e){}
 }
-function notify(title, body){
-  // 1) 브라우저/PWA 팝업 알림
-  if(Notification.permission === 'granted'){
-    try{
-      // SW 경유 알림 (PWA 백그라운드에서도 작동)
-      if(navigator.serviceWorker && navigator.serviceWorker.controller){
-        navigator.serviceWorker.ready.then(function(reg){
-          reg.showNotification('Stella Talk · ' + title, {
-            body: body,
-            icon: '/icons/talk-192.png?v=3',
-            badge: '/icons/talk-192.png?v=3',
-            vibrate: [200, 100, 200],
-            tag: 'stella-talk-msg',
-            renotify: true,
-            data: { url: '/talk' }
-          });
-        }).catch(function(){
-          // SW 실패시 일반 Notification
-          new Notification('Stella Talk · ' + title, {
-            body: body,
-            icon: '/icons/talk-192.png?v=3'
-          });
-        });
-      } else {
-        new Notification('Stella Talk · ' + title, {
-          body: body,
-          icon: '/icons/talk-192.png?v=3'
-        });
-      }
-    }catch(e){}
-  }
-  // 2) 알림 재생 (설정 모드: 소리/진동/무음 - 진동도 모드 내부에서 처리)
-  playNotifySound();
+// ── STAGE 6: per-room 뮤트 / 멘션 / 알림 합치기 / 인앱 토스트 ──
+function _muteKey(){ return 'stella_talk_mute_v1'; }
+function loadMutes(){ try{ return JSON.parse(localStorage.getItem(_muteKey())||'{}')||{}; }catch(e){ return {}; } }
+function isMuted(roomId){ return !!loadMutes()[roomId]; }
+function toggleMute(roomId){ var m=loadMutes(); if(m[roomId]) delete m[roomId]; else m[roomId]=1; try{ localStorage.setItem(_muteKey(),JSON.stringify(m)); }catch(e){} return !!m[roomId]; }
+function toggleCurMute(){
+  if(!_cur)return;
+  var muted=toggleMute(_cur.id);
+  var b=document.getElementById('muteBtn');
+  if(b){ b.textContent=muted?'🔕':'🔔'; b.title=muted?'알림 꺼짐 (탭하여 켜기)':'알림 켜짐 (탭하여 끄기)'; }
+  toast(muted?'🔕 이 방 알림을 껐습니다 (뱃지는 유지)':'🔔 이 방 알림을 켰습니다');
+}
+function mentionsMe(text){
+  if(!text)return false;
+  var t=String(text).toLowerCase();
+  var id=String(getMyId()||'').toLowerCase(), nm=String(getMyName()||'').toLowerCase();
+  if(id && t.indexOf('@'+id)>=0) return true;
+  if(nm && nm!=='나' && t.indexOf('@'+nm)>=0) return true;
+  return false;
+}
+var _notifCounts={};
+function bumpNotif(roomId){ _notifCounts[roomId]=(_notifCounts[roomId]||0)+1; return _notifCounts[roomId]; }
+function clearNotifCount(roomId){ if(roomId) _notifCounts[roomId]=0; }
+function showRoomToast(roomId, title, body){
+  try{
+    var t=document.createElement('div');
+    t.style.cssText='position:fixed;top:12px;left:50%;transform:translateX(-50%);max-width:92vw;background:var(--bg2,#161b22);color:var(--text,#e6edf3);border:1px solid var(--border,#30363d);box-shadow:0 8px 30px rgba(0,0,0,.32);padding:10px 14px;border-radius:14px;font-size:.85rem;z-index:10001;cursor:pointer;display:flex;gap:9px;align-items:center';
+    t.innerHTML='<span style="font-size:1.15rem">💬</span><span style="min-width:0"><b>'+esc(title)+'</b><br><span style="opacity:.8">'+esc(String(body||'').slice(0,42))+'</span></span>';
+    t.onclick=function(){ if(t.parentNode)t.remove(); openRoom(roomId); };
+    document.body.appendChild(t);
+    setTimeout(function(){ if(t.parentNode) t.remove(); }, 4500);
+  }catch(e){}
+}
+
+function notify(title, body, roomId){
+  // STAGE 6: 방별 태그 + 같은 방 연속 시 "메시지 N개" 합치기 + 방 딥링크. (소리는 호출부에서 mute 판정)
+  if(Notification.permission !== 'granted') return;
+  var count = roomId ? bumpNotif(roomId) : 1;
+  var shownBody = count>1 ? ('메시지 '+count+'개') : body;
+  var tag = 'stella-talk-'+(roomId||'msg');
+  var url = '/talk'+(roomId?('?room='+encodeURIComponent(roomId)):'');
+  var opts = { body: shownBody, icon:'/icons/talk-192.png?v=3', badge:'/icons/talk-192.png?v=3', vibrate:[200,100,200], tag:tag, renotify:true, data:{ url:url, roomId:roomId||'' } };
+  try{
+    if(navigator.serviceWorker && navigator.serviceWorker.controller){
+      navigator.serviceWorker.ready.then(function(reg){ reg.showNotification('Stella Talk · '+title, opts); })
+        .catch(function(){ try{ new Notification('Stella Talk · '+title, opts); }catch(e){} });
+    } else {
+      new Notification('Stella Talk · '+title, opts);
+    }
+  }catch(e){}
 }
 
 // C4: 읽으면(방 열기/앱 포커스) 떠 있는 Stella Talk 알림을 닫는다 + 배지 갱신
@@ -1694,7 +1719,9 @@ function buildMsgRow(m, myId){
     a.innerHTML='<div class="msg-file-icon">📄</div><div class="msg-file-info"><div class="msg-file-name">'+esc(m.fileName||'파일')+'</div><div class="msg-file-size">'+fmtSize(m.fileSize)+'</div></div>';
     col.appendChild(a);
   } else {
-    const bub=document.createElement('div');bub.className='msg-bubble';bub.textContent=m.text||'';col.appendChild(bub);
+    const bub=document.createElement('div');bub.className='msg-bubble';bub.textContent=m.text||'';
+    if(!isMe && mentionsMe(m.text)){ bub.style.outline='2px solid var(--primary,#1f6feb)'; bub.style.background='rgba(31,111,235,.14)'; }  // STAGE 6: 멘션 하이라이트
+    col.appendChild(bub);
   }
   // 시간 + 읽음표시(카톡식 "1")
   const tmWrap=document.createElement('div');tmWrap.style.cssText='display:flex;align-items:flex-end;gap:3px;flex-direction:'+(isMe?'row-reverse':'row');
@@ -2501,6 +2528,38 @@ function initTalk(){
   updateNotifBanner();                 // 작업2: 로그인 직후 미허용이면 배너
   setTimeout(syncRoomListFromServer,500);
   setInterval(syncRoomListFromServer, 3000);   // 방 목록/배경방 알림 폴링 5s→3s
+  setupTalkDeepLink();   // STAGE 6: ?room= 딥링크
+  setupSWMessages();     // STAGE 6: SW 알림클릭/주기동기화 메시지 수신
+  registerPeriodicSync();
+}
+// STAGE 6: 알림/딥링크로 전달된 방 열기 (방 목록 로드 대기 후 재시도)
+function openRoomDeep(roomId){
+  if(!roomId) return;
+  (function tryOpen(n){
+    if(_rooms.find(function(r){return r.id===roomId;})){ openRoom(roomId); return; }
+    if(n>0) setTimeout(function(){ tryOpen(n-1); }, 600);
+  })(6);
+}
+function setupTalkDeepLink(){
+  try{ var rid=new URLSearchParams(location.search||'').get('room'); if(rid) setTimeout(function(){ openRoomDeep(rid); }, 700); }catch(e){}
+}
+function setupSWMessages(){
+  try{
+    if('serviceWorker' in navigator){
+      navigator.serviceWorker.addEventListener('message', function(ev){
+        var d=ev.data||{};
+        if(d.type==='OPEN_ROOM' && d.roomId) openRoomDeep(d.roomId);
+        else if(d.type==='PERIODIC_SYNC'){ try{ syncRoomListFromServer(); }catch(e){} }
+      });
+    }
+  }catch(e){}
+}
+function registerPeriodicSync(){
+  try{
+    if('serviceWorker' in navigator) navigator.serviceWorker.ready.then(function(reg){
+      if(reg.periodicSync && reg.periodicSync.register) reg.periodicSync.register('talk-sync',{ minInterval: 15*60*1000 }).catch(function(){});
+    });
+  }catch(e){}
 }
 
 // ── Stella Talk 자체 로그인 ──
@@ -2603,8 +2662,13 @@ async function syncRoomListFromServer(){
     // 최초 폴링은 baseline만 잡고 알림하지 않음(앱 열 때 과거 메시지 폭주 방지)
     if(_notifyPrimed){
       for(const sr of newRooms){
-        playNotifySound();
-        try{ notify(sr.title||'새 메시지', sr.lastMessage||'새 메시지가 도착했습니다'); }catch(e){}
+        // STAGE 6: 뮤트면 소리/푸시/토스트 생략(뱃지·목록은 유지), 멘션이면 무시하고 알림
+        var _mention=mentionsMe(sr.lastMessage);
+        if(!isMuted(sr.roomId) || _mention){
+          playNotifySound();
+          try{ notify(sr.title||'새 메시지', sr.lastMessage||'새 메시지가 도착했습니다', sr.roomId); }catch(e){}
+          showRoomToast(sr.roomId, sr.title||'새 메시지', sr.lastMessage||'');  // 인앱 배너(탭→이동)
+        }
         changed=true;
       }
     }
