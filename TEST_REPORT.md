@@ -235,3 +235,18 @@
 1. 단일시도→즉시 재전송 표시를 지수 백오프 자동 재시도(최대3)로 교체 — 일시 타임아웃/끊김은 사용자 개입 없이 회복, clientId dedup로 중복 0.
 2. 재전송은 재시도 소진 또는 비재시도(401/403/앱거절)에서만 표시. status·attempt·body 진단 로깅 추가. online 복구 자동 flush 유지.
 3. [!] Drive refresh token 폐기는 인프라(GOOGLE_REFRESH_TOKEN 재발급). Azure-우선 ack는 서버리스 유실위험으로 미적용.
+
+## 2026-06-21 (iter 11) · A3 Stella GPT 로그인 버튼 파란 강조 제거 · pass 82/82
+- index.html 인라인 new Function bad=0 · npm test 82/82(회귀 없음)
+- grep: `.primary` 하드코딩 #0f172a→var(--soft)/var(--ink)/var(--line), `.link-btn` #2563eb→var(--muted), 다크 override(body.dark .primary #21262d / link-btn #8b949e)
+요약 3줄:
+1. 로그인 버튼(.primary) 라이트의 네이비 #0f172a → 테마 중립 표면(var(--soft)+ink+line border)로 주변과 동일 톤. 다크는 이미 body.dark button(#21262d) 적용 + 명시 override.
+2. 동일 패턴 파란 링크 .link-btn #2563eb → var(--muted)(+다크 #8b949e). line 27 #2563eb는 드래그 아웃라인이라 제외.
+3. CSS 한정 변경, JS/로직 회귀 없음(82/82).
+
+## FINAL (iter 11) — A1·A2·A3 완료
+- npm test: **82/82 pass**, fail 0(auth-admin 6 + talk-send-retry 7 신규). node --check auth.js·admin-approvals.js·approval.js·db.js OK. cc/talk/index 인라인 파싱 bad=0.
+- A1 인증(env 관리자+Azure password_hash 영속·Drive폴백·백필) / A2 Talk 전송 지수백오프 자동재시도 / A3 로그인 버튼 테마색 — 전부 `[x]`.
+- SW 캐시 v56→**v57**.
+- 배포: main 푸시 → Vercel 자동 배포(team: stella-gpt, 정식 stella-ai-workspace 기준 / 중복 g1st 미사용·무시).
+- 남은 [!]: (A1) Vercel `ADMIN_PASSWORD` env 설정 필요 — 미설정 시 env-admin 경로 비활성(admin/admin·Drive/Azure 레코드 폴백만). (A2) Drive refresh token 폐기 시 GOOGLE_REFRESH_TOKEN 재발급 필요(인프라). 둘 다 대시보드 작업이라 에이전트 적용 불가.
