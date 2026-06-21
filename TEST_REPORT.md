@@ -342,3 +342,16 @@
 ## FINAL (iter 18)
 - node --test 104/104 PASS. 변경: lib/router.mjs(v2), api/chat.js(검색 상시+drive 우선), js/stella-md.js(복사버튼 복원), lib/exporters.mjs(신규), test/router.test.mjs(v2)+test/exporters.test.mjs(신규), REGRESSION_AUDIT.md, sw +1.
 - 한 줄: 맛집/실시간은 web_search로 정확히, 복사/엑셀 복원, 표 온디맨드 유지 — Stella GPT 한정.
+
+## 2026-06-21 (iter 19) · 사이드바 9개 복원 + 회원승인 관리자메뉴 + 톤다운 · pass 104/104
+- node --test 104/104(router 5+exporters 5 포함, 회귀 0) · node --check api/chat.js·lib/router.mjs·lib/exporters.mjs OK · index 인라인 파싱 bad=0
+- 사이드바: 앱 바로가기 9개(Clover 추가, .shortcut-admin 해제) 전원 노출. 회원 승인=.admin-only(isStellaAdmin=role admin)만, FAB 숨김. 업데이트 색 #b45309→var(--muted).
+- 테마: app-ico grayscale+dark invert로 라이트/다크 자동(🛡·🍀 모노크롬, 빨강/주황 제거). 검색/복사/렌더 영역 변경 0.
+요약 3줄:
+1. 앱 바로가기 9개 전원 노출 복원(Stella Clover 외부링크 추가, 관리자 게이트 해제) — 일반 사용자도 모든 앱 접근.
+2. 회원 승인을 플로팅 FAB→사이드바 하단 "관리자" 섹션(.admin-only)으로 이동, 관리자(yesblue0342)에게만 노출·동작 유지.
+3. 사이드바 컬러(주황 업데이트·빨강 방패) 제거→app-ico 모노크롬/테마토큰으로 다크·라이트 양쪽 자연스럽게. 검색/복사/Excel/렌더 회귀 0.
+
+## FINAL (iter 19)
+- node --test 104/104 PASS. 변경: index.html(사이드바 마크업+applyShortcutVisibility 셀렉터+head style), sw.js +1. (검색/복사/렌더 코드 0 변경)
+- 한 줄: 9개 앱 바로가기 복원 + 회원 승인 관리자 전용 사이드바 메뉴 + 다크/라이트 모노크롬 톤다운.

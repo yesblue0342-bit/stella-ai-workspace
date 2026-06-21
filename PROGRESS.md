@@ -414,3 +414,12 @@ STATUS: IN_PROGRESS
 - 검색: needsWebSearch 게이트 삭제 → web_search 상시 제공, 모델이 결정(gpt-4o). 맛집/장소/실시간 추측→실검색+출처. #구글드라이브는 web_search보다 우선(needsDrive면 검색 미제공).
 - 유지: 표 온디맨드(wantsTable), body.route로 Stella GPT만 적용(ABAP/Codex 미전송), 메모리/날씨/Drive/이미지 보존.
 - STEP6 라이브 스모크: 샌드박스 OPENAI_API_KEY 없음 → 실호출 불가, 배포 후 사용자 환경 확인 필요.
+
+## [autopilot] Stella GPT 사이드바 복원 + 관리자 메뉴 + 톤다운
+- nav-baseline: 현재 index.html(line 196)에 8개 바로가기 존재(Clover만 누락), 6개는 .shortcut-admin로 관리자만 노출 → 일반 사용자에겐 GPT/Talk만 보여 "사라진" 것처럼 보임.
+- 가정(이번 미션 우선): 앱 바로가기 9개를 **전원 노출**(.shortcut-admin 게이트 해제). 이전 "비관리자=GPT/Talk만" 요구는 이번 미션이 명시적으로 9개 노출을 지시하므로 대체.
+- 복원: Stella Clover 외부 링크(https://stella-clover.vercel.app, target _blank) 추가 → GPT·Talk·DB·ABAP·Agent Code·Codex·Cloud·Hub·Clover 9개.
+- 회원 승인: 기존 플로팅 FAB(approvalFab, user.role==='admin' 게이트, window.stellaOpenApproval) → 사이드바 하단 "관리자" 섹션의 .admin-only 메뉴로 이동(동일 stellaOpenApproval 연결). FAB는 CSS로 숨김. applyShortcutVisibility 셀렉터를 .admin-only로 변경. .admin-only{display:none} 기본 + admin이면 block.
+- 관리자 판별: isStellaAdmin()=user.role==='admin'(yesblue0342). 서버 로그인 응답 isAdmin/role 사용.
+- 테마: body.dark 클래스 + CSS 변수(--ink/--muted/--card/--line). app-ico는 grayscale 필터+body.dark invert로 라이트=검정/다크=흰색 자동. 🛡 회원 승인·🍀 Clover 모두 app-ico-wrap 모노크롬으로 통일(빨강/주황 제거). 업데이트 버튼 #b45309→var(--muted).
+- 회귀 0: api/chat.js·lib/router.mjs·lib/exporters.mjs·js/stella-md.js 변경 없음(검색/복사/Excel·Word/렌더/body.route 유지).
