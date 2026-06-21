@@ -355,3 +355,19 @@
 ## FINAL (iter 19)
 - node --test 104/104 PASS. 변경: index.html(사이드바 마크업+applyShortcutVisibility 셀렉터+head style), sw.js +1. (검색/복사/렌더 코드 0 변경)
 - 한 줄: 9개 앱 바로가기 복원 + 회원 승인 관리자 전용 사이드바 메뉴 + 다크/라이트 모노크롬 톤다운.
+
+## 2026-06-21 (iter 20) · Stella Talk 기능 전수 점검 · pass 6/6 (104/104 회귀 0)
+- 구문: talk.html 인라인 new Function bad=0 · api/chat-room.js node --check OK
+- 엔드포인트 매핑: 프론트 호출 action(get/read/typing/send/invite/leave/react/delete-message/list) 전부 백엔드 존재, 끊김 0
+- 파라미터 정합: react{roomId,messageId,userId,emoji}·delete-message·read·typing·leave·invite·send 프론트↔백엔드 일치
+- 단위테스트: talk-send-retry+friends+room-membership 18/18, 전체 104/104
+- jsdom 로드: 런타임 null-ref 0
+- **기능 실증(jsdom)**: 세션 주입→syncRoomListFromServer(list POST)→openRoom→sendMsg → action=send POST 발생(body roomId=r1·userId=u1·message·clientId 정상)+낙관적 화면 렌더 확인 → **SEND OK**
+요약 3줄:
+1. 구문·엔드포인트·파라미터·단위테스트·런타임로드·실제 전송 플로우까지 6개 검사 전부 통과 — 오류 없음.
+2. 메시지 전송(낙관적 UI+clientId dedup+백오프 재시도)·방목록 동기화·이모지 반응·읽음/타이핑·삭제·나가기 경로 정상.
+3. 수정 필요 항목 0 → 코드 변경 없음(배포할 기능 변경 없음). 라이브 Azure/Drive 응답은 사용자 환경에서 최종 확인.
+
+## FINAL (iter 20)
+- Stella Talk 전수 점검 6/6 + 전체 104/104 PASS. 발견된 오류 0 → 코드 수정 0.
+- 한 줄: Stella Talk 정상 작동 확인(전송·동기화·반응·읽음/타이핑·삭제 경로), 회귀 없음.

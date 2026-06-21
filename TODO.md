@@ -71,3 +71,6 @@
 - [x] R3. signup pending→approved 즉시 성공(중복검사·Drive 저장 유지), SIGNUP_DISABLED 제거.
 - [x] R4. admin/admin 무조건 통과 원복(auth.js·admin-approvals.js). lib/approval.js 파일 보존.
 - [x] R5. obsolete 테스트 정리(auth-resilience 삭제, auth-admin 단순동작 반영) — approval.test.js 무수정. 84/84.
+
+## Stella Talk 점검 (iter 20, autopilot)
+- [x] Stella Talk 기능 전수 점검 — 구문/엔드포인트/파라미터/단위테스트(18)/jsdom로드/실제 send 플로우 6/6 통과. 오류 0, 수정 0(정상 작동).
