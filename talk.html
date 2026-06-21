@@ -256,7 +256,7 @@ body.theme-dark .theme-btn.active{background:#1e3a5f}
           <button class="attach-btn" onclick="document.getElementById('fileInput').click()" title="파일 첨부">📎</button>
           <input type="file" id="fileInput" multiple hidden onchange="handleFileSelect(this.files)">
           <textarea class="chat-input" id="chatInput" placeholder="메시지 입력" rows="1"
-            onkeydown="if(event.key==='Enter'&&!event.shiftKey){event.preventDefault();sendMsg()}"
+            onkeydown="if(event.key==='Enter'&&!event.shiftKey&&!event.isComposing&&event.keyCode!==229){event.preventDefault();sendMsg()}"
             oninput="this.style.height='auto';this.style.height=Math.min(this.scrollHeight,120)+'px';notifyTyping()"></textarea>
           <button class="send-btn" onclick="sendMsg()">↑</button>
         </div>
@@ -1719,7 +1719,8 @@ function buildMsgRow(m, myId){
     a.innerHTML='<div class="msg-file-icon">📄</div><div class="msg-file-info"><div class="msg-file-name">'+esc(m.fileName||'파일')+'</div><div class="msg-file-size">'+fmtSize(m.fileSize)+'</div></div>';
     col.appendChild(a);
   } else {
-    const bub=document.createElement('div');bub.className='msg-bubble';bub.textContent=m.text||'';
+    const bub=document.createElement('div');bub.className='msg-bubble';
+    fillTextWithLinks(bub, m.text||'');   // STAGE 7: URL 자동 링크화(escape 안전)+줄바꿈 유지
     if(!isMe && mentionsMe(m.text)){ bub.style.outline='2px solid var(--primary,#1f6feb)'; bub.style.background='rgba(31,111,235,.14)'; }  // STAGE 6: 멘션 하이라이트
     col.appendChild(bub);
   }
@@ -2090,7 +2091,10 @@ async function uploadLargeToDrive(file){
 }
 
 // ── 메시지 전송 ──
+var _sendLock=false;
 async function sendMsg(){
+  if(_sendLock) return;                       // STAGE 7: 전송 연타 방지(짧은 디바운스)
+  _sendLock=true; setTimeout(function(){ _sendLock=false; }, 350);
   if(!_cur) return;
   const inp = document.getElementById('chatInput');
   const text = inp.value.trim();
@@ -2303,7 +2307,8 @@ function sendTextToServer(roomId, roomName, myId, myName, text, members, tempId)
     updateMsgState(roomId, tempId, 'sent');
   }).catch(function(e){
     console.warn('[Talk] 전송 실패:', e.message);
-    // 실패 → 실패 상태로 표시 (재시도 가능)
+    if(!navigator.onLine) showOfflineBanner(true);   // STAGE 7: 오프라인이면 배너
+    // 실패 → 실패 상태로 표시 (재시도 가능 / online 복구 시 자동 재발송)
     updateMsgState(roomId, tempId, 'failed');
   });
 }
@@ -2330,6 +2335,71 @@ function retryMsg(msgId){
   saveRooms(); renderMessages();
   const myId=getMyId(), myName=getMyName();
   sendTextToServer(_cur.id, _cur.name, myId, myName, m.text, _cur.members||[myId], msgId);
+}
+
+// ── STAGE 7: URL 자동 링크화 (http(s)만 매칭 → javascript: 불가, createElement로 XSS 안전, 줄바꿈 유지) ──
+function fillTextWithLinks(el, text){
+  el.textContent='';
+  el.style.whiteSpace='pre-wrap';   // 줄바꿈 정상 표시
+  el.style.wordBreak='break-word';
+  var s=String(text||''); var re=/(https?:\/\/[^\s<]+)/g; var last=0, m;
+  while((m=re.exec(s))){
+    if(m.index>last) el.appendChild(document.createTextNode(s.slice(last,m.index)));
+    var a=document.createElement('a');
+    a.href=m[0]; a.target='_blank'; a.rel='noopener noreferrer'; a.textContent=m[0];
+    a.style.color='var(--primary,#1f6feb)'; a.style.textDecoration='underline'; a.style.wordBreak='break-all';
+    el.appendChild(a);
+    last=m.index+m[0].length;
+  }
+  if(last<s.length) el.appendChild(document.createTextNode(s.slice(last)));
+}
+
+// ── STAGE 7: 클립보드 이미지 붙여넣기 → 첨부(전송 시 기존 Drive 업로드 경로 사용) ──
+function setupPasteImage(){
+  var inp=document.getElementById('chatInput');
+  if(!inp) return;
+  inp.addEventListener('paste', function(e){
+    var items=(e.clipboardData && e.clipboardData.items)||[];
+    for(var i=0;i<items.length;i++){
+      if(items[i].kind==='file' && String(items[i].type).indexOf('image')===0){
+        var f=items[i].getAsFile();
+        if(f){ _attachFiles.push(f); renderAttachPreview(); e.preventDefault(); toast('📋 이미지 첨부됨 — 전송 버튼을 누르세요'); }
+      }
+    }
+  });
+}
+
+// ── STAGE 7: 오프라인 배너 + 복구 시 재동기화/미전송 큐 발송 ──
+function showOfflineBanner(show){
+  var b=document.getElementById('offlineBanner');
+  if(show){
+    if(!b){ b=document.createElement('div'); b.id='offlineBanner';
+      b.style.cssText='position:fixed;top:0;left:0;right:0;background:#b91c1c;color:#fff;text-align:center;padding:7px 10px;font-size:.82rem;font-weight:700;z-index:10002';
+      b.textContent='⚠️ 연결 끊김 — 재연결 중…'; document.body.appendChild(b); }
+    b.style.display='block';
+  } else if(b){ b.style.display='none'; }
+}
+function flushFailedQueue(){
+  var myId=getMyId(), myName=getMyName(); if(!myId) return;
+  var any=false;
+  (_rooms||[]).forEach(function(r){
+    if(r.isMyChat) return;
+    (r.messages||[]).forEach(function(m){
+      if(m.sendState==='failed' && m.text){ m.sendState='sending'; any=true;
+        sendTextToServer(r.id, r.name, myId, myName, m.text, r.members||[myId], m.id); }
+    });
+  });
+  if(any){ saveRooms(); if(_cur) renderMessages(); }
+}
+function setupOnlineOffline(){
+  window.addEventListener('offline', function(){ showOfflineBanner(true); });
+  window.addEventListener('online', function(){
+    showOfflineBanner(false); markActivity();
+    try{ if(_cur && !_cur.isMyChat) syncRoomFromServer(false,{full:true}); }catch(e){}
+    try{ syncRoomListFromServer(); }catch(e){}
+    flushFailedQueue();   // 끊긴 동안 실패한 메시지 자동 재발송
+  });
+  if(!navigator.onLine) showOfflineBanner(true);
 }
 
 function scrollBottom(){setTimeout(function(){const el=document.getElementById('chatMessages');if(el)el.scrollTop=el.scrollHeight;hideNewMsgChip();},50);}
@@ -2531,6 +2601,8 @@ function initTalk(){
   setupTalkDeepLink();   // STAGE 6: ?room= 딥링크
   setupSWMessages();     // STAGE 6: SW 알림클릭/주기동기화 메시지 수신
   registerPeriodicSync();
+  setupPasteImage();     // STAGE 7: 클립보드 이미지 붙여넣기
+  setupOnlineOffline();  // STAGE 7: 오프라인 배너 + 복구 시 재동기화/미전송 발송
 }
 // STAGE 6: 알림/딥링크로 전달된 방 열기 (방 목록 로드 대기 후 재시도)
 function openRoomDeep(roomId){

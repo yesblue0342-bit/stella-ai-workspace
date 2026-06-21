@@ -331,3 +331,16 @@ STATUS: IN_PROGRESS
 - 동시 작업(다른 세션)이 v40→v51로 전진 + '전역 알림 since 기반 재작성'을 이미 반영 → 충돌 회피 위해 origin/main(v51) 위에 STAGE6를 가산식으로 재적용.
 - [다음 단계] 앱 완전 종료 시 백그라운드 수신은 서버 Web Push(VAPID) 구독이 정석.
 ### 서비스워커 캐시: v51 → v52
+
+---
+
+## 2026-06-20 Stella Talk STAGE 7 — 입력 경험 / 오프라인·재연결
+- 한글 IME 가드: chatInput Enter 핸들러에 !event.isComposing && keyCode!==229 → 조합 중 Enter 오전송 방지.
+- 전송 연타 방지: sendMsg 진입 시 _sendLock 350ms 디바운스.
+- URL 자동 링크화: fillTextWithLinks() — http(s)만 매칭(javascript: 불가) + createElement로 XSS 안전,
+  target=_blank rel=noopener, white-space:pre-wrap로 줄바꿈/이모지 정상 표시. buildMsgRow 텍스트 버블 적용.
+- 클립보드 이미지 붙여넣기: chatInput paste → image를 _attachFiles 추가(전송 시 기존 Drive 업로드).
+- 오프라인 감지/재연결: navigator.onLine + online/offline. 끊기면 상단 "연결 끊김 — 재연결 중…" 배너,
+  복구 시 현재 방 full 동기화 + 목록 동기화 + 실패 메시지 자동 재발송(flushFailedQueue).
+- (기존 유지) 타이핑/재전송 ⟳/낙관적 상태/새 메시지 칩.
+### 서비스워커 캐시: v52 → v53
