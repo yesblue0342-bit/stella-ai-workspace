@@ -172,3 +172,10 @@
 - SW 캐시 v49→**v50** (UI 변경 캐시 무력화).
 - 배포: main 푸시 → Vercel 자동 배포(team: stella-gpt). 샌드박스에 `vercel --prod` 자격증명 없어 main 푸시로 동등 배포.
 - 한계: Codex 실제 OpenAI 응답·라이브 UI는 Vercel(OPENAI_API_KEY) 환경에서만 확인 가능(Deployment Protection 403로 샌드박스 직접 확인 불가).
+
+## FINAL (iter 8) — G1·T1·T2 전체 완료
+- npm test: **62/62 pass**, fail 0. backend node --check(chat.js·chat-room.js) OK. talk.html 인라인 new Function bad=0.
+- G1 메모리 병렬+warm캐시+계측 / T1 since 기반 전역 알림(유닛 7/7) / T2 send 응답 페이로드 트림(최대 100%↓) — 전부 `[x]`.
+- SW 캐시 v50→**v51**.
+- 배포: main 푸시 → Vercel 자동 배포(team: stella-gpt). 샌드박스 `vercel --prod` 자격증명 없어 main 푸시로 동등 배포.
+- 잔여 [!](항목 내 OS/인프라 제약): Talk 완전종료 푸시=Web Push(VAPID) 후속, iOS 진동/자동재생=OS. G1 스트리밍=라이브 SSE 검증 환경 확보 후속.
