@@ -4,7 +4,7 @@ import { listEvents, normalizeEvents } from "./_maclient.mjs";
 import { extractFilesFromEvents } from "../../lib/cc-files.mjs";
 import { saveAgentFilesToDrive, saveTextToDrive } from "../../lib/drive-files.mjs";
 import { getSessionRow, setSessionGithubUrl } from "../../lib/cc-db.mjs";
-import { saveToGitHubBootstrap, loadFromGitHub, toRepoPath } from "../../lib/github-store.mjs";
+import { saveToGitHubBootstrap, loadFromGitHub, toRepoPath, hasGhToken } from "../../lib/github-store.mjs";
 
 const GH_OWNER = "yesblue0342-bit", GH_REPO = "0Program";
 function pgExt(body) { return String((body && body.ext) || "txt").replace(/[^a-z0-9]/gi, "").slice(0, 8) || "txt"; }
@@ -19,7 +19,7 @@ export default async function handler(req, res) {
 
     // STEP D: 수정 루프용 — 0Program에서 현재 소스 로드(같은 path) → 모델 컨텍스트로 제공.
     if (req.body && req.body.action === "load-github") {
-      if (!process.env.GITHUB_TOKEN) return res.status(200).json({ ok: false, exists: false, reason: "no_token", message: "GitHub 저장소 미설정" });
+      if (!hasGhToken()) return res.status(200).json({ ok: false, exists: false, reason: "no_token", message: "GitHub 저장소 미설정" });
       try {
         const path = toRepoPath(pgName(req.body), pgExt(req.body));
         const cur = await loadFromGitHub({ owner: GH_OWNER, repo: GH_REPO, path });
@@ -36,7 +36,7 @@ export default async function handler(req, res) {
       const r = await saveTextToDrive({ app: app || "Stella", header, text });
       // STEP C/E: 0Program GitHub 이중 저장(비차단·실패 허용). Drive 저장/응답엔 영향 없음.
       let github = null;
-      if (process.env.GITHUB_TOKEN) {
+      if (hasGhToken()) {
         try {
           const path = toRepoPath(pgName(req.body), pgExt(req.body));
           await saveToGitHubBootstrap({ owner: GH_OWNER, repo: GH_REPO, path, content: text,

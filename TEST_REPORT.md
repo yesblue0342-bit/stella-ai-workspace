@@ -384,3 +384,12 @@
 ## FINAL (iter 21)
 - node --test 112/112 PASS. 변경: lib/github-store.mjs(신규), api/cc/save-drive.js(upsert+load), cc.html·codex.html(programName), test/github-store.test.mjs(신규), sw +1.
 - 한 줄: Agent Code/Codex 소스를 Drive+0Program 이중 저장, 같은 대화는 upsert로 수정 루프. Drive 비차단.
+
+## 2026-06-22 (iter 22) · 0Program 토큰 env 폴백 정합 · pass 112/112
+- node --check lib/github-store.mjs·api/cc/save-drive.js OK · node --test github-store 8/8 + 전체 112/112 · 소스 내 PAT 0
+- ghToken() 폴백 6종(GITHUB_TOKEN/GH_TOKEN/GH_PAT/GITHUB_PAT/GITHUB_API_KEY/STELLA_GITHUB_TOKEN) 단건 주입 검증 6/6 OK + none→"" OK
+- save-drive 게이트(load-github·text 이중저장) hasGhToken()로 교체 → 어떤 변수명이든 활성
+요약 3줄:
+1. ghHeaders가 process.env.GITHUB_TOKEN 직접참조 → ghToken() 폴백 함수로 교체(여러 PAT 변수명 호환, 새 토큰 발급/추가 없음). hasGhToken() export.
+2. api/cc/save-drive.js 두 게이트(load-github 404가드, text 이중저장 가드)도 hasGhToken()로 통일 → Vercel에 어떤 이름으로 PAT가 있어도 0Program 저장 활성.
+3. STEP G 실스모크(생성 PUT→update PUT→정리)는 **샌드박스 env에 PAT 부재(6종 전부 no)** 로 실행 불가 → 배포(Vercel env 존재) 후 0Program에서 생성/수정 1회 확인 필요. 토큰 문자열은 코드/로그/응답 어디에도 미노출.
