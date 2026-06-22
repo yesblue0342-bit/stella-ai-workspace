@@ -423,3 +423,13 @@ STATUS: IN_PROGRESS
 - 관리자 판별: isStellaAdmin()=user.role==='admin'(yesblue0342). 서버 로그인 응답 isAdmin/role 사용.
 - 테마: body.dark 클래스 + CSS 변수(--ink/--muted/--card/--line). app-ico는 grayscale 필터+body.dark invert로 라이트=검정/다크=흰색 자동. 🛡 회원 승인·🍀 Clover 모두 app-ico-wrap 모노크롬으로 통일(빨강/주황 제거). 업데이트 버튼 #b45309→var(--muted).
 - 회귀 0: api/chat.js·lib/router.mjs·lib/exporters.mjs·js/stella-md.js 변경 없음(검색/복사/Excel·Word/렌더/body.route 유지).
+
+## [autopilot] 0Program GitHub 이중 저장 + 수정 루프
+- STEP A: Drive 0download 저장부 = api/cc/save-drive.js text 모드(saveTextToDrive). Agent Code(cc.html)·Codex(codex.html) **공유**(둘 다 /api/cc/save-drive 호출). ABAP은 현재 /api/chat만 써서 save-drive 미사용 → 같은 엔드포인트 호출 시 동일 이중저장 적용됨(추후 abap.html 저장 트리거 추가 가능).
+- GitHub PAT: process.env.GITHUB_TOKEN 이미 존재(save-github.js·gh-proxy 사용). 재사용, 신규 키 없음.
+- STEP B: lib/github-store.mjs(검증본) + saveToGitHubBootstrap(빈 레포 시 README로 main 생성 후 재시도).
+- STEP C: save-drive text 모드에서 Drive 저장 직후 0Program upsert(await하되 try/catch로 비차단·실패 허용 → Drive/응답 무영향). 응답에 github:{saved,path}만(토큰 미노출).
+- STEP D: save-drive에 action:"load-github" 추가 → programName으로 현재 소스 로드(수정 루프 enabler). 프론트는 programName=대화 제목(chat.title/cur.title)으로 전송 → 같은 대화=같은 path=upsert 수정 루프.
+- STEP E: 빈 레포 부트스트랩(README 초기 커밋).
+- 경로 규칙: toRepoPath(programName, ext="txt", dir="src") → src/<name>.txt. 가정: ext 기본 txt(소스가 .txt로 Drive와 일치), programName 미전송 시 header→app→타임스탬프.
+- STEP G 스모크: 샌드박스 GITHUB_TOKEN 없음 → 실제 PUT/update 미검증, 배포 후 사용자 환경에서 확인 필요(런 계속).

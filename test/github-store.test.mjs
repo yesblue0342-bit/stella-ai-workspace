@@ -1,0 +1,10 @@
+import { test } from "node:test"; import assert from "node:assert/strict";
+import { toRepoPath, toBase64, fromBase64, buildPutBody, parseShaFromContents } from "../lib/github-store.mjs";
+test("경로: 일반명", () => assert.equal(toRepoPath("ZQM_INSPECTION_01"), "src/ZQM_INSPECTION_01.abap"));
+test("경로: 확장자 유지", () => assert.equal(toRepoPath("Report.abap"), "src/Report.abap"));
+test("경로: 한글 보존/치환", () => assert.equal(toRepoPath("검사로트 #1"), "src/검사로트_1.abap"));
+test("경로: 빈 이름", () => assert.match(toRepoPath(""), /^src\/program_\d+\.abap$/));
+test("base64 라운드트립", () => { assert.equal(fromBase64(toBase64("한글 ABAP")), "한글 ABAP"); assert.equal(toBase64("ABC"), "QUJD"); });
+test("PUT 바디: create(sha 없음)", () => { const b = buildPutBody({ content: "X", message: "m" }); assert.equal(b.content, toBase64("X")); assert.equal("sha" in b, false); });
+test("PUT 바디: update(sha 있음)", () => assert.equal(buildPutBody({ content: "X", sha: "abc" }).sha, "abc"));
+test("sha 파싱", () => { assert.equal(parseShaFromContents({ sha: "d" }), "d"); assert.equal(parseShaFromContents({}), null); });

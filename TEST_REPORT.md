@@ -371,3 +371,16 @@
 ## FINAL (iter 20)
 - Stella Talk 전수 점검 6/6 + 전체 104/104 PASS. 발견된 오류 0 → 코드 수정 0.
 - 한 줄: Stella Talk 정상 작동 확인(전송·동기화·반응·읽음/타이핑·삭제 경로), 회귀 없음.
+
+## 2026-06-21 (iter 21) · 0Program GitHub 이중 저장 + 수정 루프 · pass 112/112
+- node --test github-store 8/8 + 전체 112/112 · node --check lib/github-store.mjs·api/cc/save-drive.js OK · cc/codex 파싱 bad=0 · 소스 내 PAT 0
+- 경로 toRepoPath(일반/확장자/한글/빈이름)·base64 라운드트립·PUT바디(create/update sha)·sha파싱 8/8
+- 회귀: router/exporters 10/10(검색/표/복사 무영향)
+요약 3줄:
+1. lib/github-store.mjs(GET sha→base64→PUT upsert, GITHUB_TOKEN만) + 빈레포 부트스트랩. save-drive text 모드가 Drive 저장 직후 0Program에 비차단 upsert(실패 허용→Drive/응답 무영향).
+2. load-github 액션 + 프론트 programName(대화 제목) 전송 → 같은 대화=같은 path=upsert로 수정 루프(Codex/Agent Code가 같은 소스 이어서 수정 가능).
+3. 스모크는 샌드박스 GITHUB_TOKEN 부재로 미실행 → 배포 후 확인. 토큰은 코드/응답/로그 어디에도 미노출.
+
+## FINAL (iter 21)
+- node --test 112/112 PASS. 변경: lib/github-store.mjs(신규), api/cc/save-drive.js(upsert+load), cc.html·codex.html(programName), test/github-store.test.mjs(신규), sw +1.
+- 한 줄: Agent Code/Codex 소스를 Drive+0Program 이중 저장, 같은 대화는 upsert로 수정 루프. Drive 비차단.

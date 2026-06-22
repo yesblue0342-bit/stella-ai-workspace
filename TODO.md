@@ -74,3 +74,8 @@
 
 ## Stella Talk 점검 (iter 20, autopilot)
 - [x] Stella Talk 기능 전수 점검 — 구문/엔드포인트/파라미터/단위테스트(18)/jsdom로드/실제 send 플로우 6/6 통과. 오류 0, 수정 0(정상 작동).
+
+## 0Program 이중 저장 (autopilot)
+- [x] GH-1. lib/github-store.mjs(저장/로드/부트스트랩) + test/github-store.test.mjs 8/8.
+- [x] GH-2. save-drive text 모드 0Program upsert(비차단·실패허용)+load-github 액션(수정 루프). cc/codex programName=대화제목 전송.
+- [!] (사용자 액션) Vercel env GITHUB_TOKEN(0Program 쓰기 권한 PAT) 확인 — 미설정 시 GitHub 저장만 건너뜀(Drive 저장은 정상).
