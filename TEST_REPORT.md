@@ -402,3 +402,11 @@
 1. 진단: 포맷은 이미 API별 일치했고 **실제 원인=routed(GPT) 경로가 이미지+web_search 동시 첨부**→툴 흐름으로 빠져 거부/빈응답→프론트 OCR 폴백. 더해 텍스트전용 모델 시 비전 미보장 리스크.
 2. 수정: lib/vision-format.mjs(공유 util)로 3개 경로(callResponses/callOpenAI/callClaude) 이미지 블록 통일 + ensureVisionModel로 비전모델 보장. **이미지 있으면 web_search 미첨부(직접 비전 우선)**. 18MB 초과 용량 가드(한국어 안내).
 3. OCR 폴백은 직접 비전 실패 시에만(프론트 callApi(true)→실패 시 callApi(false)) 유지, 정상 시 에러 메시지 없음. 프론트 무변경(데이터URL 그대로 전송), 백엔드만 정리 → 회귀 0.
+
+## 2026-06-22 (iter 24) · 복사 버튼 테마 대응(다크=흰색/라이트=블렌드) · pass 119/119
+- index.html·abap.html .copy-btn/.url-copy CSS만 변경(JS 무변경). new Function 인라인 JS 파싱 OK·CSS 규칙(라이트 블렌드/다크 흰색/url-copy) 3종 존재 검증·전체 119/119 회귀 0.
+- sw v67→v68.
+요약 3줄:
+1. 코드블록/표 "복사" 핀(.copy-btn) + URL 옆 📋(.url-copy)을 테마 대응: 라이트=반투명 슬레이트+opacity .5로 주변과 블렌드(눈에 안 띄게), hover 시 또렷 → 사용성 보전.
+2. 다크=흰색 핀(body.dark .copy-btn background:#fff), url-copy는 양 모드 투명+밝기 보정. 특이도 정상(body.dark .copy-btn 0,1,1 > .copy-btn 0,1,0).
+3. 스코프: 이 버튼을 실제 렌더하는 GPT(index)·ABAP만 변경(codex/cc/talk/db/hub 미렌더). 답변복사(.msgCopyBtn)·기능 로직 무변경.

@@ -1,4 +1,4 @@
-const CACHE = 'stella-v67';
+const CACHE = 'stella-v68';
 
 self.addEventListener('install', e => self.skipWaiting());
 self.addEventListener('activate', e => {

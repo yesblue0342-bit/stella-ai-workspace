@@ -442,3 +442,9 @@ STATUS: IN_PROGRESS
   - **실제 유력 원인**: routed(GPT) 경로가 이미지가 있어도 `search:useSearch`로 **web_search 툴을 동시 첨부**(line469·22). 비전 요청에 web_search가 켜지면 모델이 검색/툴 흐름으로 빠져 빈/거부성 출력 → 프론트 isRefusalOrEmpty()가 OCR 폴백 발동. + 텍스트전용 모델 선택 시 비전모델 미보장.
   - OCR 폴백 순서: 프론트(index/abap)는 이미 callApi(true)[직접비전] 먼저 → 거부/빈 응답일 때만 callApi(false)[OCR]. 폴백 자체는 정상, 직접 비전이 우선 동작하도록 백엔드를 정리.
 - 가정: 포맷 불일치 회귀 방지 + web_search-on-image 제거 + ensureVisionModel + 용량가드로 직접 비전 우선 동작. 신규 우회 아키텍처 없음.
+
+## [autopilot] 복사 버튼 테마 대응(다크=흰색 / 라이트=블렌드)
+작업: [x]A 복사버튼 위치/스코프 확정 [x]B index/abap .copy-btn·.url-copy 테마 CSS [x]C jsdom 검증 [x]D sw +1·커밋·push
+- 대상 버튼: 코드블록/표 "복사" 핀(.copy-btn) + URL 옆 📋(.url-copy). stella-md.js와 각 앱 renderMarkdownLite가 생성.
+- 스코프 확정: 이 버튼들을 실제 렌더하는 앱은 index.html(Stella GPT)·abap.html 둘뿐(codex/cc/talk/db/hub는 미렌더). gpt.html은 .msgCopyBtn(별개 답변복사)로 범위 밖.
+- 가정: "다크=흰색, 라이트=주변과 동일/눈에 안 띄게" → 라이트는 저대비(반투명 슬레이트, opacity .5)로 블렌드+hover시 또렷, 다크는 흰색 핀. 코드블록은 라이트에서도 어두운 배경이라 hover로 사용성 보전.
