@@ -151,6 +151,11 @@ export default async function handler(req, res) {
       };
 
       const saved = await saveJsonToDrive({ folderPath: ["MemberChat"], fileName: roomId, data });
+      // 백그라운드 Web Push(앱 닫혀 있어도 알림). VAPID 키 있을 때만 동작 + 완전 비차단(실패해도 전송 응답 영향 0).
+      try {
+        const { sendRoomPush } = await import("../lib/push-send.js");
+        await sendRoomPush({ members: allMembers, senderId: userId, title, body: data.lastMessage, roomId }).catch(() => {});
+      } catch (e) { /* 키 없음/모듈 미설치 등 무해 통과 */ }
       // T2 속도: 응답에 전체 방(room: data = 모든 메시지)을 싣던 것을 제거 → 확정 메시지 1건만 반환(긴 방일수록 큰 절감).
       // 클라는 d.message(clientId 에코)로 임시본을 확정본으로 교체하므로 전체 히스토리 불필요.
       const lastAt = new Date(messageItem.createdAt).getTime();

@@ -1,7 +1,7 @@
 // KST 날짜 유틸 테스트 (PART E) — 자정 경계 포함. 실행: npm test
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { kstDateString, familyPhotoPath, familyPhotoPathNow } from "../lib/kst-date.js";
+import { kstDateString, familyPhotoPath, familyPhotoPathNow, kstWeekday, kstWeekdayIndex, kstDateLabel } from "../lib/kst-date.js";
 
 test("kstDateString: UTC→KST(+9) 변환", () => {
   // 2026-06-17 03:00:00 UTC → KST 12:00 → 2026-06-17
@@ -38,4 +38,25 @@ test("familyPhotoPath: 지정 경로 배열", () => {
 test("familyPhotoPathNow: KST 날짜로 끝나는 경로", () => {
   const p = familyPhotoPathNow(new Date("2026-06-17T15:30:00Z"));
   assert.deepEqual(p, ["0가족", "1_사진", "stella talk", "2026-06-18"]);
+});
+
+test("kstWeekday: 2026-06-22(KST)은 월요일", () => {
+  // 스크린샷 기준: 2026년 6월 22일 = 월요일
+  assert.equal(kstWeekday(new Date("2026-06-22T01:00:00Z")), "월요일");
+  assert.equal(kstWeekdayIndex(new Date("2026-06-22T01:00:00Z")), 1);
+});
+
+test("kstWeekday: KST 자정 경계로 요일이 넘어감", () => {
+  // 2026-06-21T15:00:00Z = KST 2026-06-22 00:00 → 월요일
+  assert.equal(kstWeekday(new Date("2026-06-21T15:00:00Z")), "월요일");
+  // 1초 전 = KST 2026-06-21 23:59:59 → 일요일
+  assert.equal(kstWeekday(new Date("2026-06-21T14:59:59Z")), "일요일");
+});
+
+test("kstDateLabel: '2026년 6월 22일 월요일' 형식", () => {
+  assert.equal(kstDateLabel(new Date("2026-06-22T01:00:00Z")), "2026년 6월 22일 월요일");
+});
+
+test("kstWeekday: 잘못된 입력은 throw", () => {
+  assert.throws(() => kstWeekday("nope"));
 });

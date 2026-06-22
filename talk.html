@@ -1893,7 +1893,7 @@ function renderMessages(){
   if(hasOlder){ units.push({key:'__loadmore', sig:'loadmore␟'+_startIdx, kind:'loadmore'}); }
   let lastDate='';
   msgs.forEach(function(m){
-    const dateStr=new Date(m.at).toLocaleDateString('ko-KR',{year:'numeric',month:'long',day:'numeric'});
+    const dateStr=new Date(m.at).toLocaleDateString('ko-KR',{timeZone:'Asia/Seoul',year:'numeric',month:'long',day:'numeric',weekday:'long'});
     if(dateStr!==lastDate){ units.push({key:'date_'+dateStr, sig:'date', kind:'date', dateStr:dateStr}); lastDate=dateStr; }
     if(m.type==='system'){ units.push({key:'sys_'+(m.id||m.at), sig:'sys␟'+(m.text||''), kind:'sys', m:m}); return; }
     units.push({key:'msg_'+(m.id||m.at), sig:msgSig(m,myId), kind:'msg', m:m});
@@ -2610,7 +2610,25 @@ function forceUpdate(){
   }
 }
 
-function requestNotification(){if(Notification.permission==='default')Notification.requestPermission().then(function(p){if(p==='granted')new Notification('Stella Talk',{body:'알림이 설정되었습니다.',icon:'/icons/talk-192.png'});updateNotifBanner();}).catch(function(){});}
+function requestNotification(){if(Notification.permission==='default')Notification.requestPermission().then(function(p){if(p==='granted'){new Notification('Stella Talk',{body:'알림이 설정되었습니다.',icon:'/icons/talk-192.png'});subscribePush();}updateNotifBanner();}).catch(function(){});else if(Notification.permission==='granted')subscribePush();}
+// ── 백그라운드 Web Push 구독(앱 닫혀 있어도 알림). VAPID 키 미설정이면 서버가 enabled:false 반환 → 조용히 종료.
+function _urlB64ToU8(b64){var pad='='.repeat((4-b64.length%4)%4);var s=(b64+pad).replace(/-/g,'+').replace(/_/g,'/');var raw=atob(s);var out=new Uint8Array(raw.length);for(var i=0;i<raw.length;i++)out[i]=raw.charCodeAt(i);return out;}
+var _pushSubscribing=false;
+async function subscribePush(){
+  try{
+    if(_pushSubscribing) return; _pushSubscribing=true;
+    var myId=getMyId(); if(!myId||myId==='나') { _pushSubscribing=false; return; }
+    if(!('serviceWorker' in navigator)||!('PushManager' in window)){ _pushSubscribing=false; return; }
+    if(!window.Notification||Notification.permission!=='granted'){ _pushSubscribing=false; return; }
+    var kr=await fetch('/api/push-subscribe?action=key',{cache:'no-store'}).then(function(r){return r.json();}).catch(function(){return null;});
+    if(!kr||!kr.enabled||!kr.publicKey){ _pushSubscribing=false; return; } // 키 미설정 → 비활성(무해)
+    var reg=await navigator.serviceWorker.ready;
+    var sub=await reg.pushManager.getSubscription();
+    if(!sub){ sub=await reg.pushManager.subscribe({userVisibleOnly:true, applicationServerKey:_urlB64ToU8(kr.publicKey)}); }
+    await fetch('/api/push-subscribe',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({userId:myId, subscription:sub.toJSON?sub.toJSON():sub})}).catch(function(){});
+  }catch(e){ /* 구독 실패는 무해(폴링 알림은 그대로 동작) */ }
+  finally{ _pushSubscribing=false; }
+}
 // ── 작업2: 알림 권한 배너 (미허용 시 원탭 켜기) ──
 function dismissNotifBanner(){ var b=document.getElementById('notifBanner'); if(b)b.style.display='none'; try{sessionStorage.setItem('stella_notif_banner_dismissed','1');}catch(e){} }
 function updateNotifBanner(){
@@ -2632,6 +2650,7 @@ function enableNotif(){
         var b=document.getElementById('notifBanner'); if(b)b.style.display='none';
         try{ toast('알림이 켜졌어요'); }catch(e){}
         try{ if('serviceWorker' in navigator){ navigator.serviceWorker.getRegistration().then(function(r){ if(!r) navigator.serviceWorker.register('/sw.js').catch(function(){}); }); } }catch(e){}
+        try{ subscribePush(); }catch(e){}
       } else { updateNotifBanner(); } // denied → 설정 안내로 교체
     }).catch(function(){ updateNotifBanner(); });
   }catch(e){}

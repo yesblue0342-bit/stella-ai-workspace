@@ -410,3 +410,12 @@
 1. 코드블록/표 "복사" 핀(.copy-btn) + URL 옆 📋(.url-copy)을 테마 대응: 라이트=반투명 슬레이트+opacity .5로 주변과 블렌드(눈에 안 띄게), hover 시 또렷 → 사용성 보전.
 2. 다크=흰색 핀(body.dark .copy-btn background:#fff), url-copy는 양 모드 투명+밝기 보정. 특이도 정상(body.dark .copy-btn 0,1,1 > .copy-btn 0,1,0).
 3. 스코프: 이 버튼을 실제 렌더하는 GPT(index)·ABAP만 변경(codex/cc/talk/db/hub 미렌더). 답변복사(.msgCopyBtn)·기능 로직 무변경.
+
+## 2026-06-22 (iter 25) · Stella Talk: 날짜 요일 + 백그라운드 Web Push · pass 128/128
+- node --check kst-date/push-util/push-send/push-subscribe/chat-room/sw OK · npm test 103/103 + .mjs 25/25(총 128, +9) · talk.html new Function 파싱 OK · 시크릿 0 · package.json JSON 유효
+- T1: lib/kst-date.js kstWeekday/kstWeekdayIndex/kstDateLabel(+test 5) · talk.html 날짜 구분선 toLocaleDateString에 timeZone:Asia/Seoul + weekday:'long' → "2026년 6월 22일 월요일"
+- T2: lib/push-util.js(순수,+test 5) + api/push-subscribe.js(구독저장/공개키) + lib/push-send.js(web-push 동적import,env게이트) + chat-room send 훅(비차단) + talk.html subscribePush + sw push payload(title/roomId) 정렬
+요약 3줄:
+1. 날짜 옆 한국요일 표시(KST 기준, 자정경계 테스트 포함). 스크린샷의 "6월22일 월요일" 형태로 구분선 노출.
+2. "앱 안 열어도 알림"=서버 Web Push(VAPID). 발신 시 chat-room이 멤버(발신자 제외)에게 푸시. **VAPID_PUBLIC_KEY/PRIVATE_KEY env 있을 때만 동작**, 없으면 완전 no-op → 현행 prod 영향 0. 키 추가 시 즉시 활성(web-push 의존성 추가, 빌드시 설치).
+3. sendMsg는 원래 즉시 서버 전송이라 미수신 원인은 수신측 포그라운드 폴링뿐 → 백그라운드 푸시로 해소. 폴링/인앱 토스트 알림은 그대로 유지(중복 방지는 tag로).

@@ -1,4 +1,4 @@
-const CACHE = 'stella-v68';
+const CACHE = 'stella-v69';
 
 self.addEventListener('install', e => self.skipWaiting());
 self.addEventListener('activate', e => {
@@ -56,15 +56,16 @@ self.addEventListener('fetch', e => {
 self.addEventListener('push', e => {
   let data = { title: 'Stella Talk', body: '새 메시지가 있습니다.' };
   try { if (e.data) data = e.data.json(); } catch(err) {}
+  const title = data.title ? ('Stella Talk · ' + data.title) : 'Stella Talk';
   e.waitUntil(
-    self.registration.showNotification('Stella Talk', {
+    self.registration.showNotification(title, {
       body: data.body || '새 메시지',
       icon: '/icons/talk-192.png',
       badge: '/icons/talk-192.png',
       vibrate: [200, 100, 200],
       tag: 'stella-talk-msg',
       renotify: true,
-      data: { url: data.url || '/talk' }
+      data: { url: data.url || '/talk', roomId: data.roomId || '' }
     })
   );
 });

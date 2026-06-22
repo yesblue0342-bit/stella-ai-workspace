@@ -448,3 +448,11 @@ STATUS: IN_PROGRESS
 - 대상 버튼: 코드블록/표 "복사" 핀(.copy-btn) + URL 옆 📋(.url-copy). stella-md.js와 각 앱 renderMarkdownLite가 생성.
 - 스코프 확정: 이 버튼들을 실제 렌더하는 앱은 index.html(Stella GPT)·abap.html 둘뿐(codex/cc/talk/db/hub는 미렌더). gpt.html은 .msgCopyBtn(별개 답변복사)로 범위 밖.
 - 가정: "다크=흰색, 라이트=주변과 동일/눈에 안 띄게" → 라이트는 저대비(반투명 슬레이트, opacity .5)로 블렌드+hover시 또렷, 다크는 흰색 핀. 코드블록은 라이트에서도 어두운 배경이라 hover로 사용성 보전.
+
+## [autopilot] Stella Talk 개선(요일/백그라운드 알람)
+TODO:
+- [x] T1 날짜 구분선에 KST 요일 표시(한국날짜 기준 요일) — lib/kst-date.js kstWeekday/kstDateLabel + talk.html 날짜 구분선
+- [x] T2 백그라운드 Web Push(VAPID): 앱 안 열어도 메시지 알림 — lib/push-util.js(순수) + api/push-subscribe.js(구독 저장/공개키) + chat-room send 훅(env 게이트) + talk.html 구독 + sw push payload 정렬
+- [x] T3 테스트(kst-date/push-util .test.js) + sw +1 + 커밋/push
+- 분석: sendMsg는 이미 즉시 서버 POST(전송 지연 아님). 미수신 원인=수신측 포그라운드 폴링(3s)만 동작→앱 닫히면 알림 없음. 정석=서버 Web Push(VAPID).
+- 가정: VAPID 키(VAPID_PUBLIC_KEY/PRIVATE_KEY)는 현재 Vercel env에 없음 → 푸시 경로는 **키 있을 때만 동작(없으면 완전 무해 no-op)**. 키 추가 시 활성. web-push 의존성 추가(빌드시 설치), 키 없는 샌드박스/현행 prod엔 영향 0. 순수 헬퍼만 단위테스트.

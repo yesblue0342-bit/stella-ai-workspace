@@ -16,6 +16,7 @@
     "mssql": "^11.0.1",
     "googleapis": "^144.0.0",
     "fflate": "^0.8.2",
-    "mammoth": "^1.8.0"
+    "mammoth": "^1.8.0",
+    "web-push": "^3.6.7"
   }
 }
