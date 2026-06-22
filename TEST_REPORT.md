@@ -419,3 +419,12 @@
 1. 날짜 옆 한국요일 표시(KST 기준, 자정경계 테스트 포함). 스크린샷의 "6월22일 월요일" 형태로 구분선 노출.
 2. "앱 안 열어도 알림"=서버 Web Push(VAPID). 발신 시 chat-room이 멤버(발신자 제외)에게 푸시. **VAPID_PUBLIC_KEY/PRIVATE_KEY env 있을 때만 동작**, 없으면 완전 no-op → 현행 prod 영향 0. 키 추가 시 즉시 활성(web-push 의존성 추가, 빌드시 설치).
 3. sendMsg는 원래 즉시 서버 전송이라 미수신 원인은 수신측 포그라운드 폴링뿐 → 백그라운드 푸시로 해소. 폴링/인앱 토스트 알림은 그대로 유지(중복 방지는 tag로).
+
+## 2026-06-22 (iter 26) · Stella Talk '재전송 1' 멈춤 수정 · pass 128/128
+- node --check api/chat-room.js OK · talk.html new Function 파싱 OK · npm test 103 + .mjs 25 = 128/128 · 시크릿 0 · sw v69→v70
+- 원인: ① 재시도 3회(≈7s) 소진 후 'failed' 고정 → flushFailedQueue가 'online' 이벤트에만 동작(오프라인 전환 없으면 영영 재시도 안 함) → "재전송 1" 영구 잔존. ② iter25 push 훅이 전송 응답 경로에 await로 묶여 있던 것(키 없으면 무해하나 경로 결합) 제거.
+- 수정: (서버) push를 VAPID 키 있을 때만 import + fire-and-forget로 분리 → 전송 응답을 절대 지연/차단하지 않음(키 없는 현행 prod는 push 경로 미접촉). (클라) flushFailedQueue throttle(12s)+periodic(12s)+visibility/focus 자동 플러시 → 일시 실패가 스스로 회복돼 '재전송' 사라짐.
+요약 3줄:
+1. "재전송 1이 안 사라지고 메시지 안 감"의 핵심은 실패 메시지 자동 재발송이 online 이벤트에만 걸려 있던 것 → 주기/포커스/가시성 변경 시에도 자동 재발송하도록 보강.
+2. 최근(iter25) 추가한 백그라운드 푸시 훅을 전송 응답에서 완전 분리(키 있을 때만 동작, fire-and-forget) → 전송 경로 결합/지연 제거.
+3. clientId 동일 → 서버 dedup으로 자동 재발송해도 중복 메시지 없음. 단위테스트 128/128 유지.

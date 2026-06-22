@@ -2475,7 +2475,12 @@ function showOfflineBanner(show){
     b.style.display='block';
   } else if(b){ b.style.display='none'; }
 }
-function flushFailedQueue(){
+var _lastFlushAt=0;
+function flushFailedQueue(force){
+  // 재시도 소진으로 'failed'에 멈춘 메시지를 주기적으로 자동 재발송(온라인일 때). 과도한 호출은 throttle.
+  if(!navigator.onLine) return;
+  var now=Date.now();
+  if(!force && (now-_lastFlushAt)<12000) return;   // 12초 throttle
   var myId=getMyId(), myName=getMyName(); if(!myId) return;
   var any=false;
   (_rooms||[]).forEach(function(r){
@@ -2485,7 +2490,7 @@ function flushFailedQueue(){
         sendTextToServer(r.id, r.name, myId, myName, m.text, r.members||[myId], m.id); }
     });
   });
-  if(any){ saveRooms(); if(_cur) renderMessages(); }
+  if(any){ _lastFlushAt=now; saveRooms(); if(_cur) renderMessages(); }
 }
 function setupOnlineOffline(){
   window.addEventListener('offline', function(){ showOfflineBanner(true); });
@@ -2655,7 +2660,8 @@ function enableNotif(){
     }).catch(function(){ updateNotifBanner(); });
   }catch(e){}
 }
-document.addEventListener('visibilitychange', function(){ if(document.visibilityState==='visible'){ updateNotifBanner(); try{ if(_audioCtx && _audioCtx.state==='suspended') _audioCtx.resume(); }catch(e){} } });
+document.addEventListener('visibilitychange', function(){ if(document.visibilityState==='visible'){ updateNotifBanner(); try{ flushFailedQueue(true); }catch(e){} try{ if(_audioCtx && _audioCtx.state==='suspended') _audioCtx.resume(); }catch(e){} } });
+window.addEventListener('focus', function(){ try{ flushFailedQueue(true); }catch(e){} });
 
 // ── PWA ──
 var _dp=null;
@@ -2713,6 +2719,7 @@ function initTalk(){
   updateNotifBanner();                 // 작업2: 로그인 직후 미허용이면 배너
   setTimeout(syncRoomListFromServer,500);
   setInterval(syncRoomListFromServer, 3000);   // 방 목록/배경방 알림 폴링 5s→3s
+  setInterval(function(){ try{ flushFailedQueue(); }catch(e){} }, 12000);   // '재전송'에 멈춘 메시지 주기 자동 재발송(throttle)
   setupTalkDeepLink();   // STAGE 6: ?room= 딥링크
   setupSWMessages();     // STAGE 6: SW 알림클릭/주기동기화 메시지 수신
   registerPeriodicSync();

@@ -151,15 +151,16 @@ export default async function handler(req, res) {
       };
 
       const saved = await saveJsonToDrive({ folderPath: ["MemberChat"], fileName: roomId, data });
-      // 백그라운드 Web Push(앱 닫혀 있어도 알림). VAPID 키 있을 때만 동작 + 완전 비차단(실패해도 전송 응답 영향 0).
-      try {
-        const { sendRoomPush } = await import("../lib/push-send.js");
-        await sendRoomPush({ members: allMembers, senderId: userId, title, body: data.lastMessage, roomId }).catch(() => {});
-      } catch (e) { /* 키 없음/모듈 미설치 등 무해 통과 */ }
-      // T2 속도: 응답에 전체 방(room: data = 모든 메시지)을 싣던 것을 제거 → 확정 메시지 1건만 반환(긴 방일수록 큰 절감).
-      // 클라는 d.message(clientId 에코)로 임시본을 확정본으로 교체하므로 전체 히스토리 불필요.
+      // 전송 응답을 먼저 만든다(푸시는 절대 응답을 지연/차단하지 않음).
       const lastAt = new Date(messageItem.createdAt).getTime();
-      return res.status(200).json({ ok: true, saved, message: messageItem, lastMessageAt: isNaN(lastAt) ? 0 : lastAt, messageCount: data.messages.length });
+      const payload = { ok: true, saved, message: messageItem, lastMessageAt: isNaN(lastAt) ? 0 : lastAt, messageCount: data.messages.length };
+      // 백그라운드 Web Push: VAPID 키가 있을 때만 모듈 로드 + 발송(fire-and-forget). 키 없으면 import조차 안 함 → 전송 경로 영향 0.
+      if (process.env.VAPID_PUBLIC_KEY && process.env.VAPID_PRIVATE_KEY) {
+        import("../lib/push-send.js")
+          .then(({ sendRoomPush }) => sendRoomPush({ members: allMembers, senderId: userId, title, body: data.lastMessage, roomId }))
+          .catch(() => {});
+      }
+      return res.status(200).json(payload);
     }
 
     // ── 멤버 초대/합류 (메시지 없이 members 갱신, 재초대 시 left 해제) ── STAGE 4
