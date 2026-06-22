@@ -433,3 +433,12 @@ STATUS: IN_PROGRESS
 - STEP E: 빈 레포 부트스트랩(README 초기 커밋).
 - 경로 규칙: toRepoPath(programName, ext="txt", dir="src") → src/<name>.txt. 가정: ext 기본 txt(소스가 .txt로 Drive와 일치), programName 미전송 시 header→app→타임스탬프.
 - STEP G 스모크: 샌드박스 GITHUB_TOKEN 없음 → 실제 PUT/update 미검증, 배포 후 사용자 환경에서 확인 필요(런 계속).
+
+## [autopilot] 이미지 직접 분석(Vision) 수정
+작업: [x]A진단 [x]B vision-format.mjs [x]C 포맷교정 [x]D 비전모델보장 [x]E 용량가드 [x]F OCR폴백정리 [x]G 테스트 [x]H 스모크/sw/push
+- STEP A 진단(확정):
+  - 호출부: api/chat.js — Stella GPT(루트, body.route=true)→callResponses(/v1/responses, gpt-4o), ABAP/Codex(route 미전송)→callOpenAI(/v1/chat/completions), Claude 모델→callClaude(/v1/messages).
+  - 현 포맷은 **API별로 이미 일치**: Responses=`{type:"input_image",image_url:"<dataurl 문자열>"}`(line17), Chat=`{type:"image_url",image_url:{url}}`(line788), Claude=`{type:"image",source:{base64}}`(line818). → 단순 포맷 불일치는 아님.
+  - **실제 유력 원인**: routed(GPT) 경로가 이미지가 있어도 `search:useSearch`로 **web_search 툴을 동시 첨부**(line469·22). 비전 요청에 web_search가 켜지면 모델이 검색/툴 흐름으로 빠져 빈/거부성 출력 → 프론트 isRefusalOrEmpty()가 OCR 폴백 발동. + 텍스트전용 모델 선택 시 비전모델 미보장.
+  - OCR 폴백 순서: 프론트(index/abap)는 이미 callApi(true)[직접비전] 먼저 → 거부/빈 응답일 때만 callApi(false)[OCR]. 폴백 자체는 정상, 직접 비전이 우선 동작하도록 백엔드를 정리.
+- 가정: 포맷 불일치 회귀 방지 + web_search-on-image 제거 + ensureVisionModel + 용량가드로 직접 비전 우선 동작. 신규 우회 아키텍처 없음.

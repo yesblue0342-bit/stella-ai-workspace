@@ -3,6 +3,8 @@ import { saveJsonToDrive, readJsonFromDrive, listJsonFromDrive, buildDriveContex
 import { buildMemoryContext, saveMemory as saveMemoryAzure } from "../lib/memory-db.mjs";
 // Stella GPT 답변 라우팅(루트 / 전용, body.route 게이트). 다른 앱(ABAP/Codex)은 미전송 → 영향 없음.
 import { wantsTable, buildSystemPrompt as routeSystemPrompt, extractText } from "../lib/router.mjs";
+// 이미지 직접 분석(vision): API별 올바른 이미지 블록 + 비전모델 보장 (포맷 불일치 회귀 방지).
+import { visionImageBlock, ensureVisionModel, parseDataUrl } from "../lib/vision-format.mjs";
 
 // OpenAI Responses API + web_search 호출 (실시간 질문). 응답 contract(text)는 호출부에서 유지.
 async function callResponses({ model, system, history, message, images = [], search = false }) {
@@ -14,12 +16,17 @@ async function callResponses({ model, system, history, message, images = [], sea
   }
   const imgs = (Array.isArray(images) ? images : []).filter((u) => u && String(u).startsWith("data:"));
   if (imgs.length) {
-    input.push({ role: "user", content: [{ type: "input_text", text: String(message || "") }, ...imgs.map((u) => ({ type: "input_image", image_url: u }))] });
+    // Responses API 정확한 이미지 블록(input_image + 문자열 image_url). 공유 util로 포맷 일치 보장.
+    const blocks = imgs.map((u) => { const { base64, mediaType } = parseDataUrl(u); return visionImageBlock({ api: "responses", base64, mediaType }); });
+    input.push({ role: "user", content: [{ type: "input_text", text: String(message || "") }, ...blocks] });
   } else {
     input.push({ role: "user", content: String(message || "") });
   }
-  const bodyObj = { model, instructions: system, input };
-  if (search) bodyObj.tools = [{ type: "web_search" }];
+  // 이미지가 있으면 비전 가능 모델 보장(텍스트전용이면 gpt-4o로 교체).
+  const visModel = ensureVisionModel(model, imgs.length > 0, "openai");
+  const bodyObj = { model: visModel, instructions: system, input };
+  // ★ 직접 비전 우선: 이미지가 있으면 web_search 툴을 붙이지 않는다(툴 흐름으로 빠져 거부/빈응답 → OCR 폴백되는 문제 차단).
+  if (search && !imgs.length) bodyObj.tools = [{ type: "web_search" }];
   const ctrl = new AbortController();
   const timer = setTimeout(() => ctrl.abort(), 55000);
   try {
@@ -332,6 +339,14 @@ export default async function handler(req, res) {
     const system = body.system || STELLA_SYSTEM_PROMPT;
     const images = Array.isArray(body.images) ? body.images.slice(0, 4) : [];
     const userId = String(body.userId || body.user_id || "").trim() || "anonymous";
+
+    // STEP E: 용량 가드 — 이미지 base64 합산이 너무 크면(본문/비전 토큰 한도 초과) 직접 비전 전에 한국어 안내.
+    //   프론트가 이미 1568px/JPEG로 다운스케일하므로 정상 첨부는 통과. 신규 청크 업로드는 만들지 않는다.
+    const imgBytes = images.reduce((a, u) => a + (typeof u === "string" ? u.length : 0), 0);
+    if (imgBytes > 18 * 1024 * 1024) {
+      return res.status(200).json({ ok: true, provider: "vision-guard",
+        text: "첨부 이미지 용량이 너무 큽니다(합산 ~18MB 초과). 캡쳐를 더 작게(텍스트 위주로 잘라서) 다시 올리거나, 이미지를 1~2장으로 줄여 주세요." });
+    }
 
     // ── G1: 구간별 타이밍(병목 특정용). 응답 timings + 서버 로그로 남김 ──
     const _t0 = Date.now();
@@ -771,7 +786,9 @@ function resolveClaudeModel(model) {
 async function callOpenAI({ model, system, history, message, images = [], bare = false }) {
   const apiKey = process.env.OPENAI_API_KEY;
   if (!apiKey) throw new Error("OPENAI_API_KEY not configured");
-  const selectedModel = resolveOpenAIModel(model);
+  const imgs = (Array.isArray(images) ? images : []).filter(u => u && String(u).startsWith("data:"));
+  // 이미지가 있으면 비전 가능 모델 보장(gpt-4.1-mini 등은 비전 지원이라 유지).
+  const selectedModel = ensureVisionModel(resolveOpenAIModel(model), imgs.length > 0, "openai");
   // bare=true(예: Stella Codex 코딩 어시스턴트)는 "[표+요약]" 강제 형식 프리픽스를 생략
   const pfx = bare ? "" : "[표+요약 형식으로 답변] ";
   const response = await fetch("https://api.openai.com/v1/chat/completions", {
@@ -783,9 +800,9 @@ async function callOpenAI({ model, system, history, message, images = [], bare =
       messages: [
         { role: "system", content: system },
         ...history.slice(-12).map(m => ({ role: m.role === "assistant" ? "assistant" : "user", content: String(m.content || "") })),
-        { role: "user", content: images.length > 0
+        { role: "user", content: imgs.length > 0
           ? [{ type:"text", text:pfx+String(message||"") },
-             ...images.filter(u=>u&&u.startsWith("data:")).map(u=>({ type:"image_url", image_url:{ url:u, detail:"auto" } }))]
+             ...imgs.map(u=>{ const { base64, mediaType } = parseDataUrl(u); const b = visionImageBlock({ api:"chat", base64, mediaType }); b.image_url.detail = "auto"; return b; })]
           : pfx+String(message||"") }
       ]
     })
@@ -798,7 +815,8 @@ async function callOpenAI({ model, system, history, message, images = [], bare =
 async function callClaude({ model, system, history, message, images = [] }) {
   const apiKey = process.env.ANTHROPIC_API_KEY;
   if (!apiKey) throw new Error("ANTHROPIC_API_KEY not configured");
-  const selectedModel = resolveClaudeModel(model);
+  const imgs = (Array.isArray(images) ? images : []).filter(u => u && String(u).startsWith("data:"));
+  const selectedModel = ensureVisionModel(resolveClaudeModel(model), imgs.length > 0, "claude");
   // 55초 타임아웃 가드 (Vercel 60초 제한 직전 우아하게 처리)
   const controller = new AbortController();
   const timeoutId = setTimeout(() => controller.abort(), 55000);
@@ -814,8 +832,8 @@ async function callClaude({ model, system, history, message, images = [] }) {
       system,
       messages: [
         ...history.slice(-12).map(m => ({ role: m.role === "assistant" ? "assistant" : "user", content: String(m.content || "") })),
-        { role: "user", content: images.length > 0
-          ? [...images.map(u=>{ const mx=u.match(/^data:([^;]+);base64,(.+)$/); if(!mx) return null; return { type:"image", source:{ type:"base64", media_type:mx[1], data:mx[2] } }; }).filter(Boolean), { type:"text", text:String(message||"") }]
+        { role: "user", content: imgs.length > 0
+          ? [...imgs.map(u=>{ const { base64, mediaType } = parseDataUrl(u); return visionImageBlock({ api:"claude", base64, mediaType }); }), { type:"text", text:String(message||"") }]
           : String(message||"") }
       ]
     })

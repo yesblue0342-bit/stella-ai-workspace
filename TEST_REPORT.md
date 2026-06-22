@@ -393,3 +393,12 @@
 1. ghHeaders가 process.env.GITHUB_TOKEN 직접참조 → ghToken() 폴백 함수로 교체(여러 PAT 변수명 호환, 새 토큰 발급/추가 없음). hasGhToken() export.
 2. api/cc/save-drive.js 두 게이트(load-github 404가드, text 이중저장 가드)도 hasGhToken()로 통일 → Vercel에 어떤 이름으로 PAT가 있어도 0Program 저장 활성.
 3. STEP G 실스모크(생성 PUT→update PUT→정리)는 **샌드박스 env에 PAT 부재(6종 전부 no)** 로 실행 불가 → 배포(Vercel env 존재) 후 0Program에서 생성/수정 1회 확인 필요. 토큰 문자열은 코드/로그/응답 어디에도 미노출.
+
+## 2026-06-22 (iter 23) · 이미지 직접 분석(Vision) 수정 · pass 119/119
+- node --check api/chat.js·lib/vision-format.mjs OK · node --test vision-format 7/7 + 전체 119/119(112→+7) · 소스 내 시크릿 0
+- 블록 셰입 실검증: responses=input_image(문자열 image_url)·chat=image_url{url,detail}·claude=image{source.base64,media_type} 3종 정확 + mediaType(data URL 실제값) 보존
+- 모델가드: gpt-4.1-mini 유지·gpt-4o 유지·텍스트전용→gpt-4o·claude-opus 유지·텍스트전용(claude)→claude-sonnet-4-6
+요약 3줄:
+1. 진단: 포맷은 이미 API별 일치했고 **실제 원인=routed(GPT) 경로가 이미지+web_search 동시 첨부**→툴 흐름으로 빠져 거부/빈응답→프론트 OCR 폴백. 더해 텍스트전용 모델 시 비전 미보장 리스크.
+2. 수정: lib/vision-format.mjs(공유 util)로 3개 경로(callResponses/callOpenAI/callClaude) 이미지 블록 통일 + ensureVisionModel로 비전모델 보장. **이미지 있으면 web_search 미첨부(직접 비전 우선)**. 18MB 초과 용량 가드(한국어 안내).
+3. OCR 폴백은 직접 비전 실패 시에만(프론트 callApi(true)→실패 시 callApi(false)) 유지, 정상 시 에러 메시지 없음. 프론트 무변경(데이터URL 그대로 전송), 백엔드만 정리 → 회귀 0.
