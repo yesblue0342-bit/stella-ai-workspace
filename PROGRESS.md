@@ -475,3 +475,10 @@ TODO:
 - [x] 3 ext:'abap'(codex/cc) + 서버 pgExt ABAP 강제
 - [!] 4 입력 파이프라인(보류: cc=에이전트 백엔드 구조/codex=chat, 4개 CDN 라이브러리 포팅 대형. 핵심 쓰레기파일 문제는 1~3로 해결)(codex/cc extractFile 동급: 이미지 비전+OCR, 문서 텍스트, 빈추출 차단)
 - 가정: 새 헬퍼는 js/source-guard.js(window.shouldSaveSource)로 분리, abap.html은 이미 코드펜스+ext:abap이라 가드만 통일.
+
+## [autopilot] Codex/Agent Code 이미지 첨부 레이스 수정 (iter34)
+- 원인확정: FileReader.readAsDataURL onload(비동기) 완료 전에 send가 트리거되면 pendingAtt가 비어 base64 누락 → 모델 텍스트만 수신(재전송 시 onload 완료되어 성공). 1차 가설(레이스) 확정.
+- 조치: js/attach-encode.js(공유) — encode(Promise)+pendingCount+whenReady. addFiles가 attEnc.encode로 적재, send가 whenReady await + base64 빈항목 가드, 인코딩 중 전송버튼 비활성+"이미지 처리 중…".
+- 점검 5(포맷): codex는 /api/chat(route 미전송)→callOpenAI(chat completions, image_url:{url}) 포맷 일치. cc는 /api/cc/start|turn(에이전트 백엔드). 불일치 없음.
+- 점검 6(조용한 폴백): /api/chat은 ensureVisionModel로 텍스트전용 모델이면 비전모델 자동 승격 → 조용한 폴백 없음(기존 vision 수정본). 변경 불필요.
+- 용량(큐#12) 미착수(Scope Guard 준수).

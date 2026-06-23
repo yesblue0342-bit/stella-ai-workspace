@@ -91,6 +91,7 @@ body.fullscreen-code #fsExit{display:block;position:fixed;top:8px;right:10px;z-i
 }
 </style>
 <script src="/js/source-guard.js"></script>
+<script src="/js/attach-encode.js"></script>
 </head>
 <body>
 <style id="appIcoStyle">
@@ -257,6 +258,14 @@ function addUserBubble(text, attCount){
 // 이미지 첨부: base64 콘텐츠 블록으로 /api/cc/start|turn 에 전달. Vercel 본문 한도 보호용 개당 3.5MB 상한.
 let pendingAtt=[];
 const ATT_MAX=3.5*1024*1024;
+// 첨부 인코딩 레이스 방지: 진행 중이면 전송 비활성 + "이미지 처리 중…", whenReady로 전송 전 대기.
+let _ccRunning=false; // 세션 실행 중 여부(setUIBusy와 인코딩 상태 조율)
+const attEnc = (window.makeAttachEncoder ? window.makeAttachEncoder(updateAttachBusy) : { encode:(f)=>window.readFileAsDataURL(f), pendingCount:()=>0, whenReady:()=>Promise.resolve() });
+function updateAttachBusy(n){
+  const sb=$('sendBtn'); if(sb) sb.disabled = _ccRunning || n>0;
+  if(n>0) setStatus('이미지 처리 중…');
+  else if(!_ccRunning) setStatus('');
+}
 function renderAttStrip(){
   const s=$('attachStrip'); if(!s) return;
   if(!pendingAtt.length){ s.style.display='none'; s.innerHTML=''; return; }
@@ -268,9 +277,9 @@ function addFiles(files){
   for(const f of files){
     if(!f || !/^image\//.test(f.type)) continue;
     if(f.size>ATT_MAX){ setStatus('<span class="err">'+esc(f.name)+': 이미지가 3.5MB를 초과해 건너뜀</span>'); continue; }
-    const r=new FileReader();
-    r.onload=()=>{ const s=String(r.result||''); const i=s.indexOf(','); if(i<0) return; pendingAtt.push({ name:f.name||'image', media_type:f.type, data:s.slice(i+1) }); renderAttStrip(); };
-    r.readAsDataURL(f);
+    // base64 인코딩을 Promise로 await 가능하게 → onload 완료 후에만 pendingAtt에 적재(레이스 차단).
+    attEnc.encode(f).then(s=>{ const i=s.indexOf(','); if(i<0) return; pendingAtt.push({ name:f.name||'image', media_type:f.type, data:s.slice(i+1) }); renderAttStrip(); })
+      .catch(()=>{ setStatus('<span class="err">'+esc(f.name)+': 이미지 읽기 실패</span>'); });
   }
 }
 
@@ -342,14 +351,17 @@ async function saveToGithub(auto){
 }
 
 function setUIBusy(busy){
-  $('sendBtn').disabled = busy;
+  _ccRunning = busy;
+  $('sendBtn').disabled = busy || (attEnc && attEnc.pendingCount()>0); // 인코딩 중이면 계속 비활성
   $('cancelBtn').style.display = busy ? 'block' : 'none';
   $('model').disabled = busy; $('budget').disabled = busy;
 }
 
 async function send(){
   const text = $('prompt').value.trim();
-  const att = pendingAtt.slice();
+  // 첨부 인코딩이 끝날 때까지 대기 → base64 누락 없이 전송(레이스 방지).
+  if(attEnc && attEnc.pendingCount()>0){ setStatus('이미지 처리 중…'); await attEnc.whenReady(); }
+  const att = pendingAtt.slice().filter(a=>a && a.data); // base64 빈 항목 제외(가드)
   if(!text && !att.length) return;
   $('prompt').value=''; $('prompt').style.height='';
   pendingAtt=[]; renderAttStrip();

@@ -489,3 +489,13 @@
 1. 모든 결과가 .abap로 저장되던 문제(Codex는 범용) → 실제 언어/첨부 확장자 반영.
 2. 우선순위: 첨부 소스 확장자 > 생성코드 코드펜스 언어 > ABAP 키워드 휴리스틱 > txt. 이미지 확장자는 소스로 부적합해 제외.
 3. ABAP은 ```abap/키워드로 자동 abap, Python은 py 등 — 파일이 실제 타입으로 0Program에 저장.
+
+## 2026-06-22 (iter 34) · Codex/Agent Code 이미지 첨부 레이스 수정 · pass 145/145
+- 원인확정(1차 가설): readAsDataURL onload 완료 전 send → base64 누락. 재전송 성공=타이밍 결함 확인.
+- 수정: js/attach-encode.js(makeAttachEncoder: encode/pendingCount/whenReady). codex/cc addFiles→Promise 적재, send→whenReady await + 빈base64 가드, 인코딩 중 전송 비활성+"이미지 처리 중…". setUIBusy가 인코딩 진행도 반영.
+- 점검결과: [5 포맷] codex=/api/chat chat-completions image_url:{url} 일치 / cc=에이전트 백엔드. 불일치 없음. [6 폴백] ensureVisionModel로 조용한 폴백 없음. [용량] 큐#12 미착수.
+- 검증: node --check(attach-encode/source-guard) OK · codex/cc 모듈 파싱 OK · attach-encode 4/4 + 전체 145/145 · 회귀(텍스트전용 전송/첨부없음 버튼) 정상 · 시크릿 0 · sw v77→v78.
+요약 3줄:
+1. 레이스 확정: 첨부 뱃지(동기)와 base64(onload 비동기) 불일치로 빠른 전송 시 이미지 누락.
+2. encode를 Promise화하고 전송 직전 whenReady로 대기 + 인코딩 중 전송 차단 → 누락 원천 차단.
+3. 포맷/조용한폴백은 이미 정상(불일치·폴백 없음). 용량 로직은 Scope Guard로 미착수.

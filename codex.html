@@ -91,6 +91,7 @@ body.fullscreen-code #fsExit{display:block;position:fixed;top:8px;right:10px;z-i
 }
 </style>
 <script src="/js/source-guard.js"></script>
+<script src="/js/attach-encode.js"></script>
 </head>
 <body>
 <style id="appIcoStyle">
@@ -278,6 +279,13 @@ function addAssistantBubble(text){
 // ── 이미지 첨부: data URL로 /api/chat images 필드에 전달 (개당 3.5MB 상한) ──
 let pendingAtt=[];
 const ATT_MAX=3.5*1024*1024;
+// 첨부 인코딩 레이스 방지: 진행 중이면 전송 비활성 + "이미지 처리 중…", whenReady로 전송 전 대기.
+const attEnc = (window.makeAttachEncoder ? window.makeAttachEncoder(updateAttachBusy) : { encode:(f)=>window.readFileAsDataURL(f), pendingCount:()=>0, whenReady:()=>Promise.resolve() });
+function updateAttachBusy(n){
+  const sb=$('sendBtn'); if(sb) sb.disabled = busy || n>0;
+  if(n>0) setStatus('이미지 처리 중…');
+  else if(!busy) setStatus('');
+}
 function renderAttStrip(){
   const s=$('attachStrip'); if(!s) return;
   if(!pendingAtt.length){ s.style.display='none'; s.innerHTML=''; return; }
@@ -289,15 +297,15 @@ function addFiles(files){
   for(const f of files){
     if(!f || !/^image\//.test(f.type)) continue;
     if(f.size>ATT_MAX){ setStatus('<span class="err">'+esc(f.name)+': 이미지가 3.5MB를 초과해 건너뜀</span>'); continue; }
-    const r=new FileReader();
-    r.onload=()=>{ const s=String(r.result||''); pendingAtt.push({ name:f.name||'image', dataUrl:s }); renderAttStrip(); };
-    r.readAsDataURL(f);
+    // base64 인코딩을 Promise로 await 가능하게 → onload 완료 후에만 pendingAtt에 적재(레이스 차단).
+    attEnc.encode(f).then(s=>{ pendingAtt.push({ name:f.name||'image', dataUrl:s }); renderAttStrip(); })
+      .catch(()=>{ setStatus('<span class="err">'+esc(f.name)+': 이미지 읽기 실패</span>'); });
   }
 }
 
 function setUIBusy(b){
   busy=b;
-  $('sendBtn').disabled = b;
+  $('sendBtn').disabled = b || (attEnc && attEnc.pendingCount()>0); // 인코딩 중이면 계속 비활성
   $('cancelBtn').style.display = b ? 'block' : 'none';
   $('model').disabled = b;
 }
@@ -347,7 +355,9 @@ let _ctrl=null;
 async function send(){
   if(busy) return;
   const text = $('prompt').value.trim();
-  const att = pendingAtt.slice();
+  // 첨부 인코딩이 끝날 때까지 대기 → base64 누락 없이 전송(레이스 방지).
+  if(attEnc && attEnc.pendingCount()>0){ setStatus('이미지 처리 중…'); await attEnc.whenReady(); }
+  const att = pendingAtt.slice().filter(a=>a && (a.dataUrl||a.data)); // base64 빈 항목은 전송 제외(가드)
   if(!text && !att.length) return;
   $('prompt').value=''; $('prompt').style.height='';
   pendingAtt=[]; renderAttStrip();
