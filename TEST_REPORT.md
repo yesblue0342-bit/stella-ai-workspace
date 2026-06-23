@@ -436,3 +436,11 @@
 1. 요청대로 Stella GPT 사이드바의 Stella Clover 빠른 즐겨찾기만 제거.
 2. 시각/레이아웃·visibility 로직(.admin-only) 영향 0, 나머지 8개 바로가기 그대로.
 3. HTML 단일 요소 삭제 → 회귀 0(테스트 103/103 유지), sw 캐시 bump로 클라 갱신.
+
+## 2026-06-22 (iter 28) · Stella GPT 다크모드 표/TSV 복사 블록 블렌드 · pass 103/103
+- index.html .bubble pre 다크 오버라이드 추가(검은 바탕 #0d1117 + 흰 글씨 #e6edf3 + #30363d 보더). 라이트(#f8fafc) 불변. JS 무변경.
+- new Function 파싱 OK · 규칙 존재 확인 · 전체 103/103 · 시크릿 0 · sw v71→v72.
+요약 3줄:
+1. 원인: .bubble pre(복사용 표/TSV 박스)에 body.dark 오버라이드가 없어 다크모드에서도 흰 박스(#f8fafc)로 튐. 표(table)는 이미 다크 토큰 적용돼 있었음.
+2. 수정: body.dark .bubble pre → 검은 바탕·흰 글씨로 주변 UI와 블렌드(요청대로). pre code도 투명 배경+흰 글씨.
+3. 복사 버튼(.copy-btn)은 iter24 테마 유지(다크=흰 핀). 라이트 모드/기능/회귀 0.
