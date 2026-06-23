@@ -236,11 +236,11 @@ function showToast(msg, ok){
   document.body.appendChild(t);
   setTimeout(()=>{ t.style.transition='opacity .4s'; t.style.opacity='0'; setTimeout(()=>t.remove(),400); }, 2600);
 }
-async function saveResultToDrive(app, header, text){
+async function saveResultToDrive(app, header, text, ext){
   if(!text || !String(text).trim()) return;
   try{
     const r=await fetch('/api/cc/save-drive',{method:'POST',headers:{'Content-Type':'application/json'},
-      body:JSON.stringify({ app:app||'StellaAgentCode', programName:((typeof cur!=='undefined'&&cur&&cur.title)||header), header:header, text:text, ext:'abap' })});
+      body:JSON.stringify({ app:app||'StellaAgentCode', programName:((typeof cur!=='undefined'&&cur&&cur.title)||header), header:header, text:text, ext:(ext||'') })});
     const d=await r.json().catch(()=>({ok:false}));
     if(r.ok && d.ok) showToast('Drive 저장 ✓ '+(d.name||''), true);
     else showToast('Drive 저장 실패: '+((d&&(d.message||d.error))||('HTTP '+r.status)), false);

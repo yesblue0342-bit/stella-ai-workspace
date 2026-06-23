@@ -235,11 +235,13 @@ function showToast(msg, ok){
   document.body.appendChild(t);
   setTimeout(()=>{ t.style.transition='opacity .4s'; t.style.opacity='0'; setTimeout(()=>t.remove(),400); }, 2600);
 }
-async function saveResultToDrive(header, text){
+// 첨부 파일명에서 확장자 추출(가장 마지막 첨부 기준). 없으면 ''.
+function attExt(att){ try{ for(var i=(att||[]).length-1;i>=0;i--){ var m=String(att[i]&&att[i].name||'').match(/\.([A-Za-z0-9]{1,8})$/); if(m) return m[1].toLowerCase(); } }catch(e){} return ''; }
+async function saveResultToDrive(header, text, ext){
   if(!text || !String(text).trim()) return;
   try{
     const r=await fetch('/api/cc/save-drive',{method:'POST',headers:{'Content-Type':'application/json'},
-      body:JSON.stringify({ app:'StellaCodex', programName:((typeof chat!=='undefined'&&chat&&chat.title)||header), header:header, text:text, ext:'abap' })});
+      body:JSON.stringify({ app:'StellaCodex', programName:((typeof chat!=='undefined'&&chat&&chat.title)||header), header:header, text:text, ext:(ext||'') })});
     const d=await r.json().catch(()=>({ok:false}));
     if(r.ok && d.ok) showToast('Drive 저장 ✓ '+(d.name||''), true);
     else showToast('Drive 저장 실패: '+((d&&(d.message||d.error))||('HTTP '+r.status)), false);
@@ -371,7 +373,7 @@ async function send(){
     chat.model = model;
     persistCurrent();
     setStatus('<span class="ok">완료 ✓</span>');
-    if(!window.shouldSaveSource||window.shouldSaveSource(answer)) saveResultToDrive(text, answer); // 소스 가드 통과 시에만 0Program 자동 저장
+    if(!window.shouldSaveSource||window.shouldSaveSource(answer)) saveResultToDrive(text, answer, attExt(att)); // 가드 통과 시 저장(확장자=첨부파일 기준, 없으면 서버가 코드펜스로 판별)
   }catch(e){
     const msg = (e && e.name==='AbortError') ? '중단됨' : ('오류: '+(e&&e.message?e.message:e));
     thinking.innerHTML = '<span class="err">'+esc(msg)+'</span>';

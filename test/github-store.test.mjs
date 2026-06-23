@@ -1,5 +1,20 @@
 import { test } from "node:test"; import assert from "node:assert/strict";
-import { toRepoPath, toBase64, fromBase64, buildPutBody, parseShaFromContents, deriveAbapName, resolveProgramName } from "../lib/github-store.mjs";
+import { toRepoPath, toBase64, fromBase64, buildPutBody, parseShaFromContents, deriveAbapName, resolveProgramName, resolveExt, fenceExtFromText } from "../lib/github-store.mjs";
+
+test("fenceExtFromText: 코드펜스 언어 → 확장자", () => {
+  assert.equal(fenceExtFromText("```abap\nREPORT z.\n```"), "abap");
+  assert.equal(fenceExtFromText("설명\n```python\nprint(1)\n```"), "py");
+  assert.equal(fenceExtFromText("```javascript\n```"), "js");
+  assert.equal(fenceExtFromText("```\nno-lang\n```"), ""); // 언어 없음
+});
+test("resolveExt: 첨부확장자(이미지 제외) → 코드펜스 → abap → txt", () => {
+  assert.equal(resolveExt("java", "```python\n```"), "java");   // 첨부 java 우선
+  assert.equal(resolveExt("png", "```python\nprint(1)\n```"), "py"); // 이미지 첨부는 무시 → 펜스
+  assert.equal(resolveExt("", "```abap\nREPORT z.\n```"), "abap");   // 펜스 abap
+  assert.equal(resolveExt("", "REPORT zaqmr0040.\nFORM x. ENDFORM."), "abap"); // 펜스없음+ABAP키워드
+  assert.equal(resolveExt("", "그냥 한글 텍스트"), "txt");            // 기본
+  assert.equal(resolveExt(".PY", "```\n```"), "py");                  // 점/대문자 정규화
+});
 
 test("deriveAbapName: REPORT/CLASS/FORM/Z식별자 우선순위", () => {
   assert.equal(deriveAbapName("```abap\nREPORT zaqmr0040.\n```"), "ZAQMR0040");

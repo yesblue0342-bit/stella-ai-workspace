@@ -4,16 +4,11 @@ import { listEvents, normalizeEvents } from "./_maclient.mjs";
 import { extractFilesFromEvents } from "../../lib/cc-files.mjs";
 import { saveAgentFilesToDrive, saveTextToDrive } from "../../lib/drive-files.mjs";
 import { getSessionRow, setSessionGithubUrl } from "../../lib/cc-db.mjs";
-import { saveToGitHubBootstrap, loadFromGitHub, toRepoPath, hasGhToken, deriveAbapName, resolveProgramName } from "../../lib/github-store.mjs";
+import { saveToGitHubBootstrap, loadFromGitHub, toRepoPath, hasGhToken, deriveAbapName, resolveProgramName, resolveExt } from "../../lib/github-store.mjs";
 
 const GH_OWNER = "yesblue0342-bit", GH_REPO = "0Program";
-// ABAP 키워드가 보이면 확장자 강제 abap. body.ext 우선.
-function pgExt(body, text) {
-  const e = String((body && body.ext) || "").replace(/[^a-z0-9]/gi, "").slice(0, 8);
-  if (e) return e;
-  if (text && /\b(REPORT|FUNCTION-POOL|FORM|ENDFORM|METHOD|ENDMETHOD|DATA:|SELECT\b|CLASS\s+\w+\s+DEFINITION|TYPE\s+REF\s+TO)\b/i.test(String(text))) return "abap";
-  return "txt";
-}
+// 저장 확장자: 첨부/명시 확장자(이미지 제외) → 코드펜스 언어 → ABAP 키워드 → txt.
+function pgExt(body, text) { return resolveExt(body && body.ext, text); }
 // 저장 파일명: programName이 비었거나 한글문장이면 소스에서 추출(resolveProgramName).
 function pgName(body, text) { return resolveProgramName(String((body && body.programName) || "").trim(), text); }
 // 거부/비프로그램 응답(예: "죄송하지만 …", 너무 짧음)은 0Program 저장에서 제외 — 쓰레기 파일 방지.
