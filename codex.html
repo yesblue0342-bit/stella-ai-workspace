@@ -90,6 +90,7 @@ body.fullscreen-code #fsExit{display:block;position:fixed;top:8px;right:10px;z-i
   #model{min-width:0}
 }
 </style>
+<script src="/js/source-guard.js"></script>
 </head>
 <body>
 <style id="appIcoStyle">
@@ -370,7 +371,7 @@ async function send(){
     chat.model = model;
     persistCurrent();
     setStatus('<span class="ok">완료 ✓</span>');
-    saveResultToDrive(text, answer); // C2: 결과 전문 .txt 자동 저장(StellaGPT/0download)
+    if(!window.shouldSaveSource||window.shouldSaveSource(answer)) saveResultToDrive(text, answer); // 소스 가드 통과 시에만 0Program 자동 저장
   }catch(e){
     const msg = (e && e.name==='AbortError') ? '중단됨' : ('오류: '+(e&&e.message?e.message:e));
     thinking.innerHTML = '<span class="err">'+esc(msg)+'</span>';

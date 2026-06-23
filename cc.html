@@ -90,6 +90,7 @@ body.fullscreen-code #fsExit{display:block;position:fixed;top:8px;right:10px;z-i
   #model{min-width:0}
 }
 </style>
+<script src="/js/source-guard.js"></script>
 </head>
 <body>
 <style id="appIcoStyle">
@@ -322,7 +323,7 @@ async function finish(failed){
     // PART B: 세션 완료 시 산출물 GitHub 자동 저장 (best-effort) + 수동 버튼 노출
     if(cur && cur.sessionId){ $('saveGhBtn').style.display=''; saveToGithub(true); }
     // C2: 결과 전문(.txt)도 StellaGPT/0download에 자동 저장
-    saveResultToDrive('StellaAgentCode', cur.prompt, md);
+    if(!window.shouldSaveSource||window.shouldSaveSource(md)) saveResultToDrive('StellaAgentCode', cur.prompt, md); // 소스 가드 통과 시에만 0Program 자동 저장
   }
   loadSessions();
 }
