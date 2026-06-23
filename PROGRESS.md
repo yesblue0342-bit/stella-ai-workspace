@@ -460,3 +460,11 @@ TODO:
 ## [autopilot] Stella GPT 다크 복사블록 블렌드 (재요청/iter29)
 - iter28에서 body.dark .bubble pre 추가 완료(검은 바탕·흰 글씨). 재요청은 배포전/SW캐시 stale 뷰로 추정.
 - 가정: 확실히 보장하기 위해 다크 오버라이드를 .messages pre / .row.ai pre / .codebox 까지 broaden + SW bump로 캐시 강제 갱신.
+
+## [autopilot] 0Program 저장 안됨 원인조치 (iter30) · 최우선
+원인:
+1) Drive 폴더가 StellaGPT/0download 였음(합의=0Program) → 사용자가 0Program에서 못 찾음.
+2) abap.html(Stella ABAP)이 /api/cc/save-drive 를 아예 호출 안 함 → ABAP 프로그램(ZAQMR0040) 미저장.
+3) GitHub 0Program 저장은 hasGhToken() 게이트 → Vercel PAT 부재/0Program 접근권한 없으면 조용히 skip/실패(원인 불가시).
+조치: Drive BASE_FOLDER 0download→0Program, abap.html 저장 트리거 추가(ext:abap), save-drive가 github 상태(no_token/error reason, 토큰 미노출) 항상 반환.
+가정(검증 필요): GitHub PUT 활성에는 Vercel env에 0Program 쓰기권한 PAT + 레포 yesblue0342-bit/0Program 존재가 전제(코드 외 인프라).

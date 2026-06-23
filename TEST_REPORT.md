@@ -452,3 +452,11 @@
 1. 동일 요청 재접수 → 원인은 배포전/SW캐시 stale 뷰로 추정(iter28 규칙은 정상, 덮어쓰는 규칙·hljs 없음 확인).
 2. 보강: marked(.bubble pre)·폴백(pre.codeblock)·.codebox 등 답변영역의 모든 코드/표 박스를 다크에서 검은 바탕·흰 글씨로 강제 → 흰 박스 확실 제거.
 3. SW 캐시 bump로 사용자 브라우저가 새 CSS를 받도록 강제(업데이트 버튼/재방문 시 적용).
+
+## 2026-06-22 (iter 30) · 0Program 저장 안됨 원인조치 · pass 128/128
+- node --check save-drive/drive-files/github-store OK · abap.html new Function OK · 전체 128/128 · 시크릿 0(마스킹 리터럴 분리) · sw v73→v74
+- 조치: ①Drive BASE_FOLDER 0download→0Program(GitHub 레포명과 일치) ②abap.html에 save-drive 트리거 추가(코드블록 포함 답변만, app=StellaABAP, ext=abap) ③save-drive가 github 상태(no_token/error reason, 토큰 마스킹) 항상 반환→원인 가시화.
+요약 3줄:
+1. 원인: (a)Drive가 0download에 저장돼 0Program에서 안 보임 (b)Stella ABAP은 save-drive 미호출이라 ABAP 프로그램 자체가 미저장 (c)GitHub 0Program 저장 실패가 조용히 무시돼 원인 불명.
+2. 조치: Drive·GitHub 모두 0Program로 통일, ABAP 저장 경로 신설, 실패 사유를 응답에 노출(토큰 비노출).
+3. 전제(인프라, 코드 외): Vercel env에 0Program **쓰기권한** PAT + 레포 yesblue0342-bit/0Program 존재가 있어야 GitHub PUT 성공. Claude Code/OpenAI Codex(외부 CLI)는 앱 API 미경유라 자동저장 대상 아님(웹 앱 산출물만 자동저장).

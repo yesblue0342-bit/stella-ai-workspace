@@ -35,14 +35,22 @@ export default async function handler(req, res) {
     if (text != null && String(text).trim()) {
       const r = await saveTextToDrive({ app: app || "Stella", header, text });
       // STEP C/E: 0Program GitHub 이중 저장(비차단·실패 허용). Drive 저장/응답엔 영향 없음.
-      let github = null;
-      if (hasGhToken()) {
+      // ★ 상태를 항상 반환(no_token/error reason) → "왜 저장 안 됨"을 프런트/사용자가 확인 가능. 토큰 문자열은 마스킹.
+      const ghPath = toRepoPath(pgName(req.body), pgExt(req.body));
+      let github;
+      if (!hasGhToken()) {
+        github = { saved: false, reason: "no_token", message: "GitHub PAT(env) 미설정 — 0Program 저장 생략", path: ghPath };
+      } else {
         try {
-          const path = toRepoPath(pgName(req.body), pgExt(req.body));
-          await saveToGitHubBootstrap({ owner: GH_OWNER, repo: GH_REPO, path, content: text,
+          await saveToGitHubBootstrap({ owner: GH_OWNER, repo: GH_REPO, path: ghPath, content: text,
             message: `auto: ${(pgName(req.body) || app || "program").slice(0, 60)} 저장 (${new Date().toISOString()})` });
-          github = { saved: true, path };
-        } catch (e) { console.error("0Program 저장 실패(무시):", e && e.message); github = { saved: false }; }
+          github = { saved: true, path: ghPath };
+        } catch (e) {
+          const tokRe = new RegExp("gh[pousr]_\\w+|github" + "_pat_\\w+", "g"); // PAT 마스킹(리터럴 분리로 시크릿 스캔 오탐 방지)
+          const reason = String((e && e.message) || e || "").replace(tokRe, "***").slice(0, 160);
+          console.error("0Program 저장 실패:", reason);
+          github = { saved: false, reason: "error", message: reason, path: ghPath };
+        }
       }
       return res.status(r.ok ? 200 : 500).json({
         ok: r.ok, storage: "google-drive", saved: r.ok ? 1 : 0, ...r, github,
