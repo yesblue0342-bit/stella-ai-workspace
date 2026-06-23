@@ -4,11 +4,18 @@ import { listEvents, normalizeEvents } from "./_maclient.mjs";
 import { extractFilesFromEvents } from "../../lib/cc-files.mjs";
 import { saveAgentFilesToDrive, saveTextToDrive } from "../../lib/drive-files.mjs";
 import { getSessionRow, setSessionGithubUrl } from "../../lib/cc-db.mjs";
-import { saveToGitHubBootstrap, loadFromGitHub, toRepoPath, hasGhToken } from "../../lib/github-store.mjs";
+import { saveToGitHubBootstrap, loadFromGitHub, toRepoPath, hasGhToken, deriveAbapName, resolveProgramName } from "../../lib/github-store.mjs";
 
 const GH_OWNER = "yesblue0342-bit", GH_REPO = "0Program";
-function pgExt(body) { return String((body && body.ext) || "txt").replace(/[^a-z0-9]/gi, "").slice(0, 8) || "txt"; }
-function pgName(body) { return String((body && (body.programName || body.header || body.app)) || "").trim(); }
+// ABAP 키워드가 보이면 확장자 강제 abap. body.ext 우선.
+function pgExt(body, text) {
+  const e = String((body && body.ext) || "").replace(/[^a-z0-9]/gi, "").slice(0, 8);
+  if (e) return e;
+  if (text && /\b(REPORT|FUNCTION-POOL|FORM|ENDFORM|METHOD|ENDMETHOD|DATA:|SELECT\b|CLASS\s+\w+\s+DEFINITION|TYPE\s+REF\s+TO)\b/i.test(String(text))) return "abap";
+  return "txt";
+}
+// 저장 파일명: programName이 비었거나 한글문장이면 소스에서 추출(resolveProgramName).
+function pgName(body, text) { return resolveProgramName(String((body && body.programName) || "").trim(), text); }
 // 거부/비프로그램 응답(예: "죄송하지만 …", 너무 짧음)은 0Program 저장에서 제외 — 쓰레기 파일 방지.
 function isNonProgram(text) {
   const t = String(text || "").trim();
@@ -27,7 +34,8 @@ export default async function handler(req, res) {
     if (req.body && req.body.action === "load-github") {
       if (!hasGhToken()) return res.status(200).json({ ok: false, exists: false, reason: "no_token", message: "GitHub 저장소 미설정" });
       try {
-        const path = toRepoPath(pgName(req.body), pgExt(req.body));
+        const ltext = String(req.body.text || "");
+        const path = toRepoPath(pgName(req.body, ltext), pgExt(req.body, ltext));
         const cur = await loadFromGitHub({ owner: GH_OWNER, repo: GH_REPO, path });
         return res.status(200).json({ ok: true, exists: cur.exists, text: cur.text, path });
       } catch (e) {
@@ -42,7 +50,7 @@ export default async function handler(req, res) {
       const r = await saveTextToDrive({ app: app || "Stella", header, text });
       // STEP C/E: 0Program GitHub 이중 저장(비차단·실패 허용). Drive 저장/응답엔 영향 없음.
       // ★ 상태를 항상 반환(no_token/error reason) → "왜 저장 안 됨"을 프런트/사용자가 확인 가능. 토큰 문자열은 마스킹.
-      const ghPath = toRepoPath(pgName(req.body), pgExt(req.body));
+      const ghPath = toRepoPath(pgName(req.body, text), pgExt(req.body, text));
       let github;
       if (isNonProgram(text)) {
         github = { saved: false, reason: "non_program", message: "거부/비프로그램 응답으로 0Program 저장 생략", path: ghPath };
@@ -51,7 +59,7 @@ export default async function handler(req, res) {
       } else {
         try {
           await saveToGitHubBootstrap({ owner: GH_OWNER, repo: GH_REPO, path: ghPath, content: text,
-            message: `auto: ${(pgName(req.body) || app || "program").slice(0, 60)} 저장 (${new Date().toISOString()})` });
+            message: `auto: ${(pgName(req.body, text) || app || "program").slice(0, 60)} 저장 (${new Date().toISOString()})` });
           github = { saved: true, path: ghPath };
         } catch (e) {
           const tokRe = new RegExp("gh[pousr]_\\w+|github" + "_pat_\\w+", "g"); // PAT 마스킹(리터럴 분리로 시크릿 스캔 오탐 방지)
