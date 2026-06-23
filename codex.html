@@ -92,6 +92,7 @@ body.fullscreen-code #fsExit{display:block;position:fixed;top:8px;right:10px;z-i
 </style>
 <script src="/js/source-guard.js"></script>
 <script src="/js/attach-encode.js"></script>
+<script src="/js/code-copy.js"></script>
 </head>
 <body>
 <style id="appIcoStyle">
@@ -273,6 +274,7 @@ function addUserBubble(text, attCount){
 }
 function addAssistantBubble(text){
   const d = document.createElement('div'); d.className='bubble'; d.innerHTML = renderMd(text);
+  if(window.attachCodeCopy) window.attachCodeCopy(d); // 코드블록에 복사 단추
   clearEmpty(); const m=$('msgs'); m.appendChild(d); m.scrollTop=m.scrollHeight; return d;
 }
 
@@ -378,6 +380,7 @@ async function send(){
     if(!r.ok || d.ok===false){ throw new Error(d.error || d.message || ('HTTP '+r.status)); }
     const answer = d.text || d.answer || '응답 없음';
     thinking.innerHTML = renderMd(answer);
+    if(window.attachCodeCopy) window.attachCodeCopy(thinking); // 코드블록에 복사 단추
     $('msgs').scrollTop = $('msgs').scrollHeight;
     chat.messages.push({ role:'assistant', content:answer });
     chat.model = model;

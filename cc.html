@@ -92,6 +92,7 @@ body.fullscreen-code #fsExit{display:block;position:fixed;top:8px;right:10px;z-i
 </style>
 <script src="/js/source-guard.js"></script>
 <script src="/js/attach-encode.js"></script>
+<script src="/js/code-copy.js"></script>
 </head>
 <body>
 <style id="appIcoStyle">
@@ -294,8 +295,19 @@ function renderRun(run){
     html += `<div class="step"><span class="nm">${toolIcon(t.name)} ${esc(t.name)}</span> ${inp}` +
             (t.result!=null ? `<span class="rs">${esc(typeof t.result==='string'?t.result:JSON.stringify(t.result)).slice(0,800)}</span>`:'') + `</div>`;
   }
-  if(run.text) html += `<div class="answer">${esc(run.text)}</div>`;
   host.innerHTML = html;
+  // 답변(프로그램)에 복사 단추: 코드펜스는 블록별 복사, 펜스 없으면 답변 전체 복사 단추 1개.
+  if(run.text){
+    const ans=document.createElement('div'); ans.className='answer';
+    if(window.renderCodeWithCopy){ window.renderCodeWithCopy(ans, run.text); } else { ans.textContent=run.text; }
+    if(window.ccCopyText && !ans.querySelector('pre')){
+      ans.style.position='relative';
+      const cb=document.createElement('button'); cb.type='button'; cb.className='code-copy-btn'; cb.textContent='복사'; cb.setAttribute('data-label','복사');
+      const _txt=run.text; cb.addEventListener('click',function(e){ e.preventDefault(); window.ccCopyText(_txt||'', cb); });
+      ans.appendChild(cb);
+    }
+    host.appendChild(ans);
+  }
   $('msgs').scrollTop = $('msgs').scrollHeight;
 }
 

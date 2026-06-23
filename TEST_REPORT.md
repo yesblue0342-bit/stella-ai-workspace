@@ -499,3 +499,13 @@
 1. 레이스 확정: 첨부 뱃지(동기)와 base64(onload 비동기) 불일치로 빠른 전송 시 이미지 누락.
 2. encode를 Promise화하고 전송 직전 whenReady로 대기 + 인코딩 중 전송 차단 → 누락 원천 차단.
 3. 포맷/조용한폴백은 이미 정상(불일치·폴백 없음). 용량 로직은 Scope Guard로 미착수.
+
+## 2026-06-22 (iter 35) · Codex/Agent Code 코드블록 복사 단추 · pass 151/151
+- 요청: 프로그램 보여줄 때 드래그 대신 "복사" 단추(휴먼에러 방지). 두 앱만 변경.
+- js/code-copy.js(공유): attachCodeCopy(컨테이너 내 <pre>마다 복사 단추, CSS 테마토큰 주입·중복방지) + renderCodeWithCopy/toCodeHtml(코드펜스 렌더) + 클립보드(execCommand 폴백).
+- codex: addAssistantBubble/answer 렌더 후 attachCodeCopy. cc: 답변을 renderCodeWithCopy로 렌더(펜스 블록별 복사) + 펜스 없으면 답변 전체 복사 단추 1개.
+- 검증: node --check OK · code-copy 6/6 + 전체 151/151 · jsdom 스모크(단추 주입/스타일/멱등) OK · codex/cc 모듈 파싱 OK · 시크릿 0 · sw v78→v79.
+요약 3줄:
+1. 코드블록마다 우상단 "복사" 단추(hover 또렷, 다크/라이트 테마 자동) → 드래그 없이 원클릭 복사.
+2. codex는 fenced 코드, cc(에이전트)는 답변 fenced 블록 + 비-fenced 답변 전체복사까지 커버.
+3. 다른 앱 미변경, 공유 모듈은 codex/cc만 로드. 회귀 0.
