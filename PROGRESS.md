@@ -482,3 +482,8 @@ TODO:
 - 점검 5(포맷): codex는 /api/chat(route 미전송)→callOpenAI(chat completions, image_url:{url}) 포맷 일치. cc는 /api/cc/start|turn(에이전트 백엔드). 불일치 없음.
 - 점검 6(조용한 폴백): /api/chat은 ensureVisionModel로 텍스트전용 모델이면 비전모델 자동 승격 → 조용한 폴백 없음(기존 vision 수정본). 변경 불필요.
 - 용량(큐#12) 미착수(Scope Guard 준수).
+
+## [autopilot] Stella GPT 사이드바 검색 클릭 회귀 수정 (iter36)
+- 원인확정: (가설3) 입력창 onclick/onfocus/ontouchstart에 event.preventDefault() → 특히 모바일 ontouchstart preventDefault가 포커스/타이핑/탭을 차단(회귀). (가설4/2) 1107행에 검색버튼 바인딩이 renderBoardTree()+openSidebar()로 3중 중복(검색 미실행, 옛 구현 잔재).
+- 조치: 입력 preventDefault 제거(stopPropagation 유지), 잘못된 1107 바인딩 제거, js/sidebar-search.js로 이벤트 위임(버튼 클릭+Enter+실시간 input 3경로) 견고화. doSideSearch는 q 비면 return(빈 검색 무반응은 정상).
+- 배제: searchPanel/List/Title 요소 존재(가설2 일부 배제), doSideSearch null-ref 없음.

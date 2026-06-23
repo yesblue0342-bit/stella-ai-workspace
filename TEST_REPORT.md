@@ -509,3 +509,12 @@
 1. 코드블록마다 우상단 "복사" 단추(hover 또렷, 다크/라이트 테마 자동) → 드래그 없이 원클릭 복사.
 2. codex는 fenced 코드, cc(에이전트)는 답변 fenced 블록 + 비-fenced 답변 전체복사까지 커버.
 3. 다른 앱 미변경, 공유 모듈은 codex/cc만 로드. 회귀 0.
+
+## 2026-06-22 (iter 36) · Stella GPT 사이드바 검색 클릭 회귀 수정 · checks 153/153
+- 원인확정: [가설3] 입력창 onclick/onfocus/ontouchstart의 event.preventDefault() → 모바일 ontouchstart preventDefault가 포커스/타이핑/탭 차단(PC는 onclick preventDefault). [가설4/2] 1107행 검색버튼 바인딩이 renderBoardTree()+openSidebar() 3중 중복(검색 미실행, 옛 구현 잔재). [배제] searchPanel/List/Title 요소 존재, doSideSearch null-ref 없음.
+- 수정: ①입력 preventDefault 제거(stopPropagation 유지, Enter 분기 preventDefault만 유지) ②잘못된 1107 바인딩 제거 ③js/sidebar-search.js(document 이벤트 위임: 버튼클릭+Enter+실시간 input 3경로, 미정의 가드 console.warn) include.
+- 검증: node --check(sidebar-search) OK · index.html 인라인 JS 파싱 OK · jsdom 위임 2/2(3경로 트리거 확인) + 전체 153/153 · 회귀(새채팅/노트/관리/+ 펼치기 무관) · 시크릿 0 · sw v79→v80.
+요약 3줄:
+1. 회귀 핵심=입력창 preventDefault(특히 모바일 ontouchstart)로 포커스/타이핑 차단 + 검색버튼이 검색 대신 renderBoardTree/openSidebar 호출.
+2. preventDefault 제거 + 잘못된 바인딩 제거 + 이벤트 위임(.js)으로 3경로 검색 복구, 재렌더에도 유실 없음.
+3. Stella GPT 한정 변경, 다른 사이드바 버튼/카테고리 정상.
