@@ -469,3 +469,14 @@
 1. 파일명이 요청문장 전체가 되고 `..txt` 이중점이 생기던 문제 → toRepoPath 정리(길이/후행점/구분자).
 2. AI 거부/비프로그램 응답이 0Program에 저장되던 문제 → 서버 게이트로 차단(reason 응답).
 3. 기존에 잘못 저장된 파일은 레포 권한 밖이라 수동 삭제 필요. 신규 저장부터 깨끗.
+
+## 2026-06-22 (iter 32) · 0Program 소스 저장 정상화(PROMPT.md) · pass 139/139
+- [1] js/source-guard.js shouldSaveSource(코드펜스 필수 + 거부패턴 차단) → codex/cc/abap 저장가드 통일. test 6/6.
+- [2] github-store deriveAbapName/resolveProgramName(REPORT/CLASS/FORM/Z·Y 우선순위, 한글문장/빈값 대체) + save-drive pgName/pgExt(ABAP ext 강제). github-store 13/13.
+- [3] codex/cc saveResultToDrive ext:'abap' 명시 + 서버 ext 강제 이중보장.
+- [!] 4 입력 파이프라인 보류: cc=에이전트 백엔드 구조(attachments 서버처리), codex=chat(이미지는 이미 /api/chat 비전 라우팅). 4개 CDN(tesseract/pdf/mammoth/xlsx) 포팅+2개 상이 아키텍처 재배선은 대형 → 핵심 쓰레기파일 문제는 1~3로 해결되어 별도 후속.
+- 전체 139/139 · node --check 전부 OK · 인라인 JS 파싱 OK · 시크릿 0 · sw v75→v76.
+요약 3줄:
+1. 거부/비소스 응답이 0Program에 커밋되던 문제 → shouldSaveSource 게이트로 3개 앱 모두 차단.
+2. 채팅제목/한글프롬프트가 파일명 되던 문제 → 소스에서 ABAP명 추출(resolveProgramName), 확장자 .abap 강제.
+3. 입력 파이프라인(첨부→모델 도달)은 아키텍처 상이로 보류[!] — 후속 작업으로 명시. 핵심 저장 정상화는 완료.

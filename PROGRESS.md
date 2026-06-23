@@ -468,3 +468,10 @@ TODO:
 3) GitHub 0Program 저장은 hasGhToken() 게이트 → Vercel PAT 부재/0Program 접근권한 없으면 조용히 skip/실패(원인 불가시).
 조치: Drive BASE_FOLDER 0download→0Program, abap.html 저장 트리거 추가(ext:abap), save-drive가 github 상태(no_token/error reason, 토큰 미노출) 항상 반환.
 가정(검증 필요): GitHub PUT 활성에는 Vercel env에 0Program 쓰기권한 PAT + 레포 yesblue0342-bit/0Program 존재가 전제(코드 외 인프라).
+
+## [autopilot] 0Program 소스 저장 정상화 (PROMPT.md, iter32) · 항목별 커밋
+- [x] 1 shouldSaveSource(공유 js/source-guard.js) + codex/cc/abap 저장가드
+- [x] 2 deriveAbapName(서버) + programName 한글문장/빈값 시 대체 + 테스트
+- [x] 3 ext:'abap'(codex/cc) + 서버 pgExt ABAP 강제
+- [!] 4 입력 파이프라인(보류: cc=에이전트 백엔드 구조/codex=chat, 4개 CDN 라이브러리 포팅 대형. 핵심 쓰레기파일 문제는 1~3로 해결)(codex/cc extractFile 동급: 이미지 비전+OCR, 문서 텍스트, 빈추출 차단)
+- 가정: 새 헬퍼는 js/source-guard.js(window.shouldSaveSource)로 분리, abap.html은 이미 코드펜스+ext:abap이라 가드만 통일.
