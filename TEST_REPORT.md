@@ -428,3 +428,11 @@
 1. "재전송 1이 안 사라지고 메시지 안 감"의 핵심은 실패 메시지 자동 재발송이 online 이벤트에만 걸려 있던 것 → 주기/포커스/가시성 변경 시에도 자동 재발송하도록 보강.
 2. 최근(iter25) 추가한 백그라운드 푸시 훅을 전송 응답에서 완전 분리(키 있을 때만 동작, fire-and-forget) → 전송 경로 결합/지연 제거.
 3. clientId 동일 → 서버 dedup으로 자동 재발송해도 중복 메시지 없음. 단위테스트 128/128 유지.
+
+## 2026-06-22 (iter 27) · Stella GPT 사이드바 Stella Clover 바로가기 제거 · pass 103/103
+- index.html 바로가기에서 Stella Clover <a>(stella-clover.vercel.app) 1개 제거(HTML only, JS 무변경). new Function 파싱 OK · 전체 103/103 · 시크릿 0 · sw v70→v71.
+- 다른 바로가기(GPT/Talk/DB/ABAP/Agent Code/Codex/Cloud/Hub)·관리자 회원승인 유지. Clover 링크는 index.html에만 있었음(타 앱 미존재).
+요약 3줄:
+1. 요청대로 Stella GPT 사이드바의 Stella Clover 빠른 즐겨찾기만 제거.
+2. 시각/레이아웃·visibility 로직(.admin-only) 영향 0, 나머지 8개 바로가기 그대로.
+3. HTML 단일 요소 삭제 → 회귀 0(테스트 103/103 유지), sw 캐시 bump로 클라 갱신.
