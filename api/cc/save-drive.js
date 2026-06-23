@@ -9,6 +9,12 @@ import { saveToGitHubBootstrap, loadFromGitHub, toRepoPath, hasGhToken } from ".
 const GH_OWNER = "yesblue0342-bit", GH_REPO = "0Program";
 function pgExt(body) { return String((body && body.ext) || "txt").replace(/[^a-z0-9]/gi, "").slice(0, 8) || "txt"; }
 function pgName(body) { return String((body && (body.programName || body.header || body.app)) || "").trim(); }
+// 거부/비프로그램 응답(예: "죄송하지만 …", 너무 짧음)은 0Program 저장에서 제외 — 쓰레기 파일 방지.
+function isNonProgram(text) {
+  const t = String(text || "").trim();
+  if (t.length < 40) return true;
+  return /^(죄송|미안|sorry|i\s*(can'?t|cannot|am\s+unable|'?m\s+sorry)|unable\s+to|as\s+an\s+ai)/i.test(t);
+}
 
 export const config = { maxDuration: 60 };
 
@@ -38,7 +44,9 @@ export default async function handler(req, res) {
       // ★ 상태를 항상 반환(no_token/error reason) → "왜 저장 안 됨"을 프런트/사용자가 확인 가능. 토큰 문자열은 마스킹.
       const ghPath = toRepoPath(pgName(req.body), pgExt(req.body));
       let github;
-      if (!hasGhToken()) {
+      if (isNonProgram(text)) {
+        github = { saved: false, reason: "non_program", message: "거부/비프로그램 응답으로 0Program 저장 생략", path: ghPath };
+      } else if (!hasGhToken()) {
         github = { saved: false, reason: "no_token", message: "GitHub PAT(env) 미설정 — 0Program 저장 생략", path: ghPath };
       } else {
         try {

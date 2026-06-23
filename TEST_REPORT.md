@@ -460,3 +460,12 @@
 1. 원인: (a)Drive가 0download에 저장돼 0Program에서 안 보임 (b)Stella ABAP은 save-drive 미호출이라 ABAP 프로그램 자체가 미저장 (c)GitHub 0Program 저장 실패가 조용히 무시돼 원인 불명.
 2. 조치: Drive·GitHub 모두 0Program로 통일, ABAP 저장 경로 신설, 실패 사유를 응답에 노출(토큰 비노출).
 3. 전제(인프라, 코드 외): Vercel env에 0Program **쓰기권한** PAT + 레포 yesblue0342-bit/0Program 존재가 있어야 GitHub PUT 성공. Claude Code/OpenAI Codex(외부 CLI)는 앱 API 미경유라 자동저장 대상 아님(웹 앱 산출물만 자동저장).
+
+## 2026-06-22 (iter 31) · 0Program 저장 파일명/거부응답 버그 수정 · pass 130/130
+- 스크린샷 발견: 0Program/src 에 요청문장이 파일명(…개발해줘..txt) + 거부응답("죄송하지만…")이 프로그램으로 저장됨.
+- 수정: ①toRepoPath 후행 점/공백 제거(`..txt` 방지)+연속`_`축약+60자 제한+끝 구분자 정리 ②save-drive isNonProgram 게이트(거부/40자 미만 응답은 0Program 저장 생략, reason=non_program).
+- node --check OK · github-store 10/10(+2) + 전체 130/130 · 시크릿 0 · sw v74→v75.
+요약 3줄:
+1. 파일명이 요청문장 전체가 되고 `..txt` 이중점이 생기던 문제 → toRepoPath 정리(길이/후행점/구분자).
+2. AI 거부/비프로그램 응답이 0Program에 저장되던 문제 → 서버 게이트로 차단(reason 응답).
+3. 기존에 잘못 저장된 파일은 레포 권한 밖이라 수동 삭제 필요. 신규 저장부터 깨끗.
