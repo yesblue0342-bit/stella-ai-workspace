@@ -239,7 +239,7 @@ async function saveResultToDrive(header, text){
   if(!text || !String(text).trim()) return;
   try{
     const r=await fetch('/api/cc/save-drive',{method:'POST',headers:{'Content-Type':'application/json'},
-      body:JSON.stringify({ app:'StellaCodex', programName:((typeof chat!=='undefined'&&chat&&chat.title)||header), header:header, text:text })});
+      body:JSON.stringify({ app:'StellaCodex', programName:((typeof chat!=='undefined'&&chat&&chat.title)||header), header:header, text:text, ext:'abap' })});
     const d=await r.json().catch(()=>({ok:false}));
     if(r.ok && d.ok) showToast('Drive 저장 ✓ '+(d.name||''), true);
     else showToast('Drive 저장 실패: '+((d&&(d.message||d.error))||('HTTP '+r.status)), false);
