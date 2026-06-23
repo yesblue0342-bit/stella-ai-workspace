@@ -135,9 +135,15 @@ body.dark #modelSelect{background:#21262d!important;color:#c9d1d9!important;bord
 body.dark .theme-toggle{background:#21262d!important;border-color:#30363d!important;color:#e6edf3!important}
 body.dark a{color:#58a6ff!important}
 body.dark pre.codeblock{background:#010409!important;border:1px solid #30363d}
-/* 표/TSV 복사 블록(.bubble pre): 다크모드에서 흰 박스가 튀지 않게 검은 바탕·흰 글씨로 주변과 블렌드 */
-body.dark .bubble pre{background:#0d1117!important;color:#e6edf3!important;border-color:#30363d!important}
-body.dark .bubble pre code{background:transparent!important;color:#e6edf3!important}
+/* 표/TSV 복사 블록: 다크모드에서 흰 박스가 튀지 않게 검은 바탕·흰 글씨로 주변과 블렌드.
+   렌더러(marked=.bubble pre / 폴백=pre.codeblock)·컨테이너와 무관하게 답변영역 모든 pre/codebox 커버 */
+body.dark .bubble pre,
+body.dark .messages pre,
+body.dark .row.ai pre,
+body.dark .codebox{background:#0d1117!important;color:#e6edf3!important;border-color:#30363d!important}
+body.dark .bubble pre code,
+body.dark .messages pre code,
+body.dark .codebox code{background:transparent!important;color:#e6edf3!important}
 body.dark{--tbl-bg:#1c1c1e;--tbl-head:#2c2c2e;--tbl-border:#3a3a3c;--tbl-text:#e6edf3;--tbl-row:#1c1c1e}
 body.dark table{background:#1c1c1e!important;border-color:#3a3a3c!important}
 body.dark table td,body.dark table th{border-color:#3a3a3c!important;color:#e6edf3!important;background-color:inherit!important}

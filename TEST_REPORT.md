@@ -444,3 +444,11 @@
 1. 원인: .bubble pre(복사용 표/TSV 박스)에 body.dark 오버라이드가 없어 다크모드에서도 흰 박스(#f8fafc)로 튐. 표(table)는 이미 다크 토큰 적용돼 있었음.
 2. 수정: body.dark .bubble pre → 검은 바탕·흰 글씨로 주변 UI와 블렌드(요청대로). pre code도 투명 배경+흰 글씨.
 3. 복사 버튼(.copy-btn)은 iter24 테마 유지(다크=흰 핀). 라이트 모드/기능/회귀 0.
+
+## 2026-06-22 (iter 29) · Stella GPT 다크 복사블록 블렌드 보강(재요청) · pass 103/103
+- iter28의 body.dark .bubble pre 를 .messages pre / .row.ai pre / .codebox 까지 broaden(렌더러·컨테이너 무관 보장) + sw v72→v73(캐시 강제 갱신). 라이트 #f8fafc 불변, JS 무변경.
+- new Function OK · 규칙 존재 확인 · 전체 103/103 · 시크릿 0.
+요약 3줄:
+1. 동일 요청 재접수 → 원인은 배포전/SW캐시 stale 뷰로 추정(iter28 규칙은 정상, 덮어쓰는 규칙·hljs 없음 확인).
+2. 보강: marked(.bubble pre)·폴백(pre.codeblock)·.codebox 등 답변영역의 모든 코드/표 박스를 다크에서 검은 바탕·흰 글씨로 강제 → 흰 박스 확실 제거.
+3. SW 캐시 bump로 사용자 브라우저가 새 CSS를 받도록 강제(업데이트 버튼/재방문 시 적용).

@@ -456,3 +456,7 @@ TODO:
 - [x] T3 테스트(kst-date/push-util .test.js) + sw +1 + 커밋/push
 - 분석: sendMsg는 이미 즉시 서버 POST(전송 지연 아님). 미수신 원인=수신측 포그라운드 폴링(3s)만 동작→앱 닫히면 알림 없음. 정석=서버 Web Push(VAPID).
 - 가정: VAPID 키(VAPID_PUBLIC_KEY/PRIVATE_KEY)는 현재 Vercel env에 없음 → 푸시 경로는 **키 있을 때만 동작(없으면 완전 무해 no-op)**. 키 추가 시 활성. web-push 의존성 추가(빌드시 설치), 키 없는 샌드박스/현행 prod엔 영향 0. 순수 헬퍼만 단위테스트.
+
+## [autopilot] Stella GPT 다크 복사블록 블렌드 (재요청/iter29)
+- iter28에서 body.dark .bubble pre 추가 완료(검은 바탕·흰 글씨). 재요청은 배포전/SW캐시 stale 뷰로 추정.
+- 가정: 확실히 보장하기 위해 다크 오버라이드를 .messages pre / .row.ai pre / .codebox 까지 broaden + SW bump로 캐시 강제 갱신.
