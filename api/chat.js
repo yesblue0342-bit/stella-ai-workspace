@@ -42,6 +42,60 @@ async function callResponses({ model, system, history, message, images = [], sea
   } finally { clearTimeout(timer); }
 }
 
+// OpenAI Responses API 스트리밍(SSE). onDelta(텍스트조각) 콜백으로 점진 전달, 최종 누적문자열 반환.
+// 실패 시 throw → 호출부(핸들러)가 SSE error 이벤트 전송, 클라는 비스트리밍으로 폴백.
+async function streamResponses({ model, system, history, message, images = [], search = false, onDelta }) {
+  const apiKey = process.env.OPENAI_API_KEY;
+  if (!apiKey) throw new Error("OPENAI_API_KEY not configured");
+  const input = [];
+  for (const m of (Array.isArray(history) ? history : []).slice(-12)) {
+    input.push({ role: m.role === "assistant" ? "assistant" : "user", content: String(m.content || "") });
+  }
+  const imgs = (Array.isArray(images) ? images : []).filter((u) => u && String(u).startsWith("data:"));
+  if (imgs.length) {
+    const blocks = imgs.map((u) => { const { base64, mediaType } = parseDataUrl(u); return visionImageBlock({ api: "responses", base64, mediaType }); });
+    input.push({ role: "user", content: [{ type: "input_text", text: String(message || "") }, ...blocks] });
+  } else {
+    input.push({ role: "user", content: String(message || "") });
+  }
+  const visModel = ensureVisionModel(model, imgs.length > 0, "openai");
+  const bodyObj = { model: visModel, instructions: system, input, stream: true };
+  if (search && !imgs.length) bodyObj.tools = [{ type: "web_search" }];
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(), 290000);
+  let full = "";
+  try {
+    const r = await fetch("https://api.openai.com/v1/responses", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Authorization: `Bearer ${apiKey}` },
+      body: JSON.stringify(bodyObj),
+      signal: ctrl.signal,
+    });
+    if (!r.ok) throw new Error(`OpenAI ${r.status}: ${(await r.text()).slice(0, 200)}`);
+    if (!r.body) throw new Error("no stream body");
+    const dec = new TextDecoder();
+    let buf = "";
+    for await (const chunk of r.body) {
+      buf += dec.decode(chunk, { stream: true });
+      let idx;
+      while ((idx = buf.indexOf("\n\n")) >= 0) {
+        const ev = buf.slice(0, idx); buf = buf.slice(idx + 2);
+        const dl = ev.split("\n").find((l) => l.startsWith("data:"));
+        if (!dl) continue;
+        const js = dl.slice(5).trim();
+        if (!js || js === "[DONE]") continue;
+        let o; try { o = JSON.parse(js); } catch { continue; }
+        if (o.type === "response.output_text.delta" && typeof o.delta === "string") {
+          full += o.delta; if (onDelta) onDelta(o.delta);
+        } else if (o.type === "response.error" || o.error) {
+          throw new Error((o.error && o.error.message) || "stream error");
+        }
+      }
+    }
+    return full;
+  } finally { clearTimeout(timer); }
+}
+
 // 이미지 base64 전송을 위해 body 크기 제한 상향
 export const config = {
   api: {
@@ -482,6 +536,30 @@ export default async function handler(req, res) {
       // #구글드라이브/드라이브 명령은 web_search보다 우선 → 그땐 검색 미제공(Drive 내용으로 답). 그 외엔 항상 web_search.
       const useSearch = !needsDrive;
       provider = useSearch ? "openai-search" : "openai";
+      // ── 스트리밍(SSE): 클라가 stream:true로 opt-in 시에만. 실패해도 클라가 비스트리밍으로 폴백 → 현재 동작 보존.
+      if (body.stream === true) {
+        res.setHeader("Content-Type", "text/event-stream; charset=utf-8");
+        res.setHeader("Cache-Control", "no-cache, no-transform");
+        res.setHeader("X-Accel-Buffering", "no"); // 프록시 버퍼링 방지
+        let full = "";
+        try {
+          full = await streamResponses({ model: "gpt-4o", system: routeSys, history, message: aiMessage, images, search: useSearch,
+            onDelta: (d) => { try { res.write(`data: ${JSON.stringify({ delta: d })}\n\n`); } catch (e) {} } });
+          try { res.write(`data: ${JSON.stringify({ done: true })}\n\n`); } catch (e) {}
+        } catch (e) {
+          const msg = String((e && e.message) || e || "stream error").replace(/sk-[A-Za-z0-9_-]{12,}/g, "***").slice(0, 200);
+          try { res.write(`data: ${JSON.stringify({ error: msg })}\n\n`); } catch (e2) {}
+        }
+        try { res.end(); } catch (e) {}
+        // 메모리 업데이트(스트리밍 종료 후, 비동기)
+        setImmediate(async () => {
+          try {
+            const ni = await extractMemoryFromConversation({ model, history, message: aiMessage, answer: full, isClaudeModel: false });
+            if (ni && Object.values(ni).some((a) => Array.isArray(a) && a.length > 0)) await updateMemory(userId, ni, false);
+          } catch (e) {}
+        });
+        return;
+      }
       answer = await callResponses({ model: "gpt-4o", system: routeSys, history, message: aiMessage, images, search: useSearch });
       timings.routed = true; timings.searchAlways = useSearch; timings.driveFirst = needsDrive; timings.tableUsed = wantTable;
     } else if (isClaudeModel) {

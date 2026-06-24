@@ -500,3 +500,14 @@ TODO:
   ※ 300초는 Fluid Compute 전제 — 대시보드 Settings→Functions에서 **Fluid Compute ON 확인 필요**(OFF면 플랜 한도 초과로 빌드/실행 실패 가능, 그땐 60으로 회귀).
 - [2] 서버 에러 응답 보장: handler 최상위 try/catch가 이미 500 JSON 반환 확인. 보강 — 타임아웃/abort는 504+안내 메시지, 그 외 500, 명시적 Content-Type JSON, 키 마스킹. 모든 분기(405/weather/github/vision-guard/정상/예외) JSON 반환 확인.
 - [3] 클라 재시도 + AbortController: js/fetch-retry.js(window.stellaFetchRetry — 네트워크/타임아웃/5xx만 최대 2회 지수백오프, 90s AbortController, 4xx 즉시반환, 타임아웃 TimeoutError). index.html callApi의 chat fetch를 (window.stellaFetchRetry||fetch)로 교체(미로드 시 네이티브 폴백). sw v82→v83. test 7/7.
+- [4] 스트리밍(SSE) — 핵심: 서버 api/chat.js streamResponses(Responses stream:true, SSE 델타 파싱) + routed에서 body.stream===true일 때만 text/event-stream으로 델타 write(실패 시 error 이벤트). 클라 js/chat-stream.js(SSE 리더+점진 버블, stellaRenderMarkdown으로 marked 점진 렌더) + send()가 텍스트 질의(!imgs)에서 스트리밍 시도→실패/미동작 시 callApi 비스트리밍 폴백(현재 동작 보존). sw v83→v84. test 6/6.
+  ※ Vercel SSE 동작은 Fluid Compute/스트리밍 지원 전제 — 라이브 검증 필요(샌드박스 403으로 직접 확인 불가). 폴백이 있어 미동작 시에도 채팅 정상.
+
+## 변경 요약 (Stella GPT Failed to fetch)
+- [1] maxDuration 300(vercel.json+chat.js) + web_search abort 290s → 함수 타임아웃 근본 해소(Fluid Compute 전제).
+- [2] 챗 API 모든 경로 JSON 응답 보장(타임아웃 504, 키 마스킹).
+- [3] 클라 fetch 재시도(2회 백오프 90s AbortController) — 일시 네트워크/5xx 자동 회복.
+- [4] 스트리밍(SSE) 점진 렌더 + 비스트리밍 폴백.
+## 검증법(재현 테스트)
+- Stella GPT에서 실시간/검색 질문("오늘 ~ 뉴스", "지금 ~ 날씨", "최신 ~") 입력 → 답이 점진적으로 흐르며(스트리밍) 나타나는지, web_search로 길어져도 Failed to fetch 없이 완료되는지.
+- 네트워크 일시 끊김 시 자동 재시도로 회복되는지. 스트리밍 미지원 환경이면 한 번에(폴백) 정상 표시되는지.
