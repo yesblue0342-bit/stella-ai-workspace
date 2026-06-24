@@ -493,3 +493,8 @@ TODO:
 - 결론: 코드/문법/의존성 레벨에서 재현 안 됨 → Vercel 빌드 그래프 차이가 원인일 가능성. 최근 빌드그래프 변경은 iter25 Web Push(web-push 의존성+신규 함수 api/push-subscribe.js+lib↔api 교차 import+chat-room 동적 import("web-push"))뿐. 미활성(VAPID 키 없음) 기능.
 - 조치: Web Push 인프라 완전 제거(web-push dep, lib/push-send.js, api/push-subscribe.js, chat-room 훅) → 마지막 정상 빌드 그래프로 복원. 기능 영향 0. talk.html 클라이언트 호출은 404 try/catch로 무해(잔존).
 - 남은 리스크: 원인이 플랫폼/쿼터/함수수(72)면 이 조치만으로 부족할 수 있음. 그 경우 함수 통합 후속 필요.
+
+## [autopilot] Stella GPT "Failed to fetch" 수정 (iter38)
+- 구조: /api/chat.js(Responses API + web_search, routed 경로) · 프론트 index.html send()가 /api/chat fetch(API_URL).
+- [1] maxDuration 300: vercel.json functions(api/*.js·api/*/*.js·api/**/*.js)=300, api/chat.js export const config.maxDuration=300, callResponses AbortController 55s→290s(web_search 조기 abort 방지).
+  ※ 300초는 Fluid Compute 전제 — 대시보드 Settings→Functions에서 **Fluid Compute ON 확인 필요**(OFF면 플랜 한도 초과로 빌드/실행 실패 가능, 그땐 60으로 회귀).

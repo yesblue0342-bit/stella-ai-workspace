@@ -1,8 +1,15 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
   "functions": {
-    "api/*.js": { "maxDuration": 60 },
-    "api/*/*.js": { "maxDuration": 60 }
+    "api/*.js": {
+      "maxDuration": 300
+    },
+    "api/*/*.js": {
+      "maxDuration": 300
+    },
+    "api/**/*.js": {
+      "maxDuration": 300
+    }
   },
   "headers": [
     {
@@ -16,25 +23,85 @@
     }
   ],
   "rewrites": [
-    { "source": "/", "destination": "/index.html" },
-    { "source": "/gpt", "destination": "/gpt.html" },
-    { "source": "/chatgpt", "destination": "/gpt.html" },
-    { "source": "/stella-gpt", "destination": "/gpt.html" },
-    { "source": "/talk", "destination": "/talk.html" },
-    { "source": "/stella-talk", "destination": "/talk.html" },
-    { "source": "/cloud", "destination": "/cloud.html" },
-    { "source": "/stella-cloud", "destination": "/cloud.html" },
-    { "source": "/db", "destination": "/db.html" },
-    { "source": "/hub", "destination": "/hub.html" },
-    { "source": "/stella-hub", "destination": "/hub.html" },
-    { "source": "/cc", "destination": "/cc.html" },
-    { "source": "/abap", "destination": "/abap.html" },
-    { "source": "/stella-abap", "destination": "/abap.html" },
-    { "source": "/code", "destination": "/cc.html" },
-    { "source": "/stella-code", "destination": "/cc.html" },
-    { "source": "/codex", "destination": "/codex.html" },
-    { "source": "/stella-codex", "destination": "/codex.html" },
-    { "source": "/developer", "destination": "/developer.html" },
-    { "source": "/restore", "destination": "/restore.html" }
+    {
+      "source": "/",
+      "destination": "/index.html"
+    },
+    {
+      "source": "/gpt",
+      "destination": "/gpt.html"
+    },
+    {
+      "source": "/chatgpt",
+      "destination": "/gpt.html"
+    },
+    {
+      "source": "/stella-gpt",
+      "destination": "/gpt.html"
+    },
+    {
+      "source": "/talk",
+      "destination": "/talk.html"
+    },
+    {
+      "source": "/stella-talk",
+      "destination": "/talk.html"
+    },
+    {
+      "source": "/cloud",
+      "destination": "/cloud.html"
+    },
+    {
+      "source": "/stella-cloud",
+      "destination": "/cloud.html"
+    },
+    {
+      "source": "/db",
+      "destination": "/db.html"
+    },
+    {
+      "source": "/hub",
+      "destination": "/hub.html"
+    },
+    {
+      "source": "/stella-hub",
+      "destination": "/hub.html"
+    },
+    {
+      "source": "/cc",
+      "destination": "/cc.html"
+    },
+    {
+      "source": "/abap",
+      "destination": "/abap.html"
+    },
+    {
+      "source": "/stella-abap",
+      "destination": "/abap.html"
+    },
+    {
+      "source": "/code",
+      "destination": "/cc.html"
+    },
+    {
+      "source": "/stella-code",
+      "destination": "/cc.html"
+    },
+    {
+      "source": "/codex",
+      "destination": "/codex.html"
+    },
+    {
+      "source": "/stella-codex",
+      "destination": "/codex.html"
+    },
+    {
+      "source": "/developer",
+      "destination": "/developer.html"
+    },
+    {
+      "source": "/restore",
+      "destination": "/restore.html"
+    }
   ]
 }

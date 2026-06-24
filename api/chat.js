@@ -28,7 +28,8 @@ async function callResponses({ model, system, history, message, images = [], sea
   // ★ 직접 비전 우선: 이미지가 있으면 web_search 툴을 붙이지 않는다(툴 흐름으로 빠져 거부/빈응답 → OCR 폴백되는 문제 차단).
   if (search && !imgs.length) bodyObj.tools = [{ type: "web_search" }];
   const ctrl = new AbortController();
-  const timer = setTimeout(() => ctrl.abort(), 55000);
+  // web_search는 응답이 길어질 수 있음 → 함수 maxDuration(300s, Fluid Compute) 직전까지 여유(290s).
+  const timer = setTimeout(() => ctrl.abort(), 290000);
   try {
     const r = await fetch("https://api.openai.com/v1/responses", {
       method: "POST",
@@ -48,7 +49,7 @@ export const config = {
       sizeLimit: "20mb"
     }
   },
-  maxDuration: 60
+  maxDuration: 300
 };
 
 // ───────── 시스템 프롬프트 ─────────
