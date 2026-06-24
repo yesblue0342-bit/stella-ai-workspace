@@ -518,3 +518,13 @@
 1. 회귀 핵심=입력창 preventDefault(특히 모바일 ontouchstart)로 포커스/타이핑 차단 + 검색버튼이 검색 대신 renderBoardTree/openSidebar 호출.
 2. preventDefault 제거 + 잘못된 바인딩 제거 + 이벤트 위임(.js)으로 3경로 검색 복구, 재렌더에도 유실 없음.
 3. Stella GPT 한정 변경, 다른 사이드바 버튼/카테고리 정상.
+
+## 2026-06-23 (iter 37) · Vercel 빌드 복구 — 미사용 Web Push 인프라 제거 · checks PASS
+- 진단(로컬 전부 통과, 재현 불가): 전체 .js node --check OK · import 해석 OK · 누락 deps 0 · npm install OK(web-push 제거 후 160pkg) · 커밋 lockfile 없음 · @vercel/nft 번들 31~35MB(<250MB).
+- 결론: 코드레벨 결함 없음 → 빌드 그래프 차이가 원인일 가능성. 최근 빌드그래프 변경=iter25 Web Push뿐.
+- 조치: web-push 의존성 제거, lib/push-send.js·api/push-subscribe.js 삭제(서버리스 함수 72→71), chat-room 동적 import 훅 제거. 미활성 기능이라 영향 0. talk.html 클라 호출은 404 try/catch 무해.
+- 검증: 전체 node --check OK · 테스트 151 pass/2 skip(jsdom 미설치)/0 fail · sw v80→v81. 커밋 lockfile 미포함(기존과 동일하게 npm install).
+요약 3줄:
+1. 로컬 표준 점검 전부 통과로 코드결함 배제 → 빌드 그래프 최근 변경(iter25 Web Push) 제거로 마지막 정상 상태 복원.
+2. web-push dep + 신규 함수 + lib↔api 교차 import + 동적 import("web-push") 일괄 제거(기능 미사용=영향 0).
+3. 남은 리스크: 원인이 함수수/플랫폼이면 추가로 함수 통합 필요(후속).

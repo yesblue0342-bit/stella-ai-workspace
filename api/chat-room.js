@@ -151,15 +151,9 @@ export default async function handler(req, res) {
       };
 
       const saved = await saveJsonToDrive({ folderPath: ["MemberChat"], fileName: roomId, data });
-      // 전송 응답을 먼저 만든다(푸시는 절대 응답을 지연/차단하지 않음).
+      // 전송 응답을 먼저 만든다.
       const lastAt = new Date(messageItem.createdAt).getTime();
       const payload = { ok: true, saved, message: messageItem, lastMessageAt: isNaN(lastAt) ? 0 : lastAt, messageCount: data.messages.length };
-      // 백그라운드 Web Push: VAPID 키가 있을 때만 모듈 로드 + 발송(fire-and-forget). 키 없으면 import조차 안 함 → 전송 경로 영향 0.
-      if (process.env.VAPID_PUBLIC_KEY && process.env.VAPID_PRIVATE_KEY) {
-        import("../lib/push-send.js")
-          .then(({ sendRoomPush }) => sendRoomPush({ members: allMembers, senderId: userId, title, body: data.lastMessage, roomId }))
-          .catch(() => {});
-      }
       return res.status(200).json(payload);
     }
 

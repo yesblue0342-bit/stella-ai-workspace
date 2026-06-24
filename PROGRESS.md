@@ -487,3 +487,9 @@ TODO:
 - 원인확정: (가설3) 입력창 onclick/onfocus/ontouchstart에 event.preventDefault() → 특히 모바일 ontouchstart preventDefault가 포커스/타이핑/탭을 차단(회귀). (가설4/2) 1107행에 검색버튼 바인딩이 renderBoardTree()+openSidebar()로 3중 중복(검색 미실행, 옛 구현 잔재).
 - 조치: 입력 preventDefault 제거(stopPropagation 유지), 잘못된 1107 바인딩 제거, js/sidebar-search.js로 이벤트 위임(버튼 클릭+Enter+실시간 input 3경로) 견고화. doSideSearch는 q 비면 return(빈 검색 무반응은 정상).
 - 배제: searchPanel/List/Title 요소 존재(가설2 일부 배제), doSideSearch null-ref 없음.
+
+## [autopilot] Vercel 빌드 복구 (iter37)
+- 로컬 점검 전부 통과: 전체 .js node --check OK, import 해석 OK, 누락 deps 0, npm install OK, 커밋된 lockfile 없음(=npm install 사용), @vercel/nft 함수 번들 사이즈 31~35MB(250MB 한도 무관), nft 트레이스 에러 없음.
+- 결론: 코드/문법/의존성 레벨에서 재현 안 됨 → Vercel 빌드 그래프 차이가 원인일 가능성. 최근 빌드그래프 변경은 iter25 Web Push(web-push 의존성+신규 함수 api/push-subscribe.js+lib↔api 교차 import+chat-room 동적 import("web-push"))뿐. 미활성(VAPID 키 없음) 기능.
+- 조치: Web Push 인프라 완전 제거(web-push dep, lib/push-send.js, api/push-subscribe.js, chat-room 훅) → 마지막 정상 빌드 그래프로 복원. 기능 영향 0. talk.html 클라이언트 호출은 404 try/catch로 무해(잔존).
+- 남은 리스크: 원인이 플랫폼/쿼터/함수수(72)면 이 조치만으로 부족할 수 있음. 그 경우 함수 통합 후속 필요.
