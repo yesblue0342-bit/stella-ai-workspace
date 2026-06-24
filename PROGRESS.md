@@ -499,3 +499,4 @@ TODO:
 - [1] maxDuration 300: vercel.json functions(api/*.js·api/*/*.js·api/**/*.js)=300, api/chat.js export const config.maxDuration=300, callResponses AbortController 55s→290s(web_search 조기 abort 방지).
   ※ 300초는 Fluid Compute 전제 — 대시보드 Settings→Functions에서 **Fluid Compute ON 확인 필요**(OFF면 플랜 한도 초과로 빌드/실행 실패 가능, 그땐 60으로 회귀).
 - [2] 서버 에러 응답 보장: handler 최상위 try/catch가 이미 500 JSON 반환 확인. 보강 — 타임아웃/abort는 504+안내 메시지, 그 외 500, 명시적 Content-Type JSON, 키 마스킹. 모든 분기(405/weather/github/vision-guard/정상/예외) JSON 반환 확인.
+- [3] 클라 재시도 + AbortController: js/fetch-retry.js(window.stellaFetchRetry — 네트워크/타임아웃/5xx만 최대 2회 지수백오프, 90s AbortController, 4xx 즉시반환, 타임아웃 TimeoutError). index.html callApi의 chat fetch를 (window.stellaFetchRetry||fetch)로 교체(미로드 시 네이티브 폴백). sw v82→v83. test 7/7.
