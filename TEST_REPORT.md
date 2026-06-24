@@ -528,3 +528,12 @@
 1. 로컬 표준 점검 전부 통과로 코드결함 배제 → 빌드 그래프 최근 변경(iter25 Web Push) 제거로 마지막 정상 상태 복원.
 2. web-push dep + 신규 함수 + lib↔api 교차 import + 동적 import("web-push") 일괄 제거(기능 미사용=영향 0).
 3. 남은 리스크: 원인이 함수수/플랫폼이면 추가로 함수 통합 필요(후속).
+
+## 2026-06-23 (iter 37b) · api/ 헬퍼 모듈 default export 추가 — Vercel 빌드 복구(유력) · checks PASS
+- 발견: api/drive-utils.js, api/place-weather-utils.js 는 named export만 있는 내부 헬퍼인데 api/ 하위라 Vercel이 서버리스 함수로 간주. 최신 @vercel/node는 default export 없는 함수에서 빌드 실패 → "코드변경 없이 최근부터 결정적 실패"(빌더 업데이트) 증상과 일치.
+- 조치: 두 파일에 no-op 404 default 핸들러 추가(named export 불변 → 임포터 영향 0). 이제 api/*.js 전부 default export 보유.
+- 검증: drive-utils 임포터(chat-room/memory/chat) import 해석 OK · 전체 node --check OK · sw v81→v82.
+요약 3줄:
+1. api/ 내부 헬퍼(default export 없음)를 Vercel이 함수로 보고 빌드 실패 가능 → 가장 유력한 결정적 원인.
+2. 두 헬퍼에 기본 핸들러 stub 추가로 함수 검증 통과, 기존 named export·임포터 무영향.
+3. web-push 제거(iter37) + default export 추가(37b) 두 가지로 빌드 그래프·함수 검증 모두 정상화.

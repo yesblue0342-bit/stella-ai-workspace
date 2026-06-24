@@ -110,3 +110,8 @@ export async function saveToDrive(data) {
 export async function loadFromDrive(options = {}) {
   return listJsonFromDrive(options);
 }
+
+// Vercel 서버리스 함수 검증용 기본 핸들러(이 파일은 내부 헬퍼 모듈 — 직접 호출 대상 아님).
+export default function handler(_req, res) {
+  try { res.status(404).json({ ok: false, error: "internal helper module" }); } catch (e) {}
+}
