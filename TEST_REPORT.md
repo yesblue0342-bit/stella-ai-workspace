@@ -537,3 +537,8 @@
 1. api/ 내부 헬퍼(default export 없음)를 Vercel이 함수로 보고 빌드 실패 가능 → 가장 유력한 결정적 원인.
 2. 두 헬퍼에 기본 핸들러 stub 추가로 함수 검증 통과, 기존 named export·임포터 무영향.
 3. web-push 제거(iter37) + default export 추가(37b) 두 가지로 빌드 그래프·함수 검증 모두 정상화.
+
+## FINAL (iter 37) · Vercel 빌드 복구
+- [1] 전체 .js node --check 무오류 [2] api/*.js 전부 default export 보유 [3] package.json 유효·web-push 제거 [4] vercel.json 유효 [5] push 잔존참조 0 [6] npm install(무lockfile) 성공 [7] 테스트 pass(jsdom 의존 2건 skip)/fail 0.
+- 적용 수정 2건: (a) 미사용 Web Push 인프라 제거(web-push dep+lib/push-send.js+api/push-subscribe.js+chat-room 훅) (b) api/drive-utils.js·place-weather-utils.js 에 default 핸들러 추가(헬퍼가 함수로 취급되어 default 누락 시 빌드 실패하는 최신 @vercel/node 대응).
+- 한계: 샌드박스는 Vercel Deployment Protection(403)으로 라이브/배포상태 직접 확인 불가, vercel CLI/배포로그 접근 불가, MCP는 커밋 상태 미노출 → Vercel Ready 직접 확인 불가. 로컬 빌드 동등 점검 전부 통과를 합격 근거로 기록(프롬프트 fallback).
