@@ -542,3 +542,14 @@
 - [1] 전체 .js node --check 무오류 [2] api/*.js 전부 default export 보유 [3] package.json 유효·web-push 제거 [4] vercel.json 유효 [5] push 잔존참조 0 [6] npm install(무lockfile) 성공 [7] 테스트 pass(jsdom 의존 2건 skip)/fail 0.
 - 적용 수정 2건: (a) 미사용 Web Push 인프라 제거(web-push dep+lib/push-send.js+api/push-subscribe.js+chat-room 훅) (b) api/drive-utils.js·place-weather-utils.js 에 default 핸들러 추가(헬퍼가 함수로 취급되어 default 누락 시 빌드 실패하는 최신 @vercel/node 대응).
 - 한계: 샌드박스는 Vercel Deployment Protection(403)으로 라이브/배포상태 직접 확인 불가, vercel CLI/배포로그 접근 불가, MCP는 커밋 상태 미노출 → Vercel Ready 직접 확인 불가. 로컬 빌드 동등 점검 전부 통과를 합격 근거로 기록(프롬프트 fallback).
+
+## 2026-06-23 (iter 38) · Stella GPT "Failed to fetch" 수정 (4항목) · pass 164/164
+- [1] maxDuration 300: vercel.json functions + api/chat.js config, callResponses abort 55s→290s. node --check OK, vercel.json 유효. (Fluid Compute ON 전제 — PROGRESS 기록)
+- [2] 서버 에러 응답 보장: handler try/catch가 모든 예외 JSON 반환(확인)+보강(타임아웃 504, JSON 헤더, 키 마스킹).
+- [3] 클라 재시도 래퍼: js/fetch-retry.js(2회 백오프, 90s AbortController, 5xx/네트워크/타임아웃만) — test 7/7. index.html chat fetch 교체(네이티브 폴백).
+- [4] 스트리밍 SSE: streamResponses+gated 브랜치(서버), js/chat-stream.js(클라 SSE 리더+marked 점진 렌더)+send() 스트리밍 시도→비스트리밍 폴백 — test 6/6.
+- 전체 node --check OK · 인라인 JS 파싱 OK · 테스트 164 pass/2 skip(jsdom)/0 fail · 시크릿 0 · sw v81→v84.
+
+## FINAL (iter 38)
+- 4항목 모두 커밋(별도). 전체 node --check 무오류, 테스트 164/164(skip 2), vercel.json/package.json 유효, 시크릿 0.
+- 한계: 샌드박스 Vercel 403으로 라이브 스트리밍/타임아웃 직접 검증 불가 → 단위테스트+정적검증을 합격 근거로 기록. body.stream 미전송/스트리밍 미동작 시 비스트리밍 폴백으로 0 regression.
