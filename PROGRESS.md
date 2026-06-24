@@ -498,3 +498,4 @@ TODO:
 - 구조: /api/chat.js(Responses API + web_search, routed 경로) · 프론트 index.html send()가 /api/chat fetch(API_URL).
 - [1] maxDuration 300: vercel.json functions(api/*.js·api/*/*.js·api/**/*.js)=300, api/chat.js export const config.maxDuration=300, callResponses AbortController 55s→290s(web_search 조기 abort 방지).
   ※ 300초는 Fluid Compute 전제 — 대시보드 Settings→Functions에서 **Fluid Compute ON 확인 필요**(OFF면 플랜 한도 초과로 빌드/실행 실패 가능, 그땐 60으로 회귀).
+- [2] 서버 에러 응답 보장: handler 최상위 try/catch가 이미 500 JSON 반환 확인. 보강 — 타임아웃/abort는 504+안내 메시지, 그 외 500, 명시적 Content-Type JSON, 키 마스킹. 모든 분기(405/weather/github/vision-guard/정상/예외) JSON 반환 확인.

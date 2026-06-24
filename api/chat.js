@@ -539,7 +539,15 @@ export default async function handler(req, res) {
       } : null
     });
   } catch (error) {
-    return res.status(500).json({ ok: false, error: error.message || "chat error" });
+    // 어떤 예외에서도 JSON 반환(프런트 safeJson 호환). 타임아웃/중단은 504 + 안내, 그 외 500.
+    const raw = String((error && error.message) || error || "chat error");
+    const isAbort = (error && error.name === "AbortError") || /abort|timeout|timed out|ETIMEDOUT|ECONNRESET/i.test(raw);
+    const safe = raw.replace(/sk-[A-Za-z0-9_-]{12,}/g, "***").slice(0, 300); // 혹시 모를 키 마스킹
+    res.setHeader("Content-Type", "application/json; charset=utf-8");
+    return res.status(isAbort ? 504 : 500).json({
+      ok: false,
+      error: isAbort ? "응답 시간이 초과되었습니다. 잠시 후 다시 시도해주세요." : safe,
+    });
   }
 }
 
