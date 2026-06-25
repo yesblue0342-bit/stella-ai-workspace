@@ -548,3 +548,8 @@ TODO:
 - 버그1(검색 탭→드로어 닫힘): window resize→syncSidebarLayout이 모바일 키보드(높이 변화)에도 사이드바 open 제거. → resize를 **가로폭 변할 때만** 처리(키보드 무시). PC는 소프트키보드 없어 무증상.
 - 버그2(노트탭 안눌림): openBoard가 closeSidebar 안 함 → boardPanel(z95)이 사이드바 드로어(z210) 뒤에 숨음. → openBoard에 isMobileView()시 closeSidebar 추가(member패널과 동일). PC는 boardPanel(fixed)이 컬럼 위라 무증상.
 - SW v88→v89. 인라인 JS 파싱 0 fail.
+
+## [2026-06-25 23:13 UTC] 새 OCI DB chat_index 미생성 에러 수정 (autopilot, 데이터=B 새로시작)
+- 진단: hybrid-chat-list가 dbo.chat_index를 ensure 없이 SELECT → 빈 새 OCI DB에서 "Invalid object name 'dbo.chat_index'". 저장(hybrid-chat-save)은 ensure 있음.
+- 수정: hybrid-chat-list.js·data-restore.js 의 read 전에 IF OBJECT_ID...CREATE TABLE 가드 추가(save와 동일 정의) → 새 DB에서도 빈 목록 정상 반환, 새 채팅 저장/조회 동작.
+- 사용자 결정: 옛 Azure 데이터는 보류(7월 또는 Continue using으로 추후 1회 이관), 지금부터 OCI에 새로 쌓음.

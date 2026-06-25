@@ -30,7 +30,8 @@ export default async function handler(req, res) {
       report.workspace = { rooms: 0, projects: 0, posts: 0, note: 'workspace_state 없음' };
     }
 
-    // ── 2. Azure SQL chat_index 확인 ──
+    // ── 2. chat_index 확인 (새 DB에선 테이블 없으면 빈 결과 — 에러 방지) ──
+    await pool.request().query(`IF OBJECT_ID('dbo.chat_index','U') IS NULL CREATE TABLE dbo.chat_index(id INT IDENTITY(1,1) PRIMARY KEY,user_id NVARCHAR(100) NOT NULL,room_id NVARCHAR(100) NOT NULL,title NVARCHAR(255) NULL,project_id NVARCHAR(100) NULL,drive_file_id NVARCHAR(255) NULL,drive_link NVARCHAR(1000) NULL,message_count INT NOT NULL DEFAULT 0,created_at DATETIME2 NOT NULL DEFAULT SYSUTCDATETIME(),updated_at DATETIME2 NOT NULL DEFAULT SYSUTCDATETIME())`);
     const ci = await pool.request()
       .input('uid', sql.NVarChar(100), userId)
       .query(`SELECT room_id, title, message_count, drive_file_id, updated_at FROM dbo.chat_index WHERE user_id=@uid ORDER BY updated_at DESC`);
