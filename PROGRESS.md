@@ -514,8 +514,8 @@ TODO:
 
 ## [autopilot] Stella GPT/DB 다건 요청 (iter39)
 TODO:
-- [ ] 1 검색 결과 클릭→해당 채팅 점프 (PC+모바일). 모바일 탭 안됨 + 게시글 결과는 outerHTML로 핸들러 유실. → 이벤트 위임으로 수정.
-- [ ] 2 Stella DB 전체선택+mass 삭제 기능 추가 (db.html).
+- [x] 1 검색 결과 클릭→해당 채팅 점프 (PC+모바일). 모바일 탭 안됨 + 게시글 결과는 outerHTML로 핸들러 유실. → 이벤트 위임으로 수정.
+- [x] 2 Stella DB 전체선택+mass 삭제 기능 추가 (db.html).
 - [!] 3 모바일/PC 채팅·메모 불일치 통합 — 저장소(localStorage vs 서버) 구조 조사 필요. 부분조치/보류.
 - [!] 4 Stella Hub 폴더 안나옴 / OCI 배포 — 라이브 디버깅·OCI 배포 환경 불가 → 보류, 코드 가드만.
 - 가정: GitHub main push=Vercel 자동배포. OCI 배포는 본 환경에서 트리거 불가(노트).

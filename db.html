@@ -121,6 +121,7 @@ body{font-family:system-ui,'Noto Sans KR',sans-serif;background:var(--bg);color:
 <span id="userLabel" style="font-size:.72rem;color:var(--text2)"></span>
 <button class="btn" onclick="goUp()" id="upBtn">⬆ 상위</button>
 <button class="btn" onclick="refresh()">↻</button>
+<button class="btn" onclick="selectAll()" id="selAllBtn">☑ 전체선택</button>
 <button class="btn" onclick="toggleTheme()" id="themeBtn">☀️</button>
 <button class="btn" onclick="location.href='/'">GPT</button>
 <button class="btn" id="installBtn" onclick="installPWA()" style="display:none">📲 설치</button>
@@ -583,6 +584,17 @@ function toggleSel(id){
   updateSelBar();
 }
 function clearSel(){_sel.clear();document.querySelectorAll('.file-chk').forEach(function(c){c.checked=false;});document.querySelectorAll('.file-row').forEach(function(r){r.classList.remove('sel');});updateSelBar();}
+// 전체선택 토글: 현재 필터에 보이는 항목 전부 선택, 이미 전부 선택돼 있으면 전체 해제.
+function selectAll(){
+  const q=(document.getElementById('filterIn').value||'').toLowerCase();
+  const visible=(Array.isArray(_files)?_files:[]).filter(function(f){return !q||String(f.name||'').toLowerCase().includes(q);});
+  if(!visible.length)return;
+  const allSelected=visible.every(function(f){return _sel.has(f.id);});
+  if(allSelected){clearSel();return;}
+  visible.forEach(function(f){_sel.add(f.id);});
+  renderFiles();      // 체크박스/행 선택상태 재반영
+  updateSelBar();
+}
 function updateSelBar(){
   const bar=document.getElementById('selBar');
   document.getElementById('selCount').textContent=_sel.size+'개 선택';
