@@ -494,6 +494,12 @@ function _roomStamp(r){
   return r.createdAt||0;
 }
 
+// 디바이스 전환(앱을 다시 볼 때)마다 서버에서 재동기화 → 모바일/PC 채팅·메모 불일치 완화(throttle 20s).
+var _lastResync = 0;
+function _maybeResync(){ if(typeof user==='undefined'||!user||!user.id) return; var now=Date.now(); if(now-_lastResync<20000) return; _lastResync=now; try{ syncFromServer(); }catch(e){} }
+document.addEventListener('visibilitychange', function(){ if(document.visibilityState==='visible') _maybeResync(); });
+window.addEventListener('focus', _maybeResync);
+
 // ── 서버에 현재 상태 저장 (모든 기기에서 로그아웃/재로그인 시 복원) ──
 var _serverSnapshot = { rooms: 0, projects: 0, posts: 0 }; // 서버 데이터 개수 기억
 var _restoreCompleted = false; // 복원 완료 전에는 절대 저장 안 함

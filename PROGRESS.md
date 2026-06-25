@@ -517,5 +517,7 @@ TODO:
 - [x] 1 검색 결과 클릭→해당 채팅 점프 (PC+모바일). 모바일 탭 안됨 + 게시글 결과는 outerHTML로 핸들러 유실. → 이벤트 위임으로 수정.
 - [x] 2 Stella DB 전체선택+mass 삭제 기능 추가 (db.html).
 - [!] 3 모바일/PC 채팅·메모 불일치 통합 — 저장소(localStorage vs 서버) 구조 조사 필요. 부분조치/보류.
-- [!] 4 Stella Hub 폴더 안나옴 / OCI 배포 — 라이브 디버깅·OCI 배포 환경 불가 → 보류, 코드 가드만.
+- [!] 4 Stella Hub — 라이브 디버깅·OCI 배포 환경 불가 → 보류, 코드 가드만.
 - 가정: GitHub main push=Vercel 자동배포. OCI 배포는 본 환경에서 트리거 불가(노트).
+- [~] 3 모바일/PC 불일치(부분조치): 서버 LWW 동기화(StellaSync)는 이미 존재하나 로그인 시 1회만 pull. → 앱 가시성복귀/포커스 시 syncFromServer() 재동기화(throttle 20s) 추가 → 기기 전환 시 최신 반영. 근본 머지버그/완전 실시간은 라이브 다기기 검증 필요(보류 잔여).
+- [!] 4 Stella Hub 폴더 안나옴 / OCI: loadRepos는 에러를 화면에 노출+클릭 위임(모바일OK) 정상. "폴더 안나옴"=서버 /api/github(GITHUB_TOKEN) 토큰/권한 또는 OCI 호스트 미반영. "접속 안돼"=OCI 서버 도달성. 둘 다 코드 외(서버 env+OCI 배포/도달)라 본 환경에서 수정/배포 불가 → 보류. 조치: Hub 호스트에 GITHUB_TOKEN(repo 읽기권한) 설정 + OCI 배포/방화벽 확인 필요.
