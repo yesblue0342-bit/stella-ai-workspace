@@ -543,3 +543,8 @@ TODO:
 - 진단: 검색결과 #searchPanel(position:absolute, z-index:200)이 부모 .main에 position이 없어 뷰포트 전체로 탈출 → 입력창을 덮어 "입력 안 됨"(PC). 모바일은 드로어(z80)<패널(z200)이라 입력창이 가려짐. (이전 'preventDefault 제거'로는 미해결)
 - 수정: .main{position:relative}로 패널을 main 영역에 가둠(데스크톱 사이드바 입력창 안 덮음) + 모바일 .sidebar z-index 80→210(패널 위), .sidebar-backdrop 70→205(디밍 유지). SW 캐시 v87→v88로 강제 반영.
 - 검증: 인라인 script 파싱 0 fail, node --check sw.js OK.
+
+## [2026-06-25 22:57 UTC] 모바일 검색창 탭→드로어 닫힘 + 노트탭 안눌림 수정 (autopilot)
+- 버그1(검색 탭→드로어 닫힘): window resize→syncSidebarLayout이 모바일 키보드(높이 변화)에도 사이드바 open 제거. → resize를 **가로폭 변할 때만** 처리(키보드 무시). PC는 소프트키보드 없어 무증상.
+- 버그2(노트탭 안눌림): openBoard가 closeSidebar 안 함 → boardPanel(z95)이 사이드바 드로어(z210) 뒤에 숨음. → openBoard에 isMobileView()시 closeSidebar 추가(member패널과 동일). PC는 boardPanel(fixed)이 컬럼 위라 무증상.
+- SW v88→v89. 인라인 JS 파싱 0 fail.
