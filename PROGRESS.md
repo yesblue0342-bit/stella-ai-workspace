@@ -526,3 +526,10 @@ TODO:
 - OCI Express 어댑터(server.mjs)는 이미 존재(타 커밋). 로컬 실행 검증: 정적/(rewrite)/static js 200, /api/health 핸들러 정상 실행(시크릿만 부재), 미존재 api 404 JSON → 어댑터 정상 동작 확인.
 - 조치: express·cookie-parser를 package.json deps에 추가(+`npm start`=node server.mjs) → 도커 없이도 self-sufficient. .github/workflows/deploy-oci.yml 추가(main push→OCI SSH 재배포, 시크릿 미설정 시 skip+green). OCI_DEPLOY.md 자동배포 가이드.
 - 가정: OCI 서버 161.33.4.91 / 사용자 ubuntu / 앱경로 /opt/stella-ai-workspace(워크플로 기본값, 시크릿로 변경 가능). Vercel은 미사용(vercel.json은 무해 잔존).
+
+## [2026-06-25 16:14 UTC] 메타데이터 DB → OCI 동거 마이그레이션 마무리 (autopilot)
+- 진단: 앱은 OCI로 옮겼으나 메타DB 연결(lib/db.js)이 `encrypt:true/trustServerCertificate:false`(Azure 전용)로 하드코딩 → OCI 자체 SQL Server(자체서명) 연결 불가 = 미완료.
+- 반영: lib/db.js 가 호스트로 TLS 자동판별(Azure=검증O 그대로 / localhost·stella-mssql·사설IP=자체서명 허용) + `DB_ENCRYPT`·`DB_TRUST_SERVER_CERT` 오버라이드. buildDbConfig/describeDbTarget export. health.js 가 target.mode(azure|oci-local|custom) 보고. cc-db/memory-db 등 모든 경로가 getPool 단일점이라 일괄 적용.
+- 운영: deploy/run-metadata-db-oci.sh(Azure SQL Edge 컨테이너 stella-mssql, npm_default, 영속볼륨, DB 자동생성) + .env.example/OCI_DEPLOY.md 절차.
+- 가정: Azure 기존 데이터의 실이관(bacpac import)은 서버 1회 작업으로 문서화만(샌드박스에서 라이브 DB 접근 불가). 코드/스크립트/문서/테스트까지 완료.
+- 테스트: db-config 12/12, 전체 144/146(skip 2, fail 0).

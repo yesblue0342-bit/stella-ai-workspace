@@ -572,3 +572,11 @@
 1. OCI Express 어댑터가 Vercel 함수(api/*.js)+정적+rewrites+CSP를 정상 구동함을 로컬 실행으로 확인.
 2. express deps 포함 + npm start로 도커 없이도 구동 가능, push→OCI 자동배포 워크플로(시크릿 게이트) 추가.
 3. Vercel 미사용 전환. 시크릿(OCI_SSH_*) 등록 시 push마다 자동 재배포.
+
+### 2026-06-25 16:14 UTC — 메타데이터 DB OCI 동거 (autopilot)
+- 항목: lib/db.js TLS 자동판별 + env 오버라이드 + describeDbTarget, health 보고, OCI 메타DB 스크립트
+- 결과: **144/146** pass (skipped 2, fail 0) · 신규 test/db-config.test.js **12/12**
+- 요약 3줄:
+  1) Azure 호스트는 기존 동작 100% 유지(encrypt O/검증 O), 로컬·사설·컨테이너 호스트는 자체서명 자동 허용.
+  2) DB_ENCRYPT/DB_TRUST_SERVER_CERT 명시 오버라이드 + CL_DB_* 별칭 호환 검증.
+  3) 필수 env 누락 STELLA_DB_ENV_MISSING throw, connection-string 패스스루 검증.
