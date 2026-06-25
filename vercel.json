@@ -103,5 +103,10 @@
       "source": "/restore",
       "destination": "/restore.html"
     }
-  ]
+  ],
+  "git": {
+    "deploymentEnabled": {
+      "main": false
+    }
+  }
 }
