@@ -62,3 +62,22 @@ bash deploy/run-stella-oci.sh
 ```bash
 cd /opt/stella-ai-workspace && git pull && bash deploy/run-stella-oci.sh
 ```
+
+## 자동 배포 (push → OCI, Vercel 대체)
+`.github/workflows/deploy-oci.yml` 가 main push 시 OCI 서버로 SSH 접속해 `git reset --hard origin/main` +
+`bash deploy/run-stella-oci.sh` 를 실행합니다(도커 재빌드/재실행).
+
+**GitHub → Settings → Secrets and variables → Actions** 에 등록:
+- `OCI_SSH_HOST` = `161.33.4.91`
+- `OCI_SSH_USER` = `ubuntu` (서버 SSH 사용자)
+- `OCI_SSH_KEY`  = SSH 개인키 전체(`-----BEGIN ...-----`)
+- `OCI_SSH_PORT` = (선택) 기본 22
+- `OCI_APP_DIR`  = (선택) 기본 `/opt/stella-ai-workspace`
+
+> 시크릿 미설정이면 배포 단계는 건너뛰고 워크플로는 green. 등록하면 그때부터 push마다 자동 배포.
+> 수동 트리거: Actions 탭 → "Deploy to OCI" → Run workflow.
+
+## 참고
+- `express`/`cookie-parser` 를 package.json dependencies에 포함시켜 `npm install && npm start`(= `node server.mjs`)로
+  도커 없이도 구동 가능. (Dockerfile의 별도 express 설치는 백업용으로 유지)
+- Vercel은 더 이상 사용하지 않음. `vercel.json`/`.vercelignore` 는 OCI 어댑터(server.mjs)가 rewrites/ignore 참고용으로만 읽음(무해).

@@ -521,3 +521,8 @@ TODO:
 - 가정: GitHub main push=Vercel 자동배포. OCI 배포는 본 환경에서 트리거 불가(노트).
 - [~] 3 모바일/PC 불일치(부분조치): 서버 LWW 동기화(StellaSync)는 이미 존재하나 로그인 시 1회만 pull. → 앱 가시성복귀/포커스 시 syncFromServer() 재동기화(throttle 20s) 추가 → 기기 전환 시 최신 반영. 근본 머지버그/완전 실시간은 라이브 다기기 검증 필요(보류 잔여).
 - [!] 4 Stella Hub 폴더 안나옴 / OCI: loadRepos는 에러를 화면에 노출+클릭 위임(모바일OK) 정상. "폴더 안나옴"=서버 /api/github(GITHUB_TOKEN) 토큰/권한 또는 OCI 호스트 미반영. "접속 안돼"=OCI 서버 도달성. 둘 다 코드 외(서버 env+OCI 배포/도달)라 본 환경에서 수정/배포 불가 → 보류. 조치: Hub 호스트에 GITHUB_TOKEN(repo 읽기권한) 설정 + OCI 배포/방화벽 확인 필요.
+
+## [autopilot] Vercel→OCI 전환 (iter40)
+- OCI Express 어댑터(server.mjs)는 이미 존재(타 커밋). 로컬 실행 검증: 정적/(rewrite)/static js 200, /api/health 핸들러 정상 실행(시크릿만 부재), 미존재 api 404 JSON → 어댑터 정상 동작 확인.
+- 조치: express·cookie-parser를 package.json deps에 추가(+`npm start`=node server.mjs) → 도커 없이도 self-sufficient. .github/workflows/deploy-oci.yml 추가(main push→OCI SSH 재배포, 시크릿 미설정 시 skip+green). OCI_DEPLOY.md 자동배포 가이드.
+- 가정: OCI 서버 161.33.4.91 / 사용자 ubuntu / 앱경로 /opt/stella-ai-workspace(워크플로 기본값, 시크릿로 변경 가능). Vercel은 미사용(vercel.json은 무해 잔존).

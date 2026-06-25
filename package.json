@@ -8,7 +8,8 @@
   },
   "scripts": {
     "test": "node --test test/*.test.js",
-    "cc": "node cli/stella-agent.mjs"
+    "cc": "node cli/stella-agent.mjs",
+    "start": "node server.mjs"
   },
   "dependencies": {
     "openai": "^4.104.0",
@@ -16,6 +17,8 @@
     "mssql": "^11.0.1",
     "googleapis": "^144.0.0",
     "fflate": "^0.8.2",
-    "mammoth": "^1.8.0"
+    "mammoth": "^1.8.0",
+    "express": "^4.21.2",
+    "cookie-parser": "^1.4.7"
   }
 }

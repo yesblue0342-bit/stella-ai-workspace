@@ -564,3 +564,11 @@
 1. 검색 결과가 클릭/탭으로 해당 채팅·노트로 점프하도록 수정(openRoom 미정의 버그+모바일 탭 위임).
 2. Stella DB 전체선택 추가로 일괄 삭제 편의 확보.
 3. 동기화는 기기전환 재동기화로 완화(부분), Hub는 서버/OCI 영역이라 보류.
+
+## 2026-06-23 (iter 40) · Vercel→OCI 전환 · server.mjs 로컬 구동 검증 PASS
+- server.mjs 로컬 실행: / 200(144KB), /db rewrite 200, /js/fetch-retry.js 200, /api/health 핸들러 정상(시크릿 부재만), unknown api 404 JSON.
+- express/cookie-parser package.json 추가(+start 스크립트), node --check server.mjs OK, YAML(deploy-oci.yml) 유효, 전체 132/132.
+요약 3줄:
+1. OCI Express 어댑터가 Vercel 함수(api/*.js)+정적+rewrites+CSP를 정상 구동함을 로컬 실행으로 확인.
+2. express deps 포함 + npm start로 도커 없이도 구동 가능, push→OCI 자동배포 워크플로(시크릿 게이트) 추가.
+3. Vercel 미사용 전환. 시크릿(OCI_SSH_*) 등록 시 push마다 자동 재배포.
