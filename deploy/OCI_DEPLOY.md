@@ -81,3 +81,48 @@ cd /opt/stella-ai-workspace && git pull && bash deploy/run-stella-oci.sh
 - `express`/`cookie-parser` 를 package.json dependencies에 포함시켜 `npm install && npm start`(= `node server.mjs`)로
   도커 없이도 구동 가능. (Dockerfile의 별도 express 설치는 백업용으로 유지)
 - Vercel은 더 이상 사용하지 않음. `vercel.json`/`.vercelignore` 는 OCI 어댑터(server.mjs)가 rewrites/ignore 참고용으로만 읽음(무해).
+
+## B. push 자동배포 — 상세 예시 (시크릿 4개)
+
+### ① 배포 전용 SSH 키 1개 만들기 (로컬 PC 또는 OCI 서버에서)
+```bash
+ssh-keygen -t ed25519 -C "github-deploy-stella" -f ~/.ssh/oci_deploy -N ""
+# 결과: ~/.ssh/oci_deploy(개인키), ~/.ssh/oci_deploy.pub(공개키)
+```
+
+### ② 공개키를 OCI 서버에 등록 (그 키로 ubuntu 로그인 허용)
+```bash
+ssh-copy-id -i ~/.ssh/oci_deploy.pub ubuntu@161.33.4.91
+# (ssh-copy-id 없으면) 공개키 내용을 서버 ~/.ssh/authorized_keys 에 한 줄 추가:
+#   cat ~/.ssh/oci_deploy.pub | ssh ubuntu@161.33.4.91 'cat >> ~/.ssh/authorized_keys'
+# 접속 확인:
+ssh -i ~/.ssh/oci_deploy ubuntu@161.33.4.91 'echo OK'
+```
+
+### ③ 서버에서 docker를 sudo 없이 (자동배포가 sudo 비번에서 안 멈추게)
+```bash
+ssh ubuntu@161.33.4.91
+sudo usermod -aG docker $USER      # ubuntu 를 docker 그룹에 추가
+exit                               # 재로그인(그룹 적용)
+ssh ubuntu@161.33.4.91 'docker ps' # sudo 없이 동작하면 OK
+# 앱 폴더/.env 준비(최초 1회):
+sudo mkdir -p /opt/stella-ai-workspace && sudo chown $USER /opt/stella-ai-workspace
+git clone https://github.com/yesblue0342-bit/stella-ai-workspace.git /opt/stella-ai-workspace
+cd /opt/stella-ai-workspace && cp .env.example .env && nano .env   # 시크릿 입력
+```
+
+### ④ GitHub 레포 → Settings → Secrets and variables → Actions → New repository secret
+| Name | Secret(예시) |
+|------|--------------|
+| `OCI_SSH_HOST` | `161.33.4.91` |
+| `OCI_SSH_USER` | `ubuntu` |
+| `OCI_SSH_KEY`  | `~/.ssh/oci_deploy` **개인키 파일 전체 붙여넣기**(`-----BEGIN OPENSSH PRIVATE KEY-----` … `-----END OPENSSH PRIVATE KEY-----`, 마지막 줄바꿈 포함) |
+| `OCI_SSH_PORT` | (선택) `22` |
+| `OCI_APP_DIR`  | (선택) `/opt/stella-ai-workspace` |
+
+> 개인키 내용 복사: `cat ~/.ssh/oci_deploy` 출력 전체를 그대로 `OCI_SSH_KEY` 값에 붙여넣기.
+
+### ⑤ 실행/확인
+- GitHub → **Actions → "Deploy to OCI" → Run workflow**(또는 아무 커밋 push).
+- 로그에서 `✅ OCI 재배포 완료` 확인. 이후 push마다 자동.
+- 서버 확인: `ssh ubuntu@161.33.4.91 'docker ps && docker exec stella-workspace curl -s localhost:8970/api/health'`
