@@ -35,6 +35,30 @@ jobs:
             echo "::notice::OCI 배포 시크릿(OCI_SSH_HOST/OCI_SSH_KEY) 미설정 — 배포 건너뜀. 등록 시 push마다 자동 배포됩니다."
           fi
 
+      - name: Diagnose connectivity (임시 진단 — 시크릿 값 노출 안 함)
+        if: steps.chk.outputs.ready == 'true'
+        env:
+          H: ${{ secrets.OCI_SSH_HOST }}
+          P: ${{ secrets.OCI_SSH_PORT }}
+        run: |
+          PORT="${P:-22}"
+          echo "host 문자열 길이: ${#H}  (161.33.4.91 이면 11)"
+          echo "port 문자열 길이: ${#PORT}  ('22'면 2)"
+          case "$H" in
+            100.6[4-9].*|100.[7-9][0-9].*|100.1[0-1][0-9].*|100.12[0-7].*)
+              echo "RESULT: 🔴 HOST가 100.64~127 = Tailscale/CGNAT 사설IP! 공인IP로 바꿔야 함." ;;
+            10.*|192.168.*|172.1[6-9].*|172.2[0-9].*|172.3[0-1].*)
+              echo "RESULT: 🔴 HOST가 사설 IP 대역! 공인IP로 바꿔야 함." ;;
+            *) echo "RESULT: 🟢 HOST는 공인 IP 형태" ;;
+          esac
+          echo "--- TCP 연결 + SSH 배너 테스트 (10초) ---"
+          if timeout 10 bash -c 'exec 3<>/dev/tcp/"$0"/"$1"; head -c 40 <&3' "$H" "$PORT" 2>/tmp/derr; then
+            echo ""
+            echo "RESULT: 🟢 TCP연결+배너 OK = 이 HOST:PORT로 sshd 도달 성공"
+          else
+            echo "RESULT: 🔴 연결 실패 — $(cat /tmp/derr 2>/dev/null)"
+          fi
+
       - name: SSH deploy (git pull + 도커 재빌드/재실행)
         if: steps.chk.outputs.ready == 'true'
         uses: appleboy/ssh-action@v1.2.0
