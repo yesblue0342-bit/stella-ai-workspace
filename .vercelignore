@@ -12,3 +12,9 @@ api/place-search.js
 api/weather-search.js
 api/pwa-manifest.js
 api/claude.js
+server.mjs
+Dockerfile
+.dockerignore
+.env.example
+deploy/run-stella-oci.sh
+deploy/OCI_DEPLOY.md
