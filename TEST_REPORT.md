@@ -553,3 +553,14 @@
 ## FINAL (iter 38)
 - 4항목 모두 커밋(별도). 전체 node --check 무오류, 테스트 164/164(skip 2), vercel.json/package.json 유효, 시크릿 0.
 - 한계: 샌드박스 Vercel 403으로 라이브 스트리밍/타임아웃 직접 검증 불가 → 단위테스트+정적검증을 합격 근거로 기록. body.stream 미전송/스트리밍 미동작 시 비스트리밍 폴백으로 0 regression.
+
+## 2026-06-23 (iter 39) · Stella GPT 검색점프/DB 전체선택/동기화 + Hub 보류 · pass 132/132
+- [1] 검색 결과 클릭→점프: doSideSearch openRoom(미정의) 호출 버그 → 이벤트 위임(#searchPanelList) + 채팅 점프(activeRoomId/renderAll)·게시글 노트열기. 게시글 결과 outerHTML 핸들러 유실도 data-spost로 해결. PC+모바일 탭 동작.
+- [2] Stella DB 전체선택: 툴바 '☑ 전체선택' + selectAll()(필터 보이는 항목 토글). 기존 deleteSelected(deleteMany) 일괄삭제와 연동.
+- [~] 3 모바일/PC: 가시성복귀/포커스 재동기화(throttle 20s) 추가(부분). 근본은 라이브 다기기 검증 필요.
+- [!] 4 Stella Hub/OCI: 서버 토큰/OCI 호스트·도달성 문제(코드 외) → 보류. 조치안 PROGRESS 기록.
+- 검증: index/db/hub 인라인 JS 파싱 OK · 전체 132/132 · 시크릿 0 · sw v84→v87.
+요약 3줄:
+1. 검색 결과가 클릭/탭으로 해당 채팅·노트로 점프하도록 수정(openRoom 미정의 버그+모바일 탭 위임).
+2. Stella DB 전체선택 추가로 일괄 삭제 편의 확보.
+3. 동기화는 기기전환 재동기화로 완화(부분), Hub는 서버/OCI 영역이라 보류.
