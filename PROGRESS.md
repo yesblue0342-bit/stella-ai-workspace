@@ -533,3 +533,8 @@ TODO:
 - 운영: deploy/run-metadata-db-oci.sh(Azure SQL Edge 컨테이너 stella-mssql, npm_default, 영속볼륨, DB 자동생성) + .env.example/OCI_DEPLOY.md 절차.
 - 가정: Azure 기존 데이터의 실이관(bacpac import)은 서버 1회 작업으로 문서화만(샌드박스에서 라이브 DB 접근 불가). 코드/스크립트/문서/테스트까지 완료.
 - 테스트: db-config 12/12, 전체 144/146(skip 2, fail 0).
+
+## [2026-06-25 16:20 UTC] 메타데이터 표준 = OCI, Azure SQL 폐기 명문화 (autopilot)
+- 방침: Azure DB 미사용, 메타데이터는 OCI 동거 stella-mssql 표준. (사용자 결정)
+- 반영(문서/설정): CLAUDE.md 개요(메타DB=OCI, 배포=OCI, Azure/Vercel 미사용 표기), .env.example DB 섹션을 OCI 기본(DB_SERVER=stella-mssql/sa/stella + DB_TRUST_SERVER_CERT)으로 재배치하고 Azure는 레거시 주석으로 강등.
+- 코드: lib/db.js 는 이미 호스트 기반 TLS 자동판별로 OCI 지원(변경 없음). 회귀 테스트 144/146 유지.

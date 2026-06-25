@@ -580,3 +580,8 @@
   1) Azure 호스트는 기존 동작 100% 유지(encrypt O/검증 O), 로컬·사설·컨테이너 호스트는 자체서명 자동 허용.
   2) DB_ENCRYPT/DB_TRUST_SERVER_CERT 명시 오버라이드 + CL_DB_* 별칭 호환 검증.
   3) 필수 env 누락 STELLA_DB_ENV_MISSING throw, connection-string 패스스루 검증.
+
+### 2026-06-25 16:20 UTC — 메타DB 표준 OCI 전환(문서/설정), Azure 폐기 명문화
+- 항목: CLAUDE.md/.env.example OCI 표준화, Azure deprecated 표기
+- 결과: **144/146** pass (skipped 2, fail 0) — 문서/설정 변경, 코드 로직 무변경 회귀 없음
+- 요약: 메타데이터=OCI stella-mssql 표준, Azure는 레거시. lib/db.js TLS 자동판별로 코드 변경 불필요.
