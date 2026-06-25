@@ -538,3 +538,8 @@ TODO:
 - 방침: Azure DB 미사용, 메타데이터는 OCI 동거 stella-mssql 표준. (사용자 결정)
 - 반영(문서/설정): CLAUDE.md 개요(메타DB=OCI, 배포=OCI, Azure/Vercel 미사용 표기), .env.example DB 섹션을 OCI 기본(DB_SERVER=stella-mssql/sa/stella + DB_TRUST_SERVER_CERT)으로 재배치하고 Azure는 레거시 주석으로 강등.
 - 코드: lib/db.js 는 이미 호스트 기반 TLS 자동판별로 OCI 지원(변경 없음). 회귀 테스트 144/146 유지.
+
+## [2026-06-25 22:05 UTC] Stella GPT 사이드바 검색 입력 안 되는 버그 실수정 (autopilot)
+- 진단: 검색결과 #searchPanel(position:absolute, z-index:200)이 부모 .main에 position이 없어 뷰포트 전체로 탈출 → 입력창을 덮어 "입력 안 됨"(PC). 모바일은 드로어(z80)<패널(z200)이라 입력창이 가려짐. (이전 'preventDefault 제거'로는 미해결)
+- 수정: .main{position:relative}로 패널을 main 영역에 가둠(데스크톱 사이드바 입력창 안 덮음) + 모바일 .sidebar z-index 80→210(패널 위), .sidebar-backdrop 70→205(디밍 유지). SW 캐시 v87→v88로 강제 반영.
+- 검증: 인라인 script 파싱 0 fail, node --check sw.js OK.
