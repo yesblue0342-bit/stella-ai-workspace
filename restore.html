@@ -59,6 +59,8 @@ button:disabled{opacity:.55;cursor:not-allowed}
 <div class="card">
   <h3><span class="step">2단계</span> 데이터 복원</h3>
   <button class="btn-sec" onclick="restoreAll()">✅ 전체 복원 (채팅+노트+프로젝트)</button>
+  <button class="btn-main" onclick="backupLocalToServer()" style="margin-top:8px">💾 이 기기 → 서버 백업 (강제 저장)</button>
+  <div class="notice warn" style="margin-top:8px">⬆️ 이 기기(브라우저)에 보이는 채팅·노트를 서버(OCI)에 올립니다. <b>353개가 보이는 그 도메인</b>에서 실행하세요.</div>
   <div class="log" id="restoreLog"></div>
 </div>
 
@@ -238,6 +240,28 @@ async function scanAll(){
 
   log('scanLog', '─────────────────', 'info');
   log('scanLog', '▶ 2단계 [전체 복원] 버튼을 눌러 복원하세요', 'warn');
+  setBusy(false);
+}
+
+// ── 이 기기(localStorage) → 서버 강제 백업 (서버가 비어도 무조건 올림) ──
+async function backupLocalToServer(){
+  const el = document.getElementById('restoreLog');
+  el.innerHTML = ''; el.style.display = 'block';
+  const owner = ownerId();
+  if(!owner){ log('restoreLog','⚠️ 아이디를 입력하거나 메인에서 로그인하세요.','err'); return; }
+  setBusy(true);
+  let rooms=[],posts=[],projects=[];
+  try{ rooms=JSON.parse(localStorage.getItem(K.rooms)||'[]'); }catch(e){}
+  try{ posts=JSON.parse(localStorage.getItem(K.posts)||'[]'); }catch(e){}
+  try{ projects=JSON.parse(localStorage.getItem(K.projects)||'[]'); }catch(e){}
+  log('restoreLog', '📦 이 기기 데이터 — 채팅 '+rooms.length+' / 노트 '+posts.length+' / 프로젝트 '+projects.length+'  (기준 id: '+owner+')', 'info');
+  if(rooms.length + posts.length + projects.length === 0){
+    log('restoreLog', '⚠️ 이 도메인 저장소에 데이터가 없습니다. 353개가 보이는 바로 그 도메인/브라우저에서 이 페이지를 여세요.', 'warn');
+    setBusy(false); return;
+  }
+  log('restoreLog', '💾 서버(OCI)에 저장 중...', 'warn');
+  await saveToServer(rooms, posts, projects);
+  log('restoreLog', '✅ 백업 완료 — 이제 PC·다른 기기에서 로그인하면 OCI에서 복원됩니다.', 'ok');
   setBusy(false);
 }
 
