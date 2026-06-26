@@ -50,6 +50,16 @@ try {
     .forEach((p) => ignoreSet.add(p.replace(/^\/+/, "")));
 } catch { /* 없으면 무시 */ }
 
+// ── /api/* CORS (타 도메인 localStorage→OCI 이관용. 단순 허용) ──
+app.use("/api", (req, res, next) => {
+  res.setHeader("Access-Control-Allow-Origin", req.headers.origin || "*");
+  res.setHeader("Vary", "Origin");
+  res.setHeader("Access-Control-Allow-Methods", "GET,POST,PUT,OPTIONS");
+  res.setHeader("Access-Control-Allow-Headers", "Content-Type, Authorization");
+  if (req.method === "OPTIONS") return res.status(204).end();
+  next();
+});
+
 // ── /api/* → api 파일의 default(req,res) 호출 ─────────────────
 const handlerCache = new Map();
 app.use("/api", async (req, res) => {
