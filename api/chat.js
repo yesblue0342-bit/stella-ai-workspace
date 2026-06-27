@@ -432,7 +432,7 @@ export default async function handler(req, res) {
         if (ghIntent.type === "github_status") {
           const r = await callGitHubRead("package.json");
           const text = r.content
-            ? `✅ GitHub 연결 정상\n| 항목 | 상태 |\n|---|---|\n| 저장소 | yesblue0342-bit/stella-ai-workspace |\n| Read | ✅ |\n| Commit | ✅ (GITHUB_TOKEN 등록됨) |\n| 자동배포 | ✅ (Vercel 연동) |`
+            ? `✅ GitHub 연결 정상\n| 항목 | 상태 |\n|---|---|\n| 저장소 | yesblue0342-bit/stella-ai-workspace |\n| Read | ✅ |\n| Commit | ✅ (GITHUB_TOKEN 등록됨) |\n| 자동배포 | ✅ (GitHub Actions → OCI) |`
             : `❌ GitHub 연결 실패: ${r.error || "토큰 확인 필요"}`;
           return res.status(200).json({ ok: true, text, provider: "github" });
         }
@@ -892,7 +892,7 @@ async function callClaude({ model, system, history, message, images = [] }) {
   if (!apiKey) throw new Error("ANTHROPIC_API_KEY not configured");
   const imgs = (Array.isArray(images) ? images : []).filter(u => u && String(u).startsWith("data:"));
   const selectedModel = ensureVisionModel(resolveClaudeModel(model), imgs.length > 0, "claude");
-  // 55초 타임아웃 가드 (Vercel 60초 제한 직전 우아하게 처리)
+  // 55초 타임아웃 가드 (장기 요청을 우아하게 종료해 좀비 연결 방지)
   const controller = new AbortController();
   const timeoutId = setTimeout(() => controller.abort(), 55000);
   let response;

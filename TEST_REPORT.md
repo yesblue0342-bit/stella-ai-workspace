@@ -595,3 +595,9 @@
 - 항목: lib/resumable-upload.js 신설 — Google Drive resumable 업로드를 청크(256KB 배수)로 전송, 청크별 지수백오프 재시도(3회 1s→2s→4s), 실패 후 'bytes */total' 질의로 이미 받은 바이트 파악해 빠진 부분만 재전송, 무결성 검사(fileId+size), onProgress 콜백. 치명적(4xx/무결성) 오류는 재시도 안 함.
 - 적용: talk.html uploadLargeToDrive 의 단발 PUT → 모듈 사용(미로딩 시 기존 PUT 폴백). db.html 은 이미 자체 resumable 보유.
 - 테스트: test/resumable-upload.test.js +9(헬퍼 진리표, 멀티청크 순서, 5xx 재시도·빠진청크만 재전송, 크기불일치 무결성에러, 4xx 단발실패, 재시도소진). node --check lib/resumable-upload.js OK, talk.html 인라인 1블록 0 fail. 전체 160/162.
+
+## [2026-06-27 14:10 UTC] Vercel 잔재 문자열/주석 정리 — pass 161/163 (skip 2, fail 0)
+- 사용자노출 문자열: chat.js 상태표 "자동배포 ✅ (Vercel 연동)"→"(GitHub Actions → OCI)", github.js 커밋완료 메시지→"main 푸시 시 GitHub Actions가 OCI로 자동배포", 토큰 누락 안내→"서버 .env".
+- 에이전트 지시: agentcore.mjs 완료 절차의 deploy 예시 `vercel --prod`→"push main → GitHub Actions가 OCI 배포".
+- 주석/문구: "Vercel 환경변수"→"환경변수", upload-route 한도 근거(Vercel 4.5MB→서버 본문한도), kst-date/drive-utils/_maclient/approval/github-store 의 Vercel 표현 일반화.
+- 코드 내 vercel 참조 0 (server.mjs 의 '이관 완료' 설명 주석 2건만 의도적 잔존). node --check 14파일 OK, 전체 161/163.

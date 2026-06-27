@@ -23,9 +23,9 @@ function githubConfig() {
   const repo = clean(process.env.GITHUB_REPO);
   const branch = clean(process.env.GITHUB_BRANCH) || "main";
 
-  if (!token) throw Object.assign(new Error("Vercel 환경변수 GITHUB_TOKEN이 없습니다."), { status: 500 });
-  if (!owner) throw Object.assign(new Error("Vercel 환경변수 GITHUB_OWNER가 없습니다."), { status: 500 });
-  if (!repo) throw Object.assign(new Error("Vercel 환경변수 GITHUB_REPO가 없습니다."), { status: 500 });
+  if (!token) throw Object.assign(new Error("환경변수 GITHUB_TOKEN이 없습니다."), { status: 500 });
+  if (!owner) throw Object.assign(new Error("환경변수 GITHUB_OWNER가 없습니다."), { status: 500 });
+  if (!repo) throw Object.assign(new Error("환경변수 GITHUB_REPO가 없습니다."), { status: 500 });
 
   return { token, owner, repo, branch };
 }

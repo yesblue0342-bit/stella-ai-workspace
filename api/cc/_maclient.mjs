@@ -1,5 +1,5 @@
 // api/cc/_maclient.mjs — Anthropic Managed Agents REST 클라이언트 + 이벤트 정규화 + 재사용 캐시
-// (_ 프리픽스 → Vercel 라우트 아님. 프록시 함수들이 import해서 사용)
+// (_ 프리픽스 → /api 라우트 아님. 프록시 함수들이 import해서 사용)
 // 베타 헤더: managed-agents-2026-04-01
 
 import { buildAgentSystem } from "../../lib/agentcore.mjs";

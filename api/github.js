@@ -9,7 +9,7 @@ function getConfig() {
   const repo = clean(process.env.GITHUB_REPO || process.env.GITHUB_REPOSITORY || process.env.STELLA_GITHUB_REPO) || DEFAULT_REPO;
   const branch = clean(process.env.GITHUB_BRANCH || process.env.STELLA_GITHUB_BRANCH) || "main";
   if (!token) {
-    const error = new Error("GitHub 토큰 환경변수가 없습니다. Vercel에 GITHUB_TOKEN 또는 STELLA_GITHUB_TOKEN을 등록하세요.");
+    const error = new Error("GitHub 토큰 환경변수가 없습니다. 서버 .env 에 GITHUB_TOKEN 또는 STELLA_GITHUB_TOKEN을 등록하세요.");
     error.status = 500;
     throw error;
   }
@@ -299,7 +299,7 @@ export default async function handler(req, res) {
 
       return res.status(200).json({
         ok: true,
-        message: "GitHub Commit 완료. Vercel은 GitHub 연동 상태라면 자동 배포됩니다.",
+        message: "GitHub Commit 완료. main 푸시 시 GitHub Actions가 OCI로 자동 배포합니다.",
         repo: config.repo,
         branch,
         path,
