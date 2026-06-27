@@ -1,8 +1,5 @@
 // GET /api/cc/sessions — 세션 목록(재개용). Azure cc_sessions에서 로드.
 import { listSessions } from "../../lib/cc-db.mjs";
-
-export const config = { maxDuration: 15 };
-
 export default async function handler(req, res) {
   try {
     const items = await listSessions();

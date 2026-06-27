@@ -47,9 +47,6 @@ async function getAccessToken() {
   if (!d.access_token) throw new Error("access_token 획득 실패: " + JSON.stringify(d));
   return d.access_token;
 }
-
-export const config = { maxDuration: 30 };
-
 export default async function handler(req, res) {
   if (req.method !== "POST") return res.status(405).json({ ok: false, message: "Method Not Allowed" });
   try {

@@ -2,9 +2,6 @@
 // resumable 업로드 완료 후: 공개 설정 + 가족 사진 폴더(KST 날짜별) 보관 + 재생/표시 URL 반환.
 import { getDrive, FOLDER_MIME } from "../lib/drive-utils.js";
 import { kstDateString, familyPhotoPath } from "../lib/kst-date.js";
-
-export const config = { maxDuration: 30 };
-
 async function makePublic(drive, fileId) {
   try {
     await drive.permissions.create({ fileId, requestBody: { role: "reader", type: "anyone" } });

@@ -2,9 +2,6 @@
 // 서버리스 60초 안에 끝내고 브라우저가 반복 폴링한다(스트림 장기 점유 금지).
 import * as MA from "./_maclient.mjs";
 import { getSessionRow, saveSession } from "../../lib/cc-db.mjs";
-
-export const config = { maxDuration: 30 };
-
 export default async function handler(req, res) {
   try {
     const session = String(req.query.session || "");

@@ -28,7 +28,7 @@ async function callResponses({ model, system, history, message, images = [], sea
   // ★ 직접 비전 우선: 이미지가 있으면 web_search 툴을 붙이지 않는다(툴 흐름으로 빠져 거부/빈응답 → OCR 폴백되는 문제 차단).
   if (search && !imgs.length) bodyObj.tools = [{ type: "web_search" }];
   const ctrl = new AbortController();
-  // web_search는 응답이 길어질 수 있음 → 함수 maxDuration(300s, Fluid Compute) 직전까지 여유(290s).
+  // web_search는 응답이 길어질 수 있음 → 290초 상한으로 무한 대기/좀비 연결 방지.
   const timer = setTimeout(() => ctrl.abort(), 290000);
   try {
     const r = await fetch("https://api.openai.com/v1/responses", {
@@ -97,15 +97,6 @@ async function streamResponses({ model, system, history, message, images = [], s
 }
 
 // 이미지 base64 전송을 위해 body 크기 제한 상향
-export const config = {
-  api: {
-    bodyParser: {
-      sizeLimit: "20mb"
-    }
-  },
-  maxDuration: 300
-};
-
 // ───────── 시스템 프롬프트 ─────────
 const STELLA_SYSTEM_PROMPT = `You are Stella GPT, KH's personal AI workspace assistant. Reply in Korean.
 

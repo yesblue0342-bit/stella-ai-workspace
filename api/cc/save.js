@@ -1,9 +1,6 @@
 // POST /api/cc/save — 세션 트랜스크립트(markdown)를 Drive stellaclaudecode/ 에 저장 + cc_sessions 갱신
 import { getDrive, ensurePath } from "../../lib/drive-utils.js";
 import { getSessionRow, saveSession } from "../../lib/cc-db.mjs";
-
-export const config = { maxDuration: 30 };
-
 function cleanName(s) {
   return String(s || "transcript").replace(/[\\/:*?"<>|]/g, "_").slice(0, 80);
 }

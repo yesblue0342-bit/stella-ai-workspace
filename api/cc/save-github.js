@@ -5,9 +5,6 @@ import { listEvents, normalizeEvents } from "./_maclient.mjs";
 import { extractFilesFromEvents } from "../../lib/cc-files.mjs";
 import { outputPath, outputFolderUrl, commitMessage, ghPutFile, ymdKST } from "../../lib/gh-commit.mjs";
 import { getSessionRow, setSessionGithubUrl } from "../../lib/cc-db.mjs";
-
-export const config = { maxDuration: 60 };
-
 export default async function handler(req, res) {
   if (req.method !== "POST") return res.status(405).json({ error: "POST only" });
   try {

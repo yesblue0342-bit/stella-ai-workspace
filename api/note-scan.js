@@ -1,8 +1,5 @@
 // api/note-scan.js - 노트 복원 진단
 import { getDrive, getDriveRootId, FOLDER_MIME, ensurePath, listDriveDirectory, readJsonFromDrive, listJsonFromDrive } from "../lib/drive-utils.js";
-
-export const config = { maxDuration: 30 };
-
 export default async function handler(req, res) {
   const userId = String(req.query.userId || '').trim();
   if (!userId) return res.status(400).json({ ok: false, message: 'userId 필요' });

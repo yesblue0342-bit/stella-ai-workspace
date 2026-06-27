@@ -17,9 +17,6 @@ function isNonProgram(text) {
   if (t.length < 40) return true;
   return /^(죄송|미안|sorry|i\s*(can'?t|cannot|am\s+unable|'?m\s+sorry)|unable\s+to|as\s+an\s+ai)/i.test(t);
 }
-
-export const config = { maxDuration: 60 };
-
 export default async function handler(req, res) {
   if (req.method !== "POST") return res.status(405).json({ ok: false, error: "POST only" });
   try {

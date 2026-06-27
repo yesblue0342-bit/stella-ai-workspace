@@ -1,9 +1,6 @@
 // POST /api/cc/cancel — 세션 중단 (user.interrupt 이벤트)
 import * as MA from "./_maclient.mjs";
 import { getSessionRow, saveSession } from "../../lib/cc-db.mjs";
-
-export const config = { maxDuration: 30 };
-
 export default async function handler(req, res) {
   if (req.method !== "POST") return res.status(405).json({ error: "POST only" });
   try {

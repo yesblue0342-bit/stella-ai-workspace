@@ -40,12 +40,6 @@ async function archiveToFamily(drive, fileId, fileName, when) {
   });
   return { archived: true, deduped: false, folderId, kstDate, copyId: copy.data.id };
 }
-
-export const config = {
-  api: { bodyParser: { sizeLimit: "10mb" } },
-  maxDuration: 30
-};
-
 // MemberChat/images 폴더 확보
 async function ensureImagesFolder(drive, rootId) {
   const esc = (v) => String(v || "").replace(/'/g, "\\'");

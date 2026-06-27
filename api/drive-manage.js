@@ -95,16 +95,6 @@ async function unzipToDrive({ fileId, parentId }) {
   }
   return { uploaded, errors, total: entries.filter(([p]) => !p.endsWith("/")).length };
 }
-
-export const config = {
-  api: {
-    bodyParser: {
-      sizeLimit: "50mb"
-    }
-  },
-  maxDuration: 60
-};
-
 export default async function handler(req, res) {
   if (req.method !== "POST") return res.status(405).json({ ok: false });
   const action = String(req.query.action || req.body?.action || "").trim();

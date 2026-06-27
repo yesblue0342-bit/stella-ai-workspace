@@ -1,7 +1,4 @@
 import { getDrive, getDriveRootId } from "../lib/drive-utils.js";
-
-export const config = { maxDuration: 60 };
-
 async function scanFolder(drive, folderId, name, depth, maxDepth, results) {
   if (depth > maxDepth) return;
   try {

@@ -3,9 +3,6 @@
 // 실패해도 200 으로 응답(앱 흐름 차단 금지). 채팅/노트 목록 로딩 전에 예열되어
 // 콜드 스타트로 인한 "목록이 간헐적으로 안 뜨는" 문제를 완화한다.
 import { warmup } from "../lib/db.js";
-
-export const config = { maxDuration: 60 };
-
 export default async function handler(req, res) {
   const startedAt = Date.now();
   let warmed = false;

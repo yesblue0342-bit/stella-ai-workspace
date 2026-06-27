@@ -1,8 +1,5 @@
 import { getPool, sql } from "../lib/db.js";
 import { saveJsonToDrive, readJsonFromDrive, listJsonFromDrive, ensurePath, listDriveDirectory } from "../lib/drive-utils.js";
-
-export const config = { maxDuration: 60 };
-
 export default async function handler(req, res) {
   const userId = String(req.query.userId || '').trim();
   const action = String(req.query.action || 'scan').trim();

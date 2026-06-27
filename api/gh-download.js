@@ -2,9 +2,6 @@
 // 큰 base64를 JSON에 싣지 않음 → "Failed to fetch"/0바이트 다운로드 방지.
 // Content-Type + Content-Disposition(RFC 5987 한글 파일명) 부여. 에러는 항상 JSON.
 // 토큰은 env에서만 읽고 응답/로그에 노출하지 않는다.
-
-export const config = { maxDuration: 60 };
-
 const MIME = {
   txt: "text/plain; charset=utf-8", md: "text/markdown; charset=utf-8", csv: "text/csv; charset=utf-8",
   tsv: "text/tab-separated-values; charset=utf-8", json: "application/json; charset=utf-8",

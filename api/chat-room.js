@@ -25,9 +25,6 @@ async function seedMeta(roomId) {
   const f = await readJsonFromDrive({ folderPath: ["MemberChat"], fileName: roomId }).catch(() => null);
   return { reads: (f?.data?.reads) || {}, typing: (f?.data?.typing) || {} };
 }
-
-export const config = { maxDuration: 30 };
-
 export default async function handler(req, res) {
   const action = clean(req.query.action || req.body?.action || "get");
 

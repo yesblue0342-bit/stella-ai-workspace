@@ -1,14 +1,4 @@
 import { readDriveTarget, resolveDrivePath, normalizeDriveError } from "../lib/drive-utils.js";
-
-export const config = {
-  api: {
-    bodyParser: {
-      sizeLimit: "2mb"
-    }
-  },
-  maxDuration: 60
-};
-
 export default async function handler(req, res) {
   if (req.method !== "GET" && req.method !== "POST") {
     return res.status(405).json({ ok: false, message: "Method not allowed" });

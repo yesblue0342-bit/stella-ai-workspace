@@ -2,9 +2,6 @@
 import { isValidModel, DEFAULT_MODEL } from "../../lib/agentcore.mjs";
 import * as MA from "./_maclient.mjs";
 import { getMeta, setMeta, saveSession } from "../../lib/cc-db.mjs";
-
-export const config = { maxDuration: 60 };
-
 export default async function handler(req, res) {
   if (req.method !== "POST") return res.status(405).json({ error: "POST only" });
   try {

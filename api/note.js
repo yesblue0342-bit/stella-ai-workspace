@@ -1,7 +1,4 @@
 import { saveJsonToDrive, listJsonFromDrive, readJsonFromDrive, listDriveDirectory, ensurePath } from "../lib/drive-utils.js";
-
-export const config = { maxDuration: 60 };
-
 // 노트가 저장될 수 있는 모든 레거시 루트 폴더명
 // "Board"(대문자, 구버전 board-save), "boards"(소문자) 모두 탐색
 const LEGACY_ROOTS = ["Board", "boards"];

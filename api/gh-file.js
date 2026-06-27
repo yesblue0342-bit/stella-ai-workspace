@@ -1,9 +1,6 @@
 // GET /api/gh-file?repo=owner/name&path=&ref=&disp= — 파일 원본 스트리밍(차단망 우회).
 // 폴더 zip: ?zip=1 → zipball 스트림 파이프(버퍼 안 함). 토큰은 env에서만, 클라이언트 노출 금지.
 import { applyCors, isAllowedRepo, parseRepo, getRepoMeta, checkPrivateGate, assertSafePath, ghToken, jsonErr, withTimeout, clean } from "../lib/gh-proxy.mjs";
-
-export const config = { maxDuration: 60 };
-
 const MIME = {
   txt:"text/plain; charset=utf-8",md:"text/markdown; charset=utf-8",csv:"text/csv; charset=utf-8",tsv:"text/tab-separated-values; charset=utf-8",
   json:"application/json; charset=utf-8",js:"text/javascript; charset=utf-8",mjs:"text/javascript; charset=utf-8",ts:"text/plain; charset=utf-8",

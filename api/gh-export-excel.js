@@ -4,9 +4,6 @@
 
 import * as XLSXns from "xlsx";
 const XLSX = XLSXns.default || XLSXns;
-
-export const config = { maxDuration: 60 };
-
 const MAX_BYTES = 6 * 1024 * 1024; // 과대 파일 보호
 function clean(v) { return String(v || "").trim(); }
 function ghToken() { return clean(process.env.GITHUB_TOKEN || process.env.GH_TOKEN || process.env.STELLA_GITHUB_TOKEN); }

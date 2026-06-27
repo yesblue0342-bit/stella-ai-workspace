@@ -15,8 +15,6 @@ import {
 //   GET /api/index-chatgpt?offset=0&limit=100           → 100건씩 인덱싱(done:true까지 offset+=100)
 //   GET /api/index-chatgpt?action=search&q=키워드        → 인덱스 검증 검색
 //   (옵션) &folder=chatgpt/chats  또는  &folderId=<드라이브폴더ID>
-export const config = { maxDuration: 300 };
-
 const TABLE_DDL = `
 IF OBJECT_ID('dbo.chatgpt_index','U') IS NULL
 CREATE TABLE dbo.chatgpt_index(

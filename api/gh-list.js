@@ -1,8 +1,5 @@
 // GET /api/gh-list?repo=owner/name&path=&ref= — 디렉터리 목록(JSON). 브라우저는 GitHub 직접 호출 안 함.
 import { applyCors, isAllowedRepo, parseRepo, getRepoMeta, checkPrivateGate, assertSafePath, ghToken, jsonErr, withTimeout, clean } from "../lib/gh-proxy.mjs";
-
-export const config = { maxDuration: 30 };
-
 export default async function handler(req, res) {
   applyCors(req, res);
   if (req.method === "OPTIONS") return res.status(204).end();
