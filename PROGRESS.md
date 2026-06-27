@@ -560,3 +560,10 @@ TODO:
 - **음성 파이프라인 부재**: 저장소 전체에 whisper/transcribe/MediaRecorder/getUserMedia/`/api/transcribe` **없음**. 본 repo는 "AI Meeting & Voice Workspace"가 아니라 멀티앱 워크스페이스(GPT챗·ABAP·카톡형 챗·GitHub/Drive 도구·에이전트코드). → TODO#3(Whisper 정확도) 및 TODO#2·#4의 Whisper/요약 부분은 **부착할 코드 없음 → `[!]` 보류**(없는 기능을 무인으로 날조 금지).
 - **적용 가능 항목**: TODO#2 "업로드 안정화"는 실제 존재하는 Drive resumable/chunk 업로드(lib/upload-route.js, api/drive-upload*·drive-finalize)에 매핑 → 지수백오프 재시도·무결성 확인을 거기에 적용.
 - 베이스라인 테스트: 146 중 pass 144 / fail 0 / skip 2.
+
+## [2026-06-27 14:14 UTC] 세션 완료 요약 (autopilot, 무인)
+- **TODO#1 메타DB**: OCI 이관은 이미 완료(stella-mssql 컨테이너) + 사용자결정으로 MSSQL 표준 → pg 전환 미수행(BLOCKERS.md). 남은 actionable인 **풀 재연결 resilience 완료**(lib/db.js 자가치유 + test/db-resilience.test.js, 커밋 ea9146b).
+- **TODO#2 업로드 안정화**: lib/resumable-upload.js 신설(청크+지수백오프 3회+재개+무결성) → talk.html 단발 PUT 대체. db.html은 기존 자체 resumable 보유. (커밋 741610c)
+- **TODO#3 Whisper / TODO#4 구간요약**: 음성 파이프라인 부재로 보류(BLOCKERS.md). 부착할 코드 없음 → 무인 날조 금지.
+- **사용자 추가지시 "Vercel 로직 전면 제거"**: 완료. vercel.json/.vercelignore/.vercel/.env.vercel 삭제, server.mjs 자립(BLOCKED_API 내재화), export const config 26개 제거, VERCEL_URL/VERCEL_BASE/배포보호 런타임 분기 제거, 사용자노출/주석 문자열 OCI 기준 정리. (커밋 8b1133d·ae18827·57acf61·0ca98af)
+- **SW 캐시 v89→v90**(커밋 085e894). 전체 테스트 FINAL 161/163(fail 0). 7커밋 origin/main 앞섬 → 푸시 시 deploy-oci.yml 가 OCI 배포.

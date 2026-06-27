@@ -601,3 +601,9 @@
 - 에이전트 지시: agentcore.mjs 완료 절차의 deploy 예시 `vercel --prod`→"push main → GitHub Actions가 OCI 배포".
 - 주석/문구: "Vercel 환경변수"→"환경변수", upload-route 한도 근거(Vercel 4.5MB→서버 본문한도), kst-date/drive-utils/_maclient/approval/github-store 의 Vercel 표현 일반화.
 - 코드 내 vercel 참조 0 (server.mjs 의 '이관 완료' 설명 주석 2건만 의도적 잔존). node --check 14파일 OK, 전체 161/163.
+
+## FINAL [2026-06-27 14:14 UTC]
+- 전체 스위트 최종 실행: **161 pass / 0 fail / 2 skip (총 163)**.
+- 이번 세션 커밋 7건: 메타DB 풀재연결 / Drive resumable 업로드 / Vercel 제거 1·2·3 / Vercel 문자열정리 / SW v90.
+- node --check: 변경된 모든 .js/.mjs 통과. tests/test_cli.mjs 8/8(수동).
+- 라이브 스모크(server.mjs :8971): /talk·/hub 200, 차단 api 404, /api/health 핸들러 실행, CSP 헤더 정상.
