@@ -1,11 +1,11 @@
 #!/usr/bin/env node
 // cli/stella-agent.mjs — Stella Agent Code CLI (PC 터미널용)
 // 배포된 프록시(/api/cc/*)를 호출 → PC에 ANTHROPIC_API_KEY 불필요(키는 서버에만).
-// agentcore 로직 재사용. Vercel 배포 보호는 자동화 바이패스 토큰 헤더로 통과.
+// agentcore 로직 재사용. (백엔드는 OCI 우분투 서버 — 배포 보호 미사용.)
 //
 // 사용:
-//   export CC_BASE_URL=https://stella-ai-workspace.vercel.app
-//   export VERCEL_AUTOMATION_BYPASS_SECRET=<Vercel Protection Bypass 토큰>   # 배포 보호 켜진 경우
+//   export CC_BASE_URL=https://<OCI-서버-도메인>
+//   # (레거시) 배포 보호가 걸린 백엔드를 호출할 때만: --bypass <토큰>
 //   node cli/stella-agent.mjs "write fibonacci.py with first 20 numbers and run it" --omc
 //   node cli/stella-agent.mjs --list
 //   node cli/stella-agent.mjs --resume <sessionId> "이어서 테스트도 추가해줘"
@@ -46,7 +46,7 @@ const HELP = `Stella Agent Code CLI
   -b, --budget <usd> 예산 상한 (기본 0.50)
   --omc              OMC(oh-my-claudecode) 멀티에이전트 모드
   --base <url>       프록시 베이스 (또는 env CC_BASE_URL)
-  --bypass <token>   Vercel 배포보호 바이패스 (또는 env VERCEL_AUTOMATION_BYPASS_SECRET)
+  --bypass <token>   (레거시) 배포보호 바이패스 토큰 — OCI 서버는 불필요
   --save <file>      완료 후 트랜스크립트(.md) 저장
   --json             원시 JSON 출력`;
 
@@ -57,12 +57,14 @@ if (isMain) {
   const args = parseArgs(process.argv.slice(2));
   if (args.cmd === "help") { console.log(HELP); process.exit(0); }
   const base = (args.base || process.env.CC_BASE_URL || "").replace(/\/$/, "");
-  const bypass = args.bypass || process.env.VERCEL_AUTOMATION_BYPASS_SECRET || "";
+  // (레거시) 배포 보호 바이패스 토큰 — OCI 서버는 미사용. --bypass 로만 명시 주입.
+  const bypass = args.bypass || process.env.DEPLOY_BYPASS_SECRET || "";
   if (!base) { console.error("오류: CC_BASE_URL(또는 --base)가 필요합니다.\n\n" + HELP); process.exit(2); }
 
-  const headers = (extra) => Object.assign({ "Content-Type": "application/json" }, bypass ? { "x-vercel-protection-bypass": bypass, "x-vercel-set-bypass-cookie": "true" } : {}, extra || {});
+  // 바이패스 토큰이 주어지면 일반 Authorization 헤더로 전달(특정 PaaS 종속 헤더 제거).
+  const headers = (extra) => Object.assign({ "Content-Type": "application/json" }, bypass ? { Authorization: "Bearer " + bypass } : {}, extra || {});
   async function api(path, opts = {}) {
-    const url = base + path + (path.includes("?") && bypass ? "&" : (bypass ? "?" : "")) + (bypass ? "x-vercel-protection-bypass=" + encodeURIComponent(bypass) : "");
+    const url = base + path;
     const r = await fetch(url, { method: opts.method || "GET", headers: headers(), body: opts.body ? JSON.stringify(opts.body) : undefined });
     const text = await r.text();
     let j; try { j = text ? JSON.parse(text) : {}; } catch { j = { raw: text }; }
@@ -141,7 +143,7 @@ if (isMain) {
       await pollLoop(start.sessionId, model, args.prompt.slice(0, 60), args.prompt);
     } catch (e) {
       console.error("\n오류: " + (e.message || e) + (e.status ? " (HTTP " + e.status + ")" : ""));
-      if (e.status === 401 || e.status === 403) console.error("→ 배포 보호일 수 있습니다. VERCEL_AUTOMATION_BYPASS_SECRET(또는 --bypass)을 설정하거나 Vercel에서 Protection을 끄세요.");
+      if (e.status === 401 || e.status === 403) console.error("→ 인증 실패일 수 있습니다. 로그인/세션 또는 --bypass 토큰을 확인하세요.");
       process.exit(1);
     }
   })();

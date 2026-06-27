@@ -150,19 +150,19 @@ function detectGitHubIntent(message) {
 }
 
 // ───────── GitHub API 호출 ─────────
+// 같은 서버의 다른 /api 라우트를 호출(self-call). OCI 단일 서버라 기본은 루프백.
+// 외부 도메인이 필요하면 PUBLIC_BASE_URL 로 오버라이드.
+function selfBase() {
+  return (process.env.PUBLIC_BASE_URL || `http://127.0.0.1:${process.env.PORT || 8970}`).replace(/\/+$/, "");
+}
+
 async function callGitHubRead(path) {
-  const base = process.env.VERCEL_URL
-    ? `https://${process.env.VERCEL_URL}`
-    : "https://stella-ai-workspace.vercel.app";
-  const r = await fetch(`${base}/api/github-read?path=${encodeURIComponent(path)}`);
+  const r = await fetch(`${selfBase()}/api/github-read?path=${encodeURIComponent(path)}`);
   return r.json();
 }
 
 async function callGitHubUpdate(path, content, commitMsg) {
-  const base = process.env.VERCEL_URL
-    ? `https://${process.env.VERCEL_URL}`
-    : "https://stella-ai-workspace.vercel.app";
-  const r = await fetch(`${base}/api/github-update`, {
+  const r = await fetch(`${selfBase()}/api/github-update`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ path, content, message: commitMsg })
@@ -171,10 +171,7 @@ async function callGitHubUpdate(path, content, commitMsg) {
 }
 
 async function callAuthCleanup() {
-  const base = process.env.VERCEL_URL
-    ? `https://${process.env.VERCEL_URL}`
-    : "https://stella-ai-workspace.vercel.app";
-  const r = await fetch(`${base}/api/auth-cleanup`, { method: "POST" });
+  const r = await fetch(`${selfBase()}/api/auth-cleanup`, { method: "POST" });
   return r.json();
 }
 
