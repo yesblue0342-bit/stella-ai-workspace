@@ -1,4 +1,5 @@
 import { saveJsonToDrive, listJsonFromDrive, readJsonFromDrive, listDriveDirectory, ensurePath } from "../lib/drive-utils.js";
+import { requireOwner } from "../lib/session.js";
 // 노트가 저장될 수 있는 모든 레거시 루트 폴더명
 // "Board"(대문자, 구버전 board-save), "boards"(소문자) 모두 탐색
 const LEGACY_ROOTS = ["Board", "boards"];
@@ -73,7 +74,11 @@ async function collectNotes(folderPath, noteMap, filterUserId = null) {
 
 export default async function handler(req, res) {
   const action = String(req.query.action || req.body?.action || "list").trim();
-  const userId = String(req.query.userId || req.body?.userId || "").trim();
+  const requested = String(req.query.userId || req.body?.userId || "").trim();
+  // 서버측 권한 스코프: 인증 토큰의 uid 로만 노트 접근(본인 것만). 미인증=401, 타인=403.
+  const auth = requireOwner(req, res, requested);
+  if (!auth) return;
+  const userId = auth.uid;
   if (!userId) return res.status(400).json({ ok: false, message: "userId 필요" });
 
   const notesPath = ["users", userId, "notes"];

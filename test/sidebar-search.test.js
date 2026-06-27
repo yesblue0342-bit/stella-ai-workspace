@@ -47,3 +47,50 @@ test("핸들러 미정의여도 throw 안 함(가드)", { skip: !JSDOM }, () => 
   // doSideSearch 미정의 → console.warn만, throw 없어야
   assert.doesNotThrow(() => w.document.getElementById("sideSearchBtn").dispatchEvent(new w.MouseEvent("click", { bubbles: true })));
 });
+
+// ── 한글 IME 조합 버그 회귀 방지 ──
+function setupDom() {
+  const dom = new JSDOM("<!doctype html><html><body><input id=sideSearch><button id=sideSearchBtn>S</button></body></html>", { runScripts: "dangerously" });
+  const w = dom.window;
+  const calls = { search: 0, live: 0, liveVal: null };
+  w.doSideSearch = () => { calls.search++; };
+  w.doSideSearchLive = (v) => { calls.live++; calls.liveVal = v; };
+  const s = w.document.createElement("script");
+  s.textContent = fs.readFileSync(srcPath, "utf8");
+  w.document.body.appendChild(s);
+  w.document.dispatchEvent(new w.Event("DOMContentLoaded"));
+  return { w, calls, inp: w.document.getElementById("sideSearch") };
+}
+
+test("IME 조합 중 input 은 검색 안 함, compositionend 에서 확정값으로 1회 검색", { skip: !JSDOM }, () => {
+  const { w, calls, inp } = setupDom();
+  inp.dispatchEvent(new w.CompositionEvent("compositionstart", { bubbles: true }));
+  // 조합 중 부분 자모 input ('민상ㅇㅓㄴ' 같은 중간값) → 검색 트리거 금지
+  inp.value = "민상ㅇㅓㄴ";
+  inp.dispatchEvent(new w.InputEvent("input", { bubbles: true }));
+  assert.equal(calls.live, 0, "조합 중에는 doSideSearchLive 미호출");
+  // 조합 종료 → 확정값으로 검색
+  inp.value = "민상언";
+  inp.dispatchEvent(new w.CompositionEvent("compositionend", { bubbles: true }));
+  assert.equal(calls.live, 1, "compositionend 에서 1회 검색");
+  assert.equal(calls.liveVal, "민상언", "확정된 글자로 검색");
+});
+
+test("조합 종료 후 일반 input 은 다시 검색 동작", { skip: !JSDOM }, () => {
+  const { w, calls, inp } = setupDom();
+  inp.dispatchEvent(new w.CompositionEvent("compositionstart", { bubbles: true }));
+  inp.dispatchEvent(new w.CompositionEvent("compositionend", { bubbles: true }));
+  inp.value = "QM";
+  inp.dispatchEvent(new w.InputEvent("input", { bubbles: true }));
+  assert.equal(calls.liveVal, "QM", "조합 종료 후 영문 input 정상 검색");
+});
+
+test("조합 확정 Enter(isComposing)는 검색 트리거 아님", { skip: !JSDOM }, () => {
+  const { w, calls, inp } = setupDom();
+  inp.dispatchEvent(new w.KeyboardEvent("keydown", { key: "Enter", isComposing: true, bubbles: true }));
+  assert.equal(calls.search, 0, "isComposing Enter 무시");
+  inp.dispatchEvent(new w.KeyboardEvent("keydown", { key: "Enter", keyCode: 229, bubbles: true }));
+  assert.equal(calls.search, 0, "keyCode 229 Enter 무시");
+  inp.dispatchEvent(new w.KeyboardEvent("keydown", { key: "Enter", bubbles: true }));
+  assert.equal(calls.search, 1, "확정 Enter 는 검색");
+});

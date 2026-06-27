@@ -20,13 +20,28 @@
       runSearch();
     }, true);
 
+    // ★ 한글 IME 조합 상태 추적 — 조합 중에는 검색을 실행하지 않는다(부분 자모 '민상ㅇㅓㄴ' 방지).
+    //   조합이 끝나면(compositionend) 확정된 글자로 한 번만 검색한다. window.__sideComposing 은
+    //   인라인 핸들러(index.html)와 공유되어 두 경로(인라인 oninput + 위임 input)를 모두 막는다.
+    document.addEventListener("compositionstart", function (e) {
+      if (e.target && e.target.id === "sideSearch") window.__sideComposing = true;
+    });
+    document.addEventListener("compositionend", function (e) {
+      if (!e.target || e.target.id !== "sideSearch") return;
+      window.__sideComposing = false;
+      liveSearch(e.target.value);
+    });
+
     // 입력창: 실시간 input + Enter
     document.addEventListener("input", function (e) {
       if (!e.target || e.target.id !== "sideSearch") return;
+      if (window.__sideComposing) return; // 조합 중 부분문자 검색 차단
       liveSearch(e.target.value);
     });
     document.addEventListener("keydown", function (e) {
       if (!e.target || e.target.id !== "sideSearch") return;
+      // 조합 확정용 Enter(isComposing/229)는 검색 트리거가 아니다.
+      if (e.isComposing || e.keyCode === 229) return;
       if (e.key === "Enter") { e.preventDefault(); runSearch(); }
     });
 

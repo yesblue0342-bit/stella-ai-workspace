@@ -5,6 +5,8 @@ import { buildMemoryContext, saveMemory as saveMemoryAzure } from "../lib/memory
 import { wantsTable, buildSystemPrompt as routeSystemPrompt, extractText } from "../lib/router.mjs";
 // 이미지 직접 분석(vision): API별 올바른 이미지 블록 + 비전모델 보장 (포맷 불일치 회귀 방지).
 import { visionImageBlock, ensureVisionModel, parseDataUrl } from "../lib/vision-format.mjs";
+// 메모리는 사용자별 민감정보 → 인증 토큰이 있으면 그 uid 로 스코프(없으면 기존 동작 유지: 핵심 챗 비차단).
+import { getAuthUser } from "../lib/session.js";
 
 // OpenAI Responses API + web_search 호출 (실시간 질문). 응답 contract(text)는 호출부에서 유지.
 async function callResponses({ model, system, history, message, images = [], search = false }) {
@@ -381,7 +383,9 @@ export default async function handler(req, res) {
     const model = body.model || "gpt-4.1-mini";
     const system = body.system || STELLA_SYSTEM_PROMPT;
     const images = Array.isArray(body.images) ? body.images.slice(0, 4) : [];
-    const userId = String(body.userId || body.user_id || "").trim() || "anonymous";
+    // 인증 토큰이 있으면 메모리 스코프를 토큰 uid 로 강제(타인 메모리 접근 차단). 없으면 기존 값 폴백(비차단).
+    const _authUser = getAuthUser(req);
+    const userId = (_authUser && _authUser.uid) || String(body.userId || body.user_id || "").trim() || "anonymous";
 
     // STEP E: 용량 가드 — 이미지 base64 합산이 너무 크면(본문/비전 토큰 한도 초과) 직접 비전 전에 한국어 안내.
     //   프론트가 이미 1568px/JPEG로 다운스케일하므로 정상 첨부는 통과. 신규 청크 업로드는 만들지 않는다.

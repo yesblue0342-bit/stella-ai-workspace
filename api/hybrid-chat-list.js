@@ -1,8 +1,13 @@
 import { getPool, sql, withRetry } from "../lib/db.js";
+import { requireOwner } from "../lib/session.js";
 function clean(v){return String(v||"").trim();}
 export default async function handler(req,res){
   try{
-    const userId=clean(req.query.userId||req.query.owner||req.query.email);
+    const requested=clean(req.query.userId||req.query.owner||req.query.email);
+    // 서버측 권한 스코프: 인증 uid 의 채팅 인덱스만 조회.
+    const auth=requireOwner(req,res,requested);
+    if(!auth)return;
+    const userId=auth.uid;
     if(!userId)return res.status(400).json({ok:false,message:"userId required"});
     // 콜드 스타트 대응: 연결+읽기 쿼리를 3회까지 재시도 (서버리스 첫 호출 타임아웃 완화).
     const r=await withRetry(async ()=>{

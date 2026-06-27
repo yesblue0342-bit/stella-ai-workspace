@@ -1,4 +1,5 @@
 import { getPool, sql, withRetry } from "../lib/db.js";
+import { requireOwner } from "../lib/session.js";
 
 function clean(value) {
   return String(value || "").trim();
@@ -39,7 +40,11 @@ function toJson(value) {
 
 export default async function handler(req, res) {
   try {
-    const ownerId = clean(req.query?.owner || req.body?.owner || req.body?.owner_id || req.body?.userId || req.body?.user_id);
+    const requested = clean(req.query?.owner || req.body?.owner || req.body?.owner_id || req.body?.userId || req.body?.user_id);
+    // 서버측 권한 스코프: 인증된 토큰의 uid 로만 접근. 미인증=401, 타인 데이터 요청=403.
+    const auth = requireOwner(req, res, requested);
+    if (!auth) return; // 401/403 이미 응답됨
+    const ownerId = auth.uid;
     if (!ownerId) return res.status(400).json({ ok: false, message: "owner/userId가 필요합니다." });
 
     const pool = await getPool();

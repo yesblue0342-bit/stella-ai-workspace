@@ -1,11 +1,16 @@
 // /api/memory.js - 메모리 노드 조회/수정/삭제 API
 import { saveJsonToDrive, readJsonFromDrive } from "../lib/drive-utils.js";
+import { requireOwner } from "../lib/session.js";
 
 const MEMORY_FOLDER = ["memory"];
 
 export default async function handler(req, res) {
   const action = String(req.query.action || req.body?.action || "get").trim();
-  const userId = String(req.query.userId || req.body?.userId || "anonymous").trim();
+  const requested = String(req.query.userId || req.body?.userId || "").trim();
+  // 서버측 권한 스코프: 본인 메모리만 조회/수정/삭제.
+  const auth = requireOwner(req, res, requested);
+  if (!auth) return;
+  const userId = auth.uid;
 
   try {
     // ── 메모리 조회 ──

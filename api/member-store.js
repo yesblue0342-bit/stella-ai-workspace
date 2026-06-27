@@ -1,5 +1,11 @@
 import crypto from "crypto";
 import { readJsonFromDrive, saveJsonToDrive, ensurePath } from "../lib/drive-utils.js";
+import { issueToken, setSessionCookie } from "../lib/session.js";
+
+function withSession(res, status, payload){
+  try{ const token = issueToken(payload.user); setSessionCookie(res, token); return res.status(status).json({ ...payload, token }); }
+  catch(e){ return res.status(status).json(payload); }
+}
 
 const clean = (v) => String(v || "").trim();
 const safe = (v) => clean(v).toLowerCase().replace(/[^a-zA-Z0-9@._-]/g, "_").slice(0, 120) || "user";
@@ -34,12 +40,12 @@ export default async function handler(req, res) {
       const data = { type: "stella_member", id, email, name: clean(b.name) || id, birth: clean(b.birth), salt, digest: make(code, salt), created_at: new Date().toISOString(), updated_at: new Date().toISOString() };
       await saveJsonToDrive({ folderPath: ["auth", "users"], fileName: id, data });
       if (email && email !== id) await saveJsonToDrive({ folderPath: ["auth", "users"], fileName: safe(email), data: { ...data, aliasOf: id } });
-      return res.status(201).json({ ok: true, message: "회원가입 성공", user: out(data), source: "drive" });
+      return withSession(res, 201, { ok: true, message: "회원가입 성공", user: out(data), source: "drive" });
     }
     const user = await read(id) || await read(email);
     if (!user) return res.status(401).json({ ok: false, message: "가입 정보가 없습니다." });
     if (make(code, user.salt) !== user.digest) return res.status(401).json({ ok: false, message: "인증값이 올바르지 않습니다." });
-    return res.status(200).json({ ok: true, message: "로그인 성공", user: out(user), source: "drive" });
+    return withSession(res, 200, { ok: true, message: "로그인 성공", user: out(user), source: "drive" });
   } catch (error) {
     return res.status(500).json({ ok: false, message: error.message || "처리 실패" });
   }
