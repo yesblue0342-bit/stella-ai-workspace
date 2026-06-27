@@ -4,6 +4,7 @@
 <link rel="manifest" href="/manifest-talk.json">
 <script src="/lib/friends.js"></script>
 <script src="/lib/upload-route.js"></script>
+<script src="/lib/resumable-upload.js"></script>
 <meta name="theme-color" content="#7c3aed">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="default">
@@ -2152,11 +2153,20 @@ async function uploadLargeToDrive(file){
   });
   const init = await initRes.json();
   if(!init.ok || !init.uploadUrl) throw new Error(init.message||'업로드 세션 생성 실패');
-  // 2) 파일 바이트를 Google 업로드 URL에 직접 PUT
-  const putRes = await fetch(init.uploadUrl,{ method:'PUT', headers:{'Content-Type':file.type||'application/octet-stream'}, body:file });
-  if(!putRes.ok) throw new Error('업로드 실패('+putRes.status+')');
-  const meta = await putRes.json();
-  if(!meta.id) throw new Error('업로드 응답에 fileId 없음');
+  // 2) 파일 바이트를 Google 업로드 URL에 전송 — 청크+지수백오프 재시도+중단후 재개(TODO#2).
+  let meta;
+  if(window.StellaResumable && StellaResumable.resumableUpload){
+    meta = await StellaResumable.resumableUpload(init.uploadUrl, file, {
+      contentType: file.type||'application/octet-stream'
+      // onProgress: (sent,total)=>{}  // 필요 시 진행률 UI 연결 지점
+    });
+  } else {
+    // 폴백: 모듈 미로딩 시 기존 단발 PUT.
+    const putRes = await fetch(init.uploadUrl,{ method:'PUT', headers:{'Content-Type':file.type||'application/octet-stream'}, body:file });
+    if(!putRes.ok) throw new Error('업로드 실패('+putRes.status+')');
+    meta = await putRes.json();
+  }
+  if(!meta || !meta.id) throw new Error('업로드 응답에 fileId 없음');
   // 3) 공개 설정 + 가족폴더 보관 + 재생 URL
   const finRes = await fetch('/api/drive-finalize',{
     method:'POST', headers:{'Content-Type':'application/json'},

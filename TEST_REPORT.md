@@ -590,3 +590,8 @@
 - 항목: lib/db.js 에 자가치유 풀 재연결 추가 — getPool 이 닫힌 풀 감지 시 재연결, 풀 error/close 이벤트로 캐시 자동 무효화, isPoolDeadError/shouldReusePool/withPool/resetPool export.
 - 테스트: test/db-resilience.test.js 신설(+7) — 끊김 에러코드/메시지 판별, 일반 에러 비폐기, 풀 재사용/폐기 진리표, API 표면.
 - 결과: 신규 7/7 + db-config 12/12 + retry 회귀 통과. 전체 153 중 pass 151, fail 0, skip 2(기존과 동일). node --check lib/db.js OK.
+
+## [2026-06-27 13:46 UTC] TODO#2 업로드 안정화(resumable 청크 재시도) — pass 160/162 (skip 2, fail 0)
+- 항목: lib/resumable-upload.js 신설 — Google Drive resumable 업로드를 청크(256KB 배수)로 전송, 청크별 지수백오프 재시도(3회 1s→2s→4s), 실패 후 'bytes */total' 질의로 이미 받은 바이트 파악해 빠진 부분만 재전송, 무결성 검사(fileId+size), onProgress 콜백. 치명적(4xx/무결성) 오류는 재시도 안 함.
+- 적용: talk.html uploadLargeToDrive 의 단발 PUT → 모듈 사용(미로딩 시 기존 PUT 폴백). db.html 은 이미 자체 resumable 보유.
+- 테스트: test/resumable-upload.test.js +9(헬퍼 진리표, 멀티청크 순서, 5xx 재시도·빠진청크만 재전송, 크기불일치 무결성에러, 4xx 단발실패, 재시도소진). node --check lib/resumable-upload.js OK, talk.html 인라인 1블록 0 fail. 전체 160/162.
