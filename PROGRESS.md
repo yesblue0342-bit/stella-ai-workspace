@@ -553,3 +553,10 @@ TODO:
 - 진단: hybrid-chat-list가 dbo.chat_index를 ensure 없이 SELECT → 빈 새 OCI DB에서 "Invalid object name 'dbo.chat_index'". 저장(hybrid-chat-save)은 ensure 있음.
 - 수정: hybrid-chat-list.js·data-restore.js 의 read 전에 IF OBJECT_ID...CREATE TABLE 가드 추가(save와 동일 정의) → 새 DB에서도 빈 목록 정상 반환, 새 채팅 저장/조회 동작.
 - 사용자 결정: 옛 Azure 데이터는 보류(7월 또는 Continue using으로 추후 1회 이관), 지금부터 OCI에 새로 쌓음.
+
+## [2026-06-27 13:36 UTC] AUTOPILOT 현황 파악 + 가정 기록 (무인 모드 시작)
+- **메타DB 확정**: 드라이버=`mssql`, `.env` DB_SERVER=`stella-mssql`(OCI 동거 컨테이너). 즉 Azure SQL(클라우드) 아님 → **OCI 이관은 이미 완료**. 2026-06-25 사용자 결정(PROGRESS 기록)으로 "메타데이터 표준=OCI 동거 stella-mssql(MSSQL), Azure 폐기" 확정됨.
+- **가정/결정**: TODO#1의 "OCI Postgres(pg)로 전환"은 **수행하지 않음**. 근거 — (a) auto-pause 근본원인은 self-host 컨테이너 전환으로 이미 해소, (b) 사용자가 이미 MSSQL 표준을 명시 결정, (c) pg 전환은 api/·lib/ 수십 파일의 T-SQL(MERGE/NVARCHAR/SYSUTCDATETIME/sql.* 바인딩) 전면 재작성=무인 모드에 부적합한 고위험·무가치. → TODO#1에서 **실제 남은 작업 = 연결 재시도 + 풀 재연결(resilience)** 만 수행.
+- **음성 파이프라인 부재**: 저장소 전체에 whisper/transcribe/MediaRecorder/getUserMedia/`/api/transcribe` **없음**. 본 repo는 "AI Meeting & Voice Workspace"가 아니라 멀티앱 워크스페이스(GPT챗·ABAP·카톡형 챗·GitHub/Drive 도구·에이전트코드). → TODO#3(Whisper 정확도) 및 TODO#2·#4의 Whisper/요약 부분은 **부착할 코드 없음 → `[!]` 보류**(없는 기능을 무인으로 날조 금지).
+- **적용 가능 항목**: TODO#2 "업로드 안정화"는 실제 존재하는 Drive resumable/chunk 업로드(lib/upload-route.js, api/drive-upload*·drive-finalize)에 매핑 → 지수백오프 재시도·무결성 확인을 거기에 적용.
+- 베이스라인 테스트: 146 중 pass 144 / fail 0 / skip 2.

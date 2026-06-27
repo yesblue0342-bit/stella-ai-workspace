@@ -585,3 +585,8 @@
 - 항목: CLAUDE.md/.env.example OCI 표준화, Azure deprecated 표기
 - 결과: **144/146** pass (skipped 2, fail 0) — 문서/설정 변경, 코드 로직 무변경 회귀 없음
 - 요약: 메타데이터=OCI stella-mssql 표준, Azure는 레거시. lib/db.js TLS 자동판별로 코드 변경 불필요.
+
+## [2026-06-27 13:38 UTC] TODO#1 메타DB 풀 재연결(resilience) — pass 151/153 (skip 2, fail 0)
+- 항목: lib/db.js 에 자가치유 풀 재연결 추가 — getPool 이 닫힌 풀 감지 시 재연결, 풀 error/close 이벤트로 캐시 자동 무효화, isPoolDeadError/shouldReusePool/withPool/resetPool export.
+- 테스트: test/db-resilience.test.js 신설(+7) — 끊김 에러코드/메시지 판별, 일반 에러 비폐기, 풀 재사용/폐기 진리표, API 표면.
+- 결과: 신규 7/7 + db-config 12/12 + retry 회귀 통과. 전체 153 중 pass 151, fail 0, skip 2(기존과 동일). node --check lib/db.js OK.
