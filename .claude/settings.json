@@ -1,7 +1,13 @@
 {
   "permissions": {
     "defaultMode": "bypassPermissions",
-    "allow": ["Workflow"]
+    "allow": [
+      "Workflow",
+      "mcp__Google_Drive",
+      "mcp__Google_Calendar",
+      "mcp__github",
+      "mcp__SlidesGPT"
+    ]
   },
   "skipWorkflowUsageWarning": true,
   "skipDangerousModePermissionPrompt": true
