@@ -75,6 +75,6 @@
 ## 5. 완료·배포·종료
 모든 목표 완료 + 전체 테스트 통과 시:
 1. 전체 테스트를 한 번 더 돌려 `TEST_REPORT.md` 맨 아래 `## FINAL`로 기록(pass/total + 위 a~e 결과 요약).
-2. `main` 푸시 → Vercel 자동배포(team `stella-gpt`). 필요 시 `vercel --prod --scope stella-gpt`.
+2. `main` 브랜치에 **직접 커밋하고 push**한다. **절대 새 브랜치나 PR을 만들지 마라.** push하면 GitHub Actions가 OCI 서버에 자동배포한다.
 3. 배포 URL + 최종 pass/total 출력.
 4. 마지막 줄에 `RALPH_DONE` 출력.

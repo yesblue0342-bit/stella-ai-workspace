@@ -16,3 +16,9 @@
 - 커밋 전 검증: node -e "new Function(code)"
 - DOM 런타임 검증: jsdom (null-reference 사전 탐지)
 - Google Drive 업로드: f
+
+## ⚠️ Git 규칙 (절대 준수)
+- **항상 `main` 브랜치에 직접 커밋하고 push한다.**
+- **절대 새 브랜치나 PR(Pull Request)을 만들지 마라.**
+- 개인 프로젝트이며 코드 리뷰가 필요 없다. main에 바로 올린다.
+- push하면 GitHub Actions(`deploy-oci.yml`)가 OCI 서버에 자동배포한다.
