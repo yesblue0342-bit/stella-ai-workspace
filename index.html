@@ -342,7 +342,45 @@ function allUsers(){return read(K.users,[])}function saveUsers(){write(K.users,u
 function projKey(n){return String(n||'').trim().toLowerCase().replace(/\s+/g,' ');}
 // 같은 이름(키) 폴더를 1개로 병합 + 사라지는 폴더의 채팅을 남는 폴더로 repoint(데이터 유실 0)
 function dedupeProjectsByName(projs,roomsArr){var seen={},out=[],remap={};(projs||[]).forEach(function(p){if(!p||p.id==null)return;var k=projKey(p.name);if(!k){out.push(p);return;}if(seen[k]!=null){if(seen[k]!==p.id)remap[p.id]=seen[k];}else{seen[k]=p.id;out.push(p);}});if(Array.isArray(roomsArr)){roomsArr.forEach(function(r){if(r&&remap[r.projectId]!=null)r.projectId=remap[r.projectId];});}return out;}
+/* ── 레거시 버전 키 자동 마이그레이션(데이터 손실 0) ──
+   소스 코드는 현재 _v82 키로 통일돼 있으나, 사용자 브라우저에는 과거 배포본이
+   stella_rooms_final_vNN 등 "다른 버전 키"에 저장한 채팅/노트/프로젝트가 남아 있을 수 있다.
+   (예: 옛 빌드 _v81/_v90 → 새 검색 로직은 _v82만 읽어 "0건"으로 보임.)
+   → 현재 키로 id 기준 병합한다. 레거시 키 자체는 보존(되돌림 안전·중복 0). 멱등. */
+var LEGACY_BASES=['stella_rooms_final','stella_projects_final','stella_posts_final','stella_users_final'];
+function mergeByIdInto(curKey, legacyArr){
+  if(!Array.isArray(legacyArr)||!legacyArr.length) return 0;
+  var cur=read(curKey,[]); if(!Array.isArray(cur)) cur=[];
+  var seen={}; cur.forEach(function(x){ if(x&&x.id!=null) seen[x.id]=true; });
+  var added=0;
+  legacyArr.forEach(function(x){ if(x&&x.id!=null&&!seen[x.id]){ cur.push(x); seen[x.id]=true; added++; } });
+  if(added) write(curKey,cur);
+  return added;
+}
+var _legacyMigrated=false;
+function migrateLegacyStorageKeys(){
+  if(_legacyMigrated) return false; _legacyMigrated=true;
+  try{
+    var curMap={'stella_rooms_final':K.rooms,'stella_projects_final':K.projects,'stella_posts_final':K.posts,'stella_users_final':K.users};
+    // 반복 중 새 키 write로 length가 바뀌어 인덱스가 밀리는 것을 막기 위해 키 목록을 먼저 스냅샷.
+    var allKeys=[]; for(var i=0;i<localStorage.length;i++){ var k=localStorage.key(i); if(k)allKeys.push(k); }
+    var total=0;
+    allKeys.forEach(function(key){
+      LEGACY_BASES.forEach(function(base){
+        var curKey=curMap[base]; if(!curKey) return;
+        // 같은 base의 "다른 버전" 키만 대상(현재 키 제외)
+        if(key.indexOf(base+'_v')===0 && key!==curKey){
+          var arr; try{ arr=JSON.parse(localStorage.getItem(key)||'null'); }catch(e){ arr=null; }
+          total+=mergeByIdInto(curKey, arr);
+        }
+      });
+    });
+    if(total){ try{ console.log('[Migrate] 레거시 버전 키에서 '+total+'개 항목 복구'); }catch(e){} }
+    return total>0;
+  }catch(e){ try{ console.warn('[Migrate] 실패(무시):', e&&e.message); }catch(_){ } return false; }
+}
 function loadData(){
+  migrateLegacyStorageKeys(); // 옛 버전 키 데이터를 현재 키로 합친 뒤 적재(검색 0건 방지)
   users=allUsers();
   rooms=read(K.rooms,[]).filter(ownerMatch);
   var _rawP=read(K.projects,[]).filter(ownerMatch);
