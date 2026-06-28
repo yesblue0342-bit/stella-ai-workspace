@@ -244,7 +244,7 @@ async function saveResultToDrive(app, header, text, ext){
     const r=await fetch('/api/cc/save-drive',{method:'POST',headers:{'Content-Type':'application/json'},
       body:JSON.stringify({ app:app||'StellaAgentCode', programName:((typeof cur!=='undefined'&&cur&&cur.title)||header), header:header, text:text, ext:(ext||'') })});
     const d=await r.json().catch(()=>({ok:false}));
-    if(r.ok && d.ok) showToast('Drive 저장 ✓ '+(d.name||''), true);
+    if(r.ok && d.ok){ const gh=d.github&&d.github.saved?'· 0Program ✓':(d.github?'· 0Program✗('+(d.github.reason||'')+')':''); showToast('Drive 저장 ✓ '+(d.name||'')+' '+gh, true); }
     else showToast('Drive 저장 실패: '+((d&&(d.message||d.error))||('HTTP '+r.status)), false);
   }catch(e){ showToast('Drive 저장 오류: '+(e&&e.message?e.message:e), false); }
 }
