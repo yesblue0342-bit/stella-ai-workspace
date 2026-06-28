@@ -272,6 +272,10 @@ const API_URL='/api/chat';const ADMIN_EMAILS=['yesblue0342@naver.com','yesblue03
 const K={users:'stella_users_final_v82',session:'stella_session_final_v82',rooms:'stella_rooms_final_v82',projects:'stella_projects_final_v82',posts:'stella_posts_final_v82',exp:'stella_exp_final_v82',bexp:'stella_bexp_final_v82',member:'stella_member_final_v82',manage:'stella_manage_final_v82'};
 let user=null,users=[],rooms=[],projects=[],posts=[],activeRoomId=null,activeProjectId=null,activeView='chat',files=[],authMode='login',activeMemberRoomId=null;
 const $=s=>document.querySelector(s),$$=s=>Array.from(document.querySelectorAll(s));const esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;'}[c]));
+/* HTML 속성값 이스케이프(따옴표 포함) — esc와 동일 규칙(<>&"' 전부 처리)이라 안전.
+   ※ 미정의 시 doSideSearch의 노트/프로젝트 결과 렌더에서 Reference(escAttr) 예외가 나
+   결과창이 이전 검색어 상태로 멈춰 보이던 버그를 수정. */
+const escAttr=esc;
 const read=(k,d)=>{try{return JSON.parse(localStorage.getItem(k)||JSON.stringify(d))}catch{return d}};const write=(k,v)=>localStorage.setItem(k,JSON.stringify(v));const uid=()=>Date.now().toString(36)+Math.random().toString(36).slice(2,7);const hash=p=>btoa(unescape(encodeURIComponent(String(p))));
 
 /* ── 서버측 권한 스코프(세션 토큰) ──

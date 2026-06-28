@@ -1,5 +1,30 @@
 STATUS: IN_PROGRESS
 
+## [2026-06-28] 검색 결과창 미갱신/라벨 불일치 — FIX_SEARCH2.md 근본수정(escAttr 미정의)
+
+### 근본 원인 (확정)
+- `doSideSearch`가 **노트/프로젝트** 결과를 렌더할 때 `escAttr(p.id)`를 호출(index.html 노트:`data-spost`, 프로젝트:`data-sproj`)하는데
+  `escAttr`가 **어디에도 정의돼 있지 않았음** → `ReferenceError: escAttr is not defined` 발생.
+- 결과: 검색어가 **노트/프로젝트에 매칭되면** 함수가 `list.innerHTML=html.join('')`(렌더 커밋) **이전에 throw** →
+  결과창이 **직전 검색어 상태로 멈춤**(예: "주간" 입력 → 이전 "프롬프크" 결과/라벨 잔존). 돋보기 버튼·실시간 input 모두 같은 함수라 동일 증상.
+- **채팅만/0건** 검색은 `esc()`(정의됨)만 써서 정상 → 그래서 일부 검색은 동작해 보였던 것(증상 3: 데이터 로드는 정상).
+
+### 수정
+- index.html에 `const escAttr=esc;` 추가(esc는 `<>&"'` 전부 이스케이프 → 속성값에도 안전). 한 줄로 throw 제거.
+- 이 한 줄로 FIX_SEARCH2 요구 동시 충족:
+  - (2) 결과창 미갱신/라벨 불일치 → throw 제거로 매 검색마다 `title`/`list` 정상 갱신.
+  - (4) 노트·채팅 **전체(제목+본문)** 검색 → 노트 렌더 경로가 살아나 동작(채팅은 기존 정상). `toLowerCase()+includes()`로 대소문자/한글 부분일치 유지.
+  - (5) 카테고리별(📁프로젝트/📝노트/💬채팅) 구분 + 0건일 때만 **현재 검색어**로 "결과 없음" — 기존 로직이 이제 실제로 도달.
+  - (3) 실시간 input(`oninput→doSideSearchLive` 300ms 디바운스)·Enter·돋보기 버튼 3경로 모두 기존 배선 유지(정상 동작 복구).
+- SW 캐시 `v93 → v94`.
+- 스토리지 키 구조/마이그레이션 로직 무변경(FIX_SEARCH.md 유지).
+
+### 검증
+- **실제 `doSideSearch` 소스를 파일에서 추출**해 DOM 목으로 구동: (1) 노트 본문 "주간" 매칭 시 throw 없이 렌더·라벨="주간" (2) 새 검색어로 라벨/결과 갱신+이전 잔존 제거 (3) 채팅 제목 매칭 회귀 없음 = **ALL PASS**.
+- `node --check sw.js`/`js/sidebar-search.js` OK, index.html 인라인 4블록 `new Function` OK(bad 0).
+
+---
+
 ## [2026-06-28] 사이드 검색 0건 — FIX_SEARCH.md 수행 완료(레거시 키 자동 마이그레이션)
 
 ### 무엇을 / 어떻게 고쳤나
