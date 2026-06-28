@@ -2,6 +2,17 @@
 
 > 무인(비대화) 실행 중 막힌 항목을 기록. 질문 대신 가장 합리적인 판단을 적고 다음으로 넘어감.
 
+## [2026-06-28] 사이드 검색 0건 — 데이터 부재 가능성(Case B), 일반 모드 실제 데이터에서 재현 필요
+- 사실관계: 검색이 읽는 키와 앱이 저장하는 키가 **완전히 동일**(`stella_rooms/posts/projects_final_v82`).
+  `index.html:272`의 단일 상수 `K`로 이미 중앙화돼 있고, `loadData()`(READ)·`saveRooms/savePosts/saveProjects`(WRITE)·
+  `syncFromServer()`가 모두 같은 `K.*`를 사용. 전 저장소 grep에서 `_v82` 외 다른 버전 0건.
+- 판단: PROMPT 2단계 결정트리상 **(A) 키 버전 불일치가 아님 → (B) 데이터 자체 부재**. 검색 코드(.filter)·필드 매핑도
+  데이터 형태와 일치하므로 결함 근거 없음. **추측으로 코드를 바꾸지 않는다**(PROMPT 규칙). 키 중앙화(3단계)·마이그레이션도
+  이미 충족 상태라 불필요.
+- 재현 조건(재개 조건): 일반 모드(시크릿 아님)에서 **실제 로그인 계정**으로 채팅/노트/프로젝트를 만든 뒤 그 계정으로 키워드
+  검색 시 0건이 재현되면, 그때 owner 스코프(`ownerMatch`)·서버 동기화 타이밍 등 실데이터 기반으로 추가 진단.
+  (주의: 데이터는 owner 단위로 스코프되므로 다른 계정/빈 캐시 세션에서는 정상적으로 0건이 나올 수 있음 — 이는 버그 아님.)
+
 ## [2026-06-27] AUTOPILOT TODO#1 — "OCI Postgres(pg) 전환" : 의도적 미수행(보류)
 - 사실관계: 메타데이터 DB는 이미 Azure SQL(클라우드)에서 **OCI 동거 MSSQL 컨테이너(stella-mssql)**로 이관 완료(드라이버 `mssql`, `.env` DB_SERVER=stella-mssql). 2026-06-25 PROGRESS.md에 "메타데이터 표준=OCI 동거 stella-mssql, Azure 폐기"가 **사용자 결정**으로 명시됨.
 - 판단: TODO#1이 가정한 "아직 Azure SQL에 남아있으면 pg로 전환"의 전제가 거짓. auto-pause 근본원인은 self-host 컨테이너 전환으로 이미 해소. pg 전환은 api/·lib/ 수십 파일의 T-SQL(MERGE/NVARCHAR/SYSUTCDATETIME/sql.* 바인딩) 전면 재작성으로 **고위험·무가치**이며 사용자 결정과 충돌.

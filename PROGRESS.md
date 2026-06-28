@@ -1,5 +1,28 @@
 STATUS: IN_PROGRESS
 
+## [2026-06-28] 사이드 검색 0건 — 진단 결과: 키 불일치 아님(Case B)
+
+### 검색 데이터 흐름 (index.html)
+- 키 상수 중앙화: `index.html:272` `const K={... rooms:'stella_rooms_final_v82', projects:'stella_projects_final_v82', posts:'stella_posts_final_v82' ...}` — 이미 한 곳에서 관리.
+- 메모리 변수: `index.html:273` `let ... rooms=[],projects=[],posts=[] ...` → 검색은 이 **메모리 배열**을 `.filter`(`doSideSearch` `index.html:599~`).
+- 적재(READ): `loadData()` `index.html:345` = `read(K.rooms/K.projects/K.posts)` + `syncFromServer()` `index.html:424`도 같은 K.* 키에 저장.
+
+### READ 키 ↔ WRITE 키 대조표
+| 대상 | 메모리 적재(READ) | 저장(WRITE) | 일치? |
+|------|-------------------|-------------|-------|
+| 채팅방(rooms) | `loadData`: `read(K.rooms,[])` = `stella_rooms_final_v82` (+검색 fallback `index.html:652` 동일 키) | `saveRooms`: `write(K.rooms,…)` = `stella_rooms_final_v82` | ✅ 동일 |
+| 노트(posts) | `loadData`: `read(K.posts,[])` = `stella_posts_final_v82` | `savePosts`: `write(K.posts,…)` = `stella_posts_final_v82` | ✅ 동일 |
+| 프로젝트(projects) | `loadData`: `read(K.projects,[])` = `stella_projects_final_v82` | `saveProjects`: `write(K.projects,…)` = `stella_projects_final_v82` | ✅ 동일 |
+
+### 전 저장소 버전 스캔
+`grep stella_(rooms|posts|projects|users|session|exp|bexp|member|manage)_final_v\d+` → 전 파일(index/abap/restore/talk/gpt/db/cloud.html)에서 **오직 `_v82`만 출현**. `_v81`·`_v83` 등 다른 버전 0건.
+
+### 판정 → Case B (코드 미수정)
+- READ 키 == WRITE 키 == `_v82` (전 파일 일관). **키/버전 불일치 없음 → PROMPT 2단계 (A) 아님.**
+- 검색은 저장과 동일한 메모리 배열·동일 키를 보고, 필드 매핑도 데이터 형태와 일치(rooms: name/title+messages[].content|text, posts: title/body/category, projects: name).
+- ⇒ **(B) 데이터 부재 가능성**. PROMPT 규칙대로 추측 코드 수정 없이 BLOCKERS.md 기록 후 종료. 상세는 `BLOCKERS.md` [2026-06-28] 참조.
+- **수동 검증 필요**: 일반 모드(시크릿 아님)·실제 로그인 계정으로 채팅/노트 생성 후 키워드 검색 시 N건 노출되는지 재현.
+
 ## CHECKLIST
 - [x] 증상 재현/근본원인 검증 (코드 추적) — FINDINGS 기록
 - [x] 동기화 엔진 코어: id 기준 upsert + LWW + tombstone + dedupe (`lib/sync-engine.js`)
