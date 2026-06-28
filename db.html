@@ -10,12 +10,12 @@
 <link rel="icon" type="image/png" sizes="192x192" href="/icons/db-192.png">
 <style>
 *{box-sizing:border-box;margin:0;padding:0}
-:root{--bg:#0d1117;--bg2:#161b22;--bg3:#21262d;--border:#30363d;--text:#e6edf3;--text2:#8b949e;--text3:#c9d1d9;--accent:#e6edf3;--danger:#f85149;--primary:#1f6feb}
-body.light{--bg:#f6f8fa;--bg2:#fff;--bg3:#f3f4f6;--border:#d1d5db;--text:#111827;--text2:#6b7280;--text3:#374151;--accent:#111827;--danger:#dc2626;--primary:#1f6feb}
+:root{--bg:#0d1117;--bg2:#161b22;--bg3:#21262d;--border:#30363d;--text:#e6edf3;--text2:#8b949e;--text3:#c9d1d9;--accent:#e6edf3;--danger:#f85149;--primary:#1f6feb;--chk-bg:#000;--chk-line:#fff}
+body.light{--bg:#f6f8fa;--bg2:#fff;--bg3:#f3f4f6;--border:#d1d5db;--text:#111827;--text2:#6b7280;--text3:#374151;--accent:#111827;--danger:#dc2626;--primary:#1f6feb;--chk-bg:#fff;--chk-line:#111827}
 body{font-family:system-ui,'Noto Sans KR',sans-serif;background:var(--bg);color:var(--text);min-height:100dvh;display:flex;flex-direction:column;transition:background .2s,color .2s}
 .top{display:flex;align-items:center;gap:6px;padding:10px 12px;background:var(--bg2);border-bottom:1px solid var(--border);flex-wrap:wrap;flex-shrink:0}
 .top h1{font-size:.95rem;font-weight:900;color:var(--text)}
-.btn{border:1px solid var(--border);background:var(--bg3);color:var(--text3);border-radius:9px;padding:6px 12px;cursor:pointer;font-size:.8rem;font-weight:700;white-space:nowrap;transition:background .15s}
+.btn{border:1px solid var(--border);background:var(--bg3);color:var(--text);border-radius:9px;padding:6px 12px;cursor:pointer;font-size:.8rem;font-weight:700;white-space:nowrap;transition:background .15s,border-color .15s}
 .btn:hover{opacity:.85}.btn:active{opacity:.6}
 .btn.danger{border-color:var(--danger);color:var(--danger)}
 .btn.upload-btn{background:var(--bg3);color:var(--text);border:1px solid var(--border)}
@@ -33,7 +33,11 @@ body{font-family:system-ui,'Noto Sans KR',sans-serif;background:var(--bg);color:
 .file-list{flex:1;overflow-y:auto}
 .file-row{display:flex;align-items:center;gap:9px;padding:9px 12px;border-bottom:1px solid var(--border);cursor:pointer;transition:background .1s}
 .file-row:hover{background:var(--bg2)}.file-row.sel{background:var(--bg3)}
-.file-chk{width:16px;height:16px;cursor:pointer;accent-color:var(--primary);flex-shrink:0}
+/* 체크박스: 테마별 흑백 고대비(다크=검정 바탕·흰 선 / 라이트=흰 바탕·검정 선). 파란 accent 제거 */
+.file-chk{-webkit-appearance:none;appearance:none;width:18px;height:18px;flex-shrink:0;cursor:pointer;margin:0;position:relative;background:var(--chk-bg);border:2px solid var(--chk-line);border-radius:4px;transition:background .12s,border-color .12s}
+.file-chk:hover{opacity:.8}
+.file-chk:checked::after{content:"";position:absolute;left:4px;top:0;width:6px;height:11px;border:solid var(--chk-line);border-width:0 2px 2px 0;transform:rotate(45deg)}
+.file-chk:focus-visible{outline:2px solid var(--chk-line);outline-offset:2px}
 .file-icon{font-size:1.15rem;width:24px;text-align:center;flex-shrink:0}
 .file-info{flex:1;min-width:0}
 .file-name{font-size:.86rem;font-weight:700;color:var(--text3);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
@@ -41,7 +45,7 @@ body{font-family:system-ui,'Noto Sans KR',sans-serif;background:var(--bg);color:
 .file-acts{display:flex;gap:4px;flex-shrink:0;opacity:0;transition:opacity .15s}
 .file-row:hover .file-acts{opacity:1}
 .enter-folder{flex:0 0 auto;width:32px;height:32px;border:none;background:transparent;color:var(--text2);font-size:1.5rem;font-weight:800;line-height:1;cursor:pointer;display:flex;align-items:center;justify-content:center;border-radius:8px}
-.enter-folder:hover,.enter-folder:active{background:var(--bg3);color:var(--primary)}
+.enter-folder:hover,.enter-folder:active{background:var(--bg3);color:var(--text)}
 @media (hover:none){.file-acts{opacity:1}}
 .act{background:var(--bg3);color:var(--text3);border:1px solid var(--border);border-radius:7px;padding:3px 8px;cursor:pointer;font-size:.72rem}
 .act.del{border-color:var(--danger);color:var(--danger)}
@@ -68,8 +72,8 @@ body{font-family:system-ui,'Noto Sans KR',sans-serif;background:var(--bg);color:
 .mvcard input::placeholder{color:var(--text2)}
 
 /* ── 드래그&드롭 ── */
-.file-list.drag-over{outline:3px dashed var(--primary);outline-offset:-4px;background:rgba(31,111,235,.07)}
-.drop-hint{display:none;position:fixed;inset:0;z-index:2000;background:rgba(31,111,235,.18);border:4px dashed #1f6feb;pointer-events:none;align-items:center;justify-content:center;flex-direction:column;gap:12px;font-size:1.4rem;font-weight:900;color:#1f6feb}
+.file-list.drag-over{outline:3px dashed var(--chk-line);outline-offset:-4px;background:transparent}
+.drop-hint{display:none;position:fixed;inset:0;z-index:2000;background:rgba(0,0,0,.55);border:4px dashed #fff;pointer-events:none;align-items:center;justify-content:center;flex-direction:column;gap:12px;font-size:1.4rem;font-weight:900;color:#fff}
 .drop-hint.on{display:flex}
 
 /* ── 우클릭 메뉴 ── */
@@ -97,7 +101,7 @@ body{font-family:system-ui,'Noto Sans KR',sans-serif;background:var(--bg);color:
 .picker-foot button{padding:8px 16px;border-radius:10px;cursor:pointer;font-size:.84rem;font-weight:700;border:1px solid var(--border);background:var(--bg3);color:var(--text)}
 .picker-foot .pri{background:#1f6feb;color:#fff;border-color:#1f6feb}
 /* ── 클립보드 상태 표시 ── */
-.clip-bar{display:none;gap:6px;padding:6px 12px;background:#1e3a5f;border-bottom:1px solid var(--border);align-items:center;font-size:.8rem;color:#93c5fd;flex-shrink:0}
+.clip-bar{display:none;gap:6px;padding:6px 12px;background:var(--bg3);border-bottom:1px solid var(--border);align-items:center;font-size:.8rem;color:var(--text);flex-shrink:0}
 .clip-bar.on{display:flex}
 .clip-bar button{font-size:.78rem}
 </style>
@@ -134,6 +138,8 @@ body{font-family:system-ui,'Noto Sans KR',sans-serif;background:var(--bg);color:
 <!-- 선택 작업 바 -->
 <div class="sel-bar" id="selBar">
 <span id="selCount">0개 선택</span>
+<button class="btn" onclick="downloadSelected()">⬇ 다운로드</button>
+<button class="btn" onclick="compressSelected()">🗜️ 압축</button>
 <button class="btn danger" onclick="deleteSelected()">🗑 삭제</button>
 <button class="btn" onclick="moveSelected()">📂 이동</button>
 <button class="btn" onclick="clearSel()">✕ 해제</button>
@@ -148,6 +154,7 @@ body{font-family:system-ui,'Noto Sans KR',sans-serif;background:var(--bg);color:
 <input class="filter-in" id="filterIn" placeholder="파일/폴더 필터..." oninput="renderFiles()">
 <button class="btn" onclick="mkdirPrompt()">📁＋ 폴더</button>
 <button class="btn upload-btn" onclick="document.getElementById('fileUploadIn').click()">⬆ 업로드</button>
+<button class="btn" onclick="downloadSelected()" id="dlBtn" title="선택 항목 다운로드">⬇ 다운로드</button>
 <input type="file" id="fileUploadIn" multiple hidden onchange="uploadFiles(this.files)">
 </div>
 <div class="status" id="statusBar">로딩 중...</div>
@@ -319,6 +326,9 @@ async function loadFolder(folderId,name){
       return;
     }
     _files=Array.isArray(d.files)?d.files:[];
+    // 루트('')에서도 압축/업로드/폴더생성/붙여넣기가 동작하도록 실제 폴더 id 해석.
+    // 루트는 'root' 별칭 — Drive parents[] 가 수용하므로 빈 문자열 대신 사용해 dead-end 제거.
+    if(!folderId && d.folder && d.folder.id) _curId=d.folder.id;
     const cid=folderId||'ROOT';
     // 스택: 같은 위치면 중복 추가 안 함
     if(!_stack.length||_stack[_stack.length-1].id!==cid){
@@ -670,6 +680,74 @@ async function unzipItem(fileId, name){
   }
 }
 
+// ── 선택 항목 다운로드 (단일 파일=바로, 여러 개·폴더 포함=ZIP으로 묶어 받기) ──
+async function downloadSelected(){
+  const items=(Array.isArray(_files)?_files:[]).filter(function(f){return _sel.has(f.id);});
+  if(!items.length){status('⬇ 먼저 다운로드할 항목을 선택하세요. (전체선택 또는 체크박스)');return;}
+  const onlyFiles=items.filter(function(f){return !f.isFolder;});
+  // 단일 파일이면 곧바로 다운로드
+  if(items.length===1 && onlyFiles.length===1){
+    downloadFile(onlyFiles[0].id, onlyFiles[0].name);
+    status('⬇ 다운로드: '+onlyFiles[0].name);
+    return;
+  }
+  // 여러 개거나 폴더 포함 → 서버에서 ZIP으로 묶어 다운로드(브라우저 다중 다운로드 차단 회피)
+  // ZIP은 현재 폴더에 저장된 뒤 다운로드된다(저장본이 남음) — 문구로 명시.
+  if(!confirm(items.length+'개 항목을 ZIP으로 묶어 현재 폴더에 저장 후 다운로드합니다. 진행할까요?'))return;
+  await zipSelected(items, true);
+}
+
+// ── 선택 항목 압축 (현재 폴더에 ZIP 저장) ──
+async function compressSelected(){
+  const items=(Array.isArray(_files)?_files:[]).filter(function(f){return _sel.has(f.id);});
+  if(!items.length){status('🗜️ 먼저 압축할 항목을 선택하세요.');return;}
+  if(!confirm(items.length+'개 항목을 현재 폴더에 ZIP으로 압축하시겠습니까?'))return;
+  await zipSelected(items, false);
+}
+
+// 컨텍스트 메뉴: 단일 항목 압축
+function compressItem(f){
+  if(!f)return;
+  if(!confirm('"'+f.name+'"을(를) ZIP으로 압축하시겠습니까?'))return;
+  zipSelected([f], false);
+}
+
+// 공통: 항목 배열을 서버 zip 액션으로 압축. downloadAfter=true면 생성된 zip을 즉시 다운로드.
+async function zipSelected(items, downloadAfter){
+  if(!items||!items.length)return;
+  if(!_curId){alert('폴더 안에서 실행하세요.');return;}
+  const ids=items.map(function(f){return f.id;});
+  // 단일 항목이면 그 이름을 기본 zip명으로(확장자 제거), 여러 개면 서버가 타임스탬프명 사용
+  const baseName=(items.length===1)?String(items[0].name||'').replace(/\.[^.]+$/,''):'';
+  const ov=document.getElementById('upoverlay'),pr=document.getElementById('upProgress');
+  ov.classList.add('on');
+  pr.textContent='🗜️ 압축 중... ('+ids.length+'개 항목) 파일이 많으면 시간이 걸릴 수 있습니다.';
+  status('🗜️ 압축 중...');
+  try{
+    const r=await fetchWithTimeout('/api/drive-manage?action=zip',{
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({fileIds:ids, parentId:_curId, zipName:baseName})
+    },300000); // 5분 — 대용량/다수 파일 대비
+    const parsed=await parseJsonSafe(r);
+    const d=parsed.data;
+    ov.classList.remove('on');
+    if(!r.ok||!d||!d.ok){
+      const em=(d&&(d.error||d.message))||(parsed.parseError?('응답 파싱 실패 HTTP '+r.status):('HTTP '+r.status));
+      status('❌ 압축 실패: '+em);alert('압축 실패: '+em);return;
+    }
+    const extra=(d.errors&&d.errors.length?' (제외 '+d.errors.length+'개)':'')+(d.truncated?' ⚠️ 개수·용량 한도 초과분 제외':'');
+    status('✅ 압축 완료: '+d.file.name+' — '+(d.added||0)+'개 파일'+extra);
+    clearSel();
+    if(downloadAfter && d.file && d.file.id){ downloadFile(d.file.id, d.file.name); }
+    refresh();
+  }catch(e){
+    ov.classList.remove('on');
+    const msg=isAbortError(e)?'시간 초과(5분) — 항목이 너무 많거나 큽니다.':((e&&e.message)||e);
+    status('❌ 압축 오류: '+msg);alert('압축 오류: '+msg);
+  }
+}
+
 // ── 삭제 ──
 async function deleteItem(fileId,name){
   if(!confirm('"'+name+'" 삭제하시겠습니까?'))return;
@@ -917,6 +995,9 @@ function ctxAction(action){
       break;
     case 'unzip':
       unzipItem(f.id, f.name);
+      break;
+    case 'zip':
+      compressItem(f);
       break;
   }
 }
@@ -1180,6 +1261,7 @@ window.onload=function(){
   <div class="ctx-item" onclick="ctxAction('moveTo')">📁 이동할 폴더 선택...</div>
   <div class="ctx-item" onclick="ctxAction('copyTo')">📁 복사할 폴더 선택...</div>
   <div class="ctx-sep"></div>
+  <div class="ctx-item" onclick="ctxAction('zip')">🗜️ 압축하기</div>
   <div class="ctx-item" onclick="ctxAction('unzip')" id="ctxUnzip" style="display:none">🗜️ 압축 풀기</div>
   <div class="ctx-item" onclick="ctxAction('rename')">✏️ 이름 변경</div>
   <div class="ctx-item danger" onclick="ctxAction('delete')">🗑 삭제</div>
