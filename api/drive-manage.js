@@ -228,6 +228,38 @@ export default async function handler(req, res) {
     } catch (e) { return res.status(500).json({ ok: false, error: e.message }); }
   }
 
+  // ── Resumable 업로드 완료 검증 (서버측 세션 상태 조회 — 브라우저 CORS 무관) ──
+  // 브라우저가 Drive로 직접 PUT한 바이트는 도달했지만 응답을 못 읽어 "Failed to fetch"가 나는 경우,
+  // 서버가 세션에 `Content-Range: bytes */total` 로 상태를 물어 실제 완료 여부를 확정한다.
+  if (action === "upload-status") {
+    try {
+      const { uploadUrl, fileSize } = req.body || {};
+      if (!uploadUrl) return res.status(400).json({ ok: false, message: "uploadUrl 필요" });
+      // SSRF 방지: 서버가 PUT하는 대상은 Google 업로드 세션 URL로 제한
+      if (!/^https:\/\/[a-z0-9.-]*\.googleapis\.com\//i.test(String(uploadUrl))) {
+        return res.status(400).json({ ok: false, message: "허용되지 않은 uploadUrl" });
+      }
+      const total = Number(fileSize);
+      const range = `bytes */${Number.isFinite(total) && total > 0 ? total : "*"}`;
+      // redirect:"manual" — 만약 *.googleapis.com 이 타호스트로 3xx 리다이렉트해도 따라가지 않음(SSRF 가드 우회 방지).
+      const r = await fetch(uploadUrl, { method: "PUT", redirect: "manual", headers: { "Content-Range": range } });
+      if (r.status === 200 || r.status === 201) {
+        let data = {};
+        try { data = await r.json(); } catch (_) {}
+        return res.status(200).json({ ok: true, status: "complete", fileId: data.id || null, name: data.name || null, size: data.size || null });
+      }
+      if (r.status === 308) {
+        const rg = r.headers.get("range");
+        let received = 0;
+        if (rg) { const m = /-(\d+)\s*$/.exec(rg); if (m) received = parseInt(m[1], 10) + 1; }
+        return res.status(200).json({ ok: true, status: "incomplete", received });
+      }
+      // 404/410 = 세션 만료/소멸. 그 외 상태도 그대로 표면화.
+      const txt = await r.text().catch(() => "");
+      return res.status(200).json({ ok: true, status: "gone", httpStatus: r.status, body: String(txt).slice(0, 200) });
+    } catch (e) { return res.status(500).json({ ok: false, error: e.message, action }); }
+  }
+
   // ── 소용량 업로드 (하위 호환 - 10MB 이하) ──
   if (action === "upload") {
     try {

@@ -103,3 +103,38 @@ npm test → # tests 187 / # pass 187 / # fail 0 / # skipped 0
 - `sw.js` 캐시 `stella-v96 → stella-v97`.
 - **main 브랜치 직접 push** → GitHub Actions `deploy-oci.yml` → OCI 자동 재빌드/재실행.
 - ※ 1차(다운로드/압축) + 2차(톤다운)가 함께 main 으로 배포됨. 새 키/라우트 없음, 시크릿 노출 없음.
+
+---
+
+# 3차 — 업로드 "Failed to fetch" 오탐 수정
+
+> 증상: 파일은 정상 업로드됐는데 "업로드 중… ❌ <파일명>: Failed to fetch" 오류가 뜸.
+> 요청: 진짜 오류면 고치고, 정상 동작이면 "업로드 완료"처럼 긍정 메시지로.
+
+## 원인 (진단)
+- resumable 세션은 **서버에서** 개시(브라우저 Origin 없음) → 브라우저가 청크를 **크로스오리진으로 Drive에 직접 PUT**.
+- 바이트는 Google에 도달(파일 생성됨)하지만, 서버 개시 세션의 응답에는 CORS 헤더가 없어 **브라우저 fetch가 응답을 못 읽고 `TypeError: Failed to fetch`** 발생.
+- 기존 재시도(`queryResumeOffset`)도 **브라우저 PUT** → 같은 CORS 벽 → 삼켜짐 → 3회 모두 실패 → 실제 성공인데 실패로 표시. = **오탐**.
+
+## 수정
+- **서버 신규 액션 `upload-status`**(`api/drive-manage.js`): 서버가 세션에 `Content-Range: bytes */<total>` PUT(서버↔Google은 CORS 무관) → 200/201=완료(fileId/name 반환), 308=미완(수신 바이트), 404/410=세션 소멸. **SSRF 가드**(`https://*.googleapis.com/`만 허용) + `redirect:"manual"`(리다이렉트 우회 차단).
+- **`db.html`**: `verifyUploadStatus()`(위 서버 액션 호출) + `friendlyUploadErr()`(날 "Failed to fetch" → 안내문 변환). `uploadResumable()`는 청크 PUT 실패 시 **서버에 실제 완료 여부 확인** → 완료면 `{ok:true}`(→ "✅ 완료"), 수신 바이트만큼 이어받기, 최종 확인까지 실패면 친절한 메시지. CORS로 무용한 `queryResumeOffset` 제거.
+
+## 판정 로직
+- **정상 업로드(증상의 경우)**: 브라우저는 "Failed to fetch"여도 → 서버 검증 200/201 → **"업로드 완료"**. (오탐 제거)
+- **진짜 실패**: 서버 검증이 308(미완)·404(소멸)·오류 → 명확한 안내 메시지. (오탐 아님 — 실제 오류만 표시)
+
+## 어드버서리얼 리뷰(6 에이전트, logic·server·regression) → 결과
+- 회귀 리뷰 **0건**. 확정 2건 모두 **nit**:
+  - SSRF 가드가 첫 홉만 검사(리다이렉트 미검사) → **`redirect:"manual"` 추가로 하드닝**(반영).
+  - 서버가 308+received==total 보고 시 성공 처리(Google 프로토콜상 도달 불가, 또한 "바이트가 이미 Google에 있으니 성공"이 사용자 의도와 일치) → 변경 불필요.
+
+## 검증 (모두 PASS)
+- `node --check` · drive-manage import OK.
+- **신규 서버 단위 테스트 `test/upload-status.test.js` 6건 PASS**: SSRF 거부, uploadUrl 누락 400, 200→complete, 308→incomplete(Range 파싱), 404→gone, JSON 파싱 실패 시도 ok.
+- **jsdom 업로드 시나리오 11건 PASS**: (A) "Failed to fetch"지만 서버 검증 완료 → `ok:true`(완료), (B) 진짜 실패 → 친절 메시지(날 "Failed to fetch" 미노출), 헬퍼 정의·죽은 함수 제거 확인.
+- 정적 9종 · jsdom 회귀 21건 · **전체 스위트 193/193 PASS**(신규 6건 포함, 회귀 0).
+
+## 배포 (3차)
+- `sw.js` 캐시 `stella-v97 → stella-v98`.
+- **main 직접 push** → `deploy-oci.yml` 자동 배포. 새 키 없음, 신규 라우트는 기존 `drive-manage` 액션 추가뿐, 시크릿 노출 없음(상태 조회는 Authorization 미전송 — upload_id 로 식별).
