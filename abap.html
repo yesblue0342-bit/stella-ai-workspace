@@ -357,6 +357,7 @@ async function syncFromServer(){
       }
       if(tmp.ok && !d) d = tmp; // 빈 결과라도 일단 보관
     }
+    if(d && d.ok) _serverPullOk = true; // 서버 상태 확인됨(빈 결과라도) → 이후 저장 허용
     if(!d || !d.ok) return;
 
     // 서버 데이터 개수 스냅샷 기록 (덮어쓰기 보호용)
@@ -437,12 +438,19 @@ async function syncFromServer(){
 // ── 서버에 현재 상태 저장 (모든 기기에서 로그아웃/재로그인 시 복원) ──
 var _serverSnapshot = { rooms: 0, projects: 0, posts: 0 }; // 서버 데이터 개수 기억
 var _restoreCompleted = false; // 복원 완료 전에는 절대 저장 안 함
+var _serverPullOk = false; // 서버 상태를 최소 1회 성공적으로 읽었는가(파괴적 덮어쓰기 방지 핵심)
 
 async function syncToServer(){
   if(!user||!user.id) return;
   // ★ 안전장치 1: 복원이 완료되기 전에는 절대 서버 저장 금지
   if(!_restoreCompleted){
     console.log('[Sync] 복원 미완료 - 서버 저장 차단');
+    return;
+  }
+  // ★ 안전장치 0(최우선): 서버 상태를 한 번도 성공적으로 읽지 못했으면 저장 금지.
+  //   신규/새 환경에서 초기 읽기 실패 후 빈 로컬을 밀어넣어 계정 데이터를 덮어쓰던 사고 차단.
+  if(!_serverPullOk){
+    console.warn('[Sync] 서버 상태 미확인(초기 읽기 실패) - 덮어쓰기 차단(데이터 보호).');
     return;
   }
   // ★ 안전장치 2: 의미있는 채팅 계산 (새 채팅 + 빈 메시지 제외)
