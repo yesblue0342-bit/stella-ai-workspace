@@ -38,15 +38,14 @@ body.light .app-ico{filter:grayscale(1) brightness(0)}
 .repo.active{border-color:var(--primary);background:var(--bg3)}
 .repo .t{font-weight:700}
 .repo .m{color:var(--text2);font-size:.72rem;margin-top:2px}
-.repo-badge{font-size:.64rem;font-weight:700;padding:1px 6px;border-radius:999px;vertical-align:middle;white-space:nowrap}
-.repo-badge.priv{background:#7c2d12;color:#fed7aa}
-.repo-badge.pub{background:#14532d;color:#bbf7d0}
-body.light .repo-badge.priv{background:#fde68a;color:#92400e}
-body.light .repo-badge.pub{background:#dcfce7;color:#166534}
+/* 공개/비공개 배지: 앱 아이콘과 동일한 무채색 톤(다크=검은바탕·연한글씨 / 라이트=흰바탕·진한글씨). 눈에 띄지 않게 차분하게. */
+.repo-badge{font-size:.64rem;font-weight:600;padding:1px 7px;border-radius:999px;vertical-align:middle;white-space:nowrap;border:1px solid var(--border);background:var(--bg3);color:var(--text2)}
+.repo-badge .bico{filter:grayscale(1);opacity:.9;margin-right:1px}
 .tree{font-size:.83rem}
 .node{padding:3px 4px;border-radius:6px;cursor:pointer;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .node:hover{background:var(--bg3)}
-.node.file.sel{background:var(--bg3);outline:1px solid var(--primary)}
+.node.sel{background:var(--bg3);outline:1px solid var(--primary)}
+.node.checked{background:var(--bg3);outline:1px dashed var(--primary)}
 .children{margin-left:14px;border-left:1px solid var(--border);padding-left:6px}
 .main{flex:1;min-width:0;display:flex;flex-direction:column}
 .pv-head{display:flex;align-items:center;gap:8px;padding:10px 14px;border-bottom:1px solid var(--border);background:var(--bg2);flex-wrap:wrap}
@@ -81,6 +80,13 @@ body.light .hljs-name,body.light .hljs-tag,body.light .hljs-selector-class{color
 .node .nck{margin-right:4px;vertical-align:middle;display:none}
 .tree.multi .node .nck{display:inline-block}
 .btn.on{background:var(--primary);border-color:var(--primary);color:#fff}
+/* 폴더 우클릭 컨텍스트 메뉴 (GitHub식 ZIP 다운로드/선택) */
+.ctxmenu{position:fixed;z-index:300;min-width:200px;background:var(--bg2);border:1px solid var(--border);border-radius:10px;box-shadow:0 8px 28px rgba(0,0,0,.4);padding:4px;font-size:.82rem;display:none}
+.ctxmenu.show{display:block}
+.ctxmenu .mi{padding:8px 12px;border-radius:7px;cursor:pointer;white-space:nowrap;color:var(--text);display:flex;align-items:center;gap:8px}
+.ctxmenu .mi:hover{background:var(--bg3)}
+.ctxmenu .mih{padding:6px 12px 4px;color:var(--text2);font-size:.7rem;font-weight:700;max-width:240px;overflow:hidden;text-overflow:ellipsis}
+.ctxmenu .sep{height:1px;background:var(--border);margin:4px 6px}
 .toast{position:fixed;left:50%;bottom:26px;transform:translateX(-50%) translateY(16px);background:#1f6feb;color:#fff;padding:10px 16px;border-radius:10px;font-size:.84rem;font-weight:700;box-shadow:0 6px 20px rgba(0,0,0,.35);opacity:0;pointer-events:none;transition:opacity .2s,transform .2s;z-index:200;max-width:90vw}
 .toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
 .toast.err{background:var(--danger)}
@@ -110,6 +116,7 @@ body.light .hljs-name,body.light .hljs-tag,body.light .hljs-selector-class{color
     <div class="pv-head">
       <span class="pv-path" id="pvPath">레포와 파일을 선택하세요</span>
       <a class="btn" id="dlBtn" style="display:none" title="원본 그대로 다운로드(프록시)">⬇ 다운로드</a>
+      <button class="btn" id="zipBtn" onclick="zipSelectedFolders()" title="선택한 폴더를 각각 ZIP으로 다운로드 (선택 없으면 레포 전체)">📦 폴더 ZIP</button>
       <button class="btn" id="xlsxBtn" style="display:none" onclick="exportExcel()" title="Excel로 내보내기(안 열릴 때 폴백)">📊 Excel</button>
       <button class="btn" id="upBtn" onclick="pickUpload()" title="현재 레포에 파일 업로드">⬆ 업로드</button>
       <button class="btn" id="mkdirBtn" onclick="doMkdir()" title="새 폴더 만들기">＋ 폴더</button>
@@ -125,6 +132,7 @@ body.light .hljs-name,body.light .hljs-tag,body.light .hljs-selector-class{color
 </div>
 
 <div class="toast" id="toast"></div>
+<div class="ctxmenu" id="ctxMenu"></div>
 <script>
 const H = window.StellaHub;
 const $ = (id) => document.getElementById(id);
@@ -189,7 +197,7 @@ async function loadRepos(){
     const privN = repos.filter(r=>r.private).length;
     const head = authed ? '<div class="note" style="padding:4px 8px">공개+비공개 '+repos.length+'개 (🔒 '+privN+')</div>' : '<div class="note" style="padding:4px 8px">공개 '+repos.length+'개 (토큰 설정 시 비공개도 표시)</div>';
     $('repoList').innerHTML = head + repos.map(r=>{
-      const badge = r.private ? '<span class="repo-badge priv">🔒 비공개</span>' : '<span class="repo-badge pub">🌐 공개</span>';
+      const badge = r.private ? '<span class="repo-badge priv"><span class="bico">🔒</span>비공개</span>' : '<span class="repo-badge pub"><span class="bico">🌐</span>공개</span>';
       return '<div class="repo" data-name="'+esc(r.name)+'" data-owner="'+esc(r.owner||OWNER)+'" data-branch="'+esc(r.default_branch||'main')+'" data-private="'+(r.private?1:0)+'">'
         + '<div class="t">'+esc(r.name)+' '+badge+'</div>'
         + '<div class="m">'+esc(r.language||'')+(r.stargazers_count?(' · ★'+r.stargazers_count):'')+(r.description?(' · '+esc(r.description)):'')+'</div></div>';
@@ -258,9 +266,13 @@ function renderNodes(host, items, parentPath){
     row.className='node '+(it.type==='dir'?'dir':'file');
     row.dataset.path=it.path;
     const cb=makeCheckbox(it);
+    if(cb.checked) row.classList.add('checked');
+    cb.addEventListener('change', ()=> row.classList.toggle('checked', cb.checked));
     const lbl=document.createElement('span'); lbl.textContent=nodeLabel(it,false);
     row.appendChild(cb); row.appendChild(lbl);
     if(it.type==='dir'){
+      row.title='클릭: 폴더 열기 · 우클릭: ZIP 다운로드·선택';
+      row.addEventListener('contextmenu', (e)=>{ e.preventDefault(); e.stopPropagation(); openFolderMenu(e.clientX, e.clientY, it, row, cb); });
       const kids=document.createElement('div'); kids.className='children'; kids.style.display='none';
       let loaded=false;
       row.addEventListener('click', async (e)=>{
@@ -355,6 +367,73 @@ function bigMsg(it, why){
   return '<div class="empty">'+esc(why)+'.<br><span class="note">'+esc(it.name)+(it.size?(' · '+Math.round(it.size/1024)+'KB'):'')+'</span><br>「⬇ 다운로드」로 원본을, 안 열리면 「📊 Excel」로 받으세요.</div>';
 }
 function exportExcel(){ if(!curFile){toast('파일을 먼저 선택하세요',true);return;} window.open(excelUrl(curFile.path),'_blank'); }
+
+// ── 폴더 ZIP 다운로드 (GitHub식: 폴더 우클릭 / 다중선택 → 압축 다운로드) ──
+// 서버 /api/gh-zip 이 토큰으로 폴더를 재귀 수집해 zip 스트리밍(비공개 레포 포함). path 빈값=레포 전체.
+async function zipDownload(path, label){
+  if(!curRepo){ toast('레포를 먼저 여세요',true); return; }
+  const name = label || (path ? path.split('/').pop() : curRepo.name) || 'archive';
+  const url='/api/gh-zip?owner='+encodeURIComponent(curRepo.owner)+'&repo='+encodeURIComponent(curRepo.name)
+    +'&path='+encodeURIComponent(path||'')+'&ref='+encodeURIComponent(curRepo.default_branch);
+  toast('📦 "'+name+'" 압축 중… 잠시만요');
+  try{
+    const r=await fetchT(url,{},180000);
+    if(!r.ok){ const d=await safeJson(r); throw new Error(d.message||('ZIP 실패('+r.status+')')); }
+    const blob=await r.blob();
+    if(!blob.size) throw new Error('빈 ZIP(내려받을 파일이 없습니다)');
+    const dlUrl=URL.createObjectURL(blob);
+    const a=document.createElement('a'); a.href=dlUrl; a.download=name+'.zip';
+    document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(()=>URL.revokeObjectURL(dlUrl), 5000);
+    toast('✅ "'+name+'.zip" 다운로드');
+  }catch(e){
+    const msg=(e.name==='AbortError')?'압축 시간 초과 — 폴더가 큽니다. 하위 폴더를 나눠 받으세요.':('ZIP 실패: '+(e.message||e));
+    toast(msg,true);
+  }
+}
+// 헤더 「📦 폴더 ZIP」: 선택한 폴더들을 각각 zip으로. 선택 없으면 레포 전체 안내.
+async function zipSelectedFolders(){
+  if(!needRepo())return;
+  const dirs=selectedList().filter(x=>x.type==='dir');
+  if(!dirs.length){
+    if(confirm('선택된 폴더가 없습니다.\n레포 전체("'+curRepo.name+'")를 ZIP으로 받을까요?\n\n특정 폴더만 받으려면: 폴더에서 우클릭 → 「폴더 ZIP 다운로드」,\n또는 여러 폴더는 ☑ 다중 선택 후 체크하세요.')){
+      await zipDownload('', curRepo.name);
+    }
+    return;
+  }
+  for(const d of dirs){ await zipDownload(d.path); }
+  if(dirs.length>1) toast('✅ 폴더 '+dirs.length+'개 ZIP 완료');
+}
+// ── 우클릭 컨텍스트 메뉴 (폴더 전용) ──
+function hideCtxMenu(){ const m=$('ctxMenu'); if(m) m.classList.remove('show'); }
+function openFolderMenu(x, y, it, row, cb){
+  const m=$('ctxMenu'); if(!m) return;
+  const sel=selected.has(it.path);
+  const add=(txt, fn, cls)=>{ const d=document.createElement('div'); d.className='mi'+(cls?' '+cls:''); d.textContent=txt;
+    d.addEventListener('click', (ev)=>{ ev.stopPropagation(); hideCtxMenu(); fn(); }); return d; };
+  m.innerHTML='';
+  const head=document.createElement('div'); head.className='mih'; head.textContent='📁 '+it.name; m.appendChild(head);
+  m.appendChild(add('⬇ 폴더 ZIP 다운로드', ()=>zipDownload(it.path)));
+  const sep=document.createElement('div'); sep.className='sep'; m.appendChild(sep);
+  m.appendChild(add(sel?'☑ 다운로드 선택 해제':'⬜ 다운로드 선택에 추가', ()=>toggleFolderSelect(it, row, cb)));
+  // 위치(뷰포트 밖으로 넘치지 않게 클램프)
+  m.style.left='0px'; m.style.top='0px'; m.classList.add('show');
+  const w=m.offsetWidth, h=m.offsetHeight;
+  m.style.left=Math.max(4, Math.min(x, window.innerWidth  - w - 8))+'px';
+  m.style.top =Math.max(4, Math.min(y, window.innerHeight - h - 8))+'px';
+}
+function toggleFolderSelect(it, row, cb){
+  const now=!selected.has(it.path);
+  if(now) selected.set(it.path,{path:it.path,sha:it.sha,type:it.type}); else selected.delete(it.path);
+  if(now && !multiMode){ multiMode=true; $('selBtn').classList.add('on'); $('tree').classList.add('multi'); }
+  if(cb) cb.checked=now; if(row) row.classList.toggle('checked', now);
+  toast(now?('폴더 선택: '+it.name):('선택 해제: '+it.name));
+}
+// 메뉴 닫기(외부 클릭/스크롤/리사이즈/ESC)
+document.addEventListener('click', hideCtxMenu);
+document.addEventListener('scroll', hideCtxMenu, true);
+window.addEventListener('resize', hideCtxMenu);
+document.addEventListener('keydown', (e)=>{ if(e.key==='Escape') hideCtxMenu(); });
 
 // ── 파일관리자 쓰기 작업 (현재 선택 레포 대상, 토큰은 서버 env) ──
 async function ghWrite(payload){
