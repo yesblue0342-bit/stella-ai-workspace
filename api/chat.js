@@ -130,21 +130,30 @@ ALLOWED only when user says "자세히", "설명해줘", "왜", "상세히":
 [REPO] yesblue0342-bit/stella-ai-workspace | main file: index.html
 [KH] SAP QM/PP consultant, Celltrion BISON project, novelist/poet/rapper/martial artist`;
 
-// ───────── GitHub 의도 감지 ─────────
+// ───────── GitHub 의도 감지 (정밀) ─────────
+// ⚠️ 일반 업무 질문(예: "이 부분 스펙 정리해줘. SAP QM CBO프로그램")이 관리 액션으로
+//    오인되어 "auth 폴더 정리 완료" 같은 엉뚱한 답을 반환하던 버그 수정.
+//    → 아주 명시적인 관리자 명령일 때만 액션으로 처리하고, 그 외는 전부 AI가 답하게 한다.
 function detectGitHubIntent(message) {
-  const m = message.toLowerCase();
-  // auth 폴더 정리
-  if ((m.includes("auth") && (m.includes("정리") || m.includes("폴더") || m.includes("중복"))) ||
-      m.includes("auth-cleanup") || m.includes("auth cleanup")) {
+  const raw = String(message || "");
+  const m = raw.toLowerCase();
+
+  // auth 폴더 정리 — 반드시 'auth' 뒤에 '폴더/cleanup' 이 붙은 명시 명령일 때만.
+  // ('author'·'OAuth'·'정리' 단독 등 흔한 단어에는 절대 걸리지 않게)
+  const authCmd = /auth[\s_-]*(폴더|cleanup|클린업)/.test(m) || m.includes("auth-cleanup") || m.includes("auth cleanup");
+  if (authCmd && /(정리|cleanup|클린업|clean)/.test(m)) {
     return { type: "auth_cleanup" };
   }
-  // 파일 읽기
-  const readMatch = message.match(/(?:읽어|불러|확인해|조회해|보여줘)[^\n]*?([a-zA-Z0-9_\-\/]+\.[a-zA-Z]{2,6})/);
-  if (readMatch) return { type: "read", path: readMatch[1] };
-  // 파일 수정/커밋
-  const updateMatch = message.match(/(?:수정|고쳐|변경|커밋|배포)[^\n]*?([a-zA-Z0-9_\-\/]+\.[a-zA-Z]{2,6})/);
-  if (updateMatch) return { type: "update_intent", path: updateMatch[1] };
-  // GitHub 상태 확인
+
+  // 파일 읽기/수정 — 대상이 '레포 코드 파일'(.html/.js/.json 등)일 때만.
+  //   SAP/업무 파일(.abap/.pdf/.xlsx/.txt 등)이나 파일명이 없으면 일반 질문 → AI가 답한다.
+  const isRepoFile = (p) => /\.(html?|m?jsx?|tsx?|json|css|md|ya?ml|sh|py|env|toml)$/i.test(String(p));
+  const readMatch = raw.match(/(?:읽어|불러|확인해|조회해|보여줘)[^\n]*?([a-zA-Z0-9_\-\/]+\.[a-zA-Z]{2,6})/);
+  if (readMatch && isRepoFile(readMatch[1])) return { type: "read", path: readMatch[1] };
+  const updateMatch = raw.match(/(?:수정|고쳐|변경|커밋|배포)[^\n]*?([a-zA-Z0-9_\-\/]+\.[a-zA-Z]{2,6})/);
+  if (updateMatch && isRepoFile(updateMatch[1])) return { type: "update_intent", path: updateMatch[1] };
+
+  // GitHub 상태 확인 — 'github' 명시가 있을 때만.
   if (m.includes("github") && (m.includes("확인") || m.includes("연결") || m.includes("상태"))) {
     return { type: "github_status" };
   }
