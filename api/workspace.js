@@ -1,5 +1,6 @@
 import { getPool, sql, withRetry } from "../lib/db.js";
 import { requireOwner } from "../lib/session.js";
+import { shouldSkipEmptyOverwrite } from "../lib/workspace-guard.js";
 
 function clean(value) {
   return String(value || "").trim();
@@ -71,11 +72,30 @@ export default async function handler(req, res) {
 
     if (req.method === "POST" || req.method === "PUT") {
       const body = req.body || {};
+      const roomsJson = toJson(body.rooms);
+      const projectsJson = toJson(body.projects);
+      const postsJson = toJson(body.posts);
+
+      // ★ 방어(서버측): 채팅/프로젝트/노트가 모두 빈 저장 요청이면, 기존에 비어있지 않은
+      //   데이터를 덮어쓰지 않는다. 신규/새 환경 기기가 초기 읽기 실패 후 빈 상태를 밀어넣어
+      //   계정 전체 데이터를 파괴하던 사고를 이중으로 차단. (force=1 또는 allowEmpty=true 시 허용)
+      const forced = body.allowEmpty === true || String(req.query?.force || "") === "1";
+      const incoming = { rooms: roomsJson, projects: projectsJson, posts: postsJson };
+      const isEmpty = (v) => v == null || v === "" || v === "[]" || v === "null" || v === "{}";
+      if (isEmpty(roomsJson) && isEmpty(projectsJson) && isEmpty(postsJson) && !forced) {
+        const cur = await pool.request()
+          .input("owner_id", sql.NVarChar(255), ownerId)
+          .query(`SELECT TOP 1 rooms_json, projects_json, posts_json FROM dbo.workspace_state WHERE owner_id = @owner_id`);
+        if (shouldSkipEmptyOverwrite(incoming, cur.recordset[0], forced)) {
+          return res.status(200).json({ ok: true, skipped: true, owner: ownerId, message: "빈 상태 덮어쓰기 차단(기존 데이터 보존)" });
+        }
+      }
+
       await pool.request()
         .input("owner_id", sql.NVarChar(255), ownerId)
-        .input("rooms_json", sql.NVarChar(sql.MAX), toJson(body.rooms))
-        .input("projects_json", sql.NVarChar(sql.MAX), toJson(body.projects))
-        .input("posts_json", sql.NVarChar(sql.MAX), toJson(body.posts))
+        .input("rooms_json", sql.NVarChar(sql.MAX), roomsJson)
+        .input("projects_json", sql.NVarChar(sql.MAX), projectsJson)
+        .input("posts_json", sql.NVarChar(sql.MAX), postsJson)
         .input("member_json", sql.NVarChar(sql.MAX), toJson(body.member))
         .input("drive_index_json", sql.NVarChar(sql.MAX), toJson(body.driveIndex || body.drive_index))
         .query(`

@@ -480,6 +480,10 @@ async function syncFromServer(){
       }
       if(tmp.ok && !d) d = tmp; // 빈 결과라도 일단 보관
     }
+    // ★ 서버 상태 확인 성공 플래그 — 읽기가 성공했을 때만(빈 결과라도) 이후 서버 저장(덮어쓰기)을 허용한다.
+    //   초기 읽기가 실패(콜드스타트/타임아웃/네트워크)한 상태에서 빈 로컬을 서버에 밀어넣어
+    //   다른 기기의 데이터를 파괴하던 치명적 버그(신규 환경 로그인 시 전체 소실)를 차단.
+    if(d && d.ok) _serverPullOk = true;
     if(!d || !d.ok) return;
 
     // 서버 데이터 개수 스냅샷 기록 (덮어쓰기 보호용)
@@ -569,12 +573,20 @@ window.addEventListener('focus', _maybeResync);
 // ── 서버에 현재 상태 저장 (모든 기기에서 로그아웃/재로그인 시 복원) ──
 var _serverSnapshot = { rooms: 0, projects: 0, posts: 0 }; // 서버 데이터 개수 기억
 var _restoreCompleted = false; // 복원 완료 전에는 절대 저장 안 함
+var _serverPullOk = false; // 서버 상태를 최소 1회 성공적으로 읽었는가(파괴적 덮어쓰기 방지 핵심)
 
 async function syncToServer(){
   if(!user||!user.id) return;
   // ★ 안전장치 1: 복원이 완료되기 전에는 절대 서버 저장 금지
   if(!_restoreCompleted){
     console.log('[Sync] 복원 미완료 - 서버 저장 차단');
+    return;
+  }
+  // ★ 안전장치 0(최우선): 서버 상태를 한 번도 성공적으로 읽지 못했으면 저장 금지.
+  //   신규/새 환경에서 초기 읽기가 실패한 채로 빈 로컬을 밀어넣어 계정 전체 데이터를
+  //   덮어쓰던 치명 버그 차단. (읽기 성공 후에는 로컬이 서버의 상위집합이므로 저장 안전)
+  if(!_serverPullOk){
+    console.warn('[Sync] 서버 상태 미확인(초기 읽기 실패) - 덮어쓰기 차단(데이터 보호). 다음 동기화 때 재시도됨.');
     return;
   }
   // ★ 안전장치 2: 의미있는 채팅 계산 (새 채팅 + 빈 메시지 제외)
@@ -1136,7 +1148,7 @@ function formatSearchReferences(results){if(!Array.isArray(results)||!results.le
 // 채팅 히스토리 Drive에서 로드 (새로 접속 시)
 async function loadChatHistoryFromDrive(){
   try{
-    const r=await fetchWithRetry('/api/hybrid-chat-list?userId='+encodeURIComponent(user.id),{cache:'no-store'},3,12000);
+    const r=authNudge(await fetchWithRetry('/api/hybrid-chat-list?userId='+encodeURIComponent(user.id),{cache:'no-store',headers:authHeaders()},3,12000));
     if(!r.ok)return;
     const d=await r.json();
     // hybrid-chat-list는 items 반환, 호환 처리
