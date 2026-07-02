@@ -14,6 +14,8 @@
 <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/dompurify@3/dist/purify.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js"></script>
 <script src="/js/stella-md.js"></script>
 <script src="/js/sidebar-search.js"></script>
 <script src="/js/fetch-retry.js"></script>
@@ -1065,7 +1067,6 @@ function openAction(i){if(i.type==='room')openMenu(i.title,[{label:'채팅방 �
 function renameProject(pid){const p=projects.find(x=>x.id===pid);if(!p)return;const n=prompt('프로젝트 이름 변경',p.name);if(n?.trim()){p.name=n.trim();saveProjects();renderAll()}}function deleteProject(pid){const p=projects.find(x=>x.id===pid);if(!p)return;if(!confirm(`"${p.name}" 프로젝트를 삭제할까요?\n채팅은 미분류로 이동됩니다.`))return;rooms.forEach(r=>{if(r.projectId===pid)r.projectId=null});projects=projects.filter(x=>x.id!==pid);activeProjectId='all';saveProjects();saveRooms();renderAll()}function renameRoom(rid){const r=rooms.find(x=>x.id===rid);if(!r)return;const n=prompt('채팅방 이름 변경',r.name);if(n?.trim()){r.name=n.trim();r.updatedAt=new Date().toISOString();saveRooms();renderAll()}}function pickProject(){const list=['0. 미분류',...projects.map((p,i)=>`${i+1}. ${p.name}`)].join('\n');const v=prompt('프로젝트 번호 선택\n\n'+list,'0');if(v===null)return undefined;const n=Number(v);if(!Number.isInteger(n)||n<0||n>projects.length)return undefined;return n===0?null:projects[n-1].id}function moveRoom(rid){const r=rooms.find(x=>x.id===rid);const p=pickProject();if(!r||p===undefined)return;r.projectId=p;r.updatedAt=new Date().toISOString();activeProjectId=p||'none';saveRooms();renderAll()}function copyRoom(rid){const r=rooms.find(x=>x.id===rid);const p=pickProject();if(!r||p===undefined)return;const c={...r,id:'r_'+uid(),projectId:p,name:r.name+' 복사본',messages:r.messages.map(m=>({...m}))};rooms.unshift(c);activeRoomId=c.id;activeProjectId=p||'none';saveRooms();renderAll()}function deleteRoom(rid){const r=rooms.find(x=>x.id===rid);if(!r)return;if(!confirm(`"${r.name}" 채팅방을 삭제할까요?`))return;rooms=rooms.filter(x=>x.id!==rid);if(activeRoomId===rid)activeRoomId=rooms[0]?.id||null;saveRooms();renderAll()}
 function renamePost(pid){const p=posts.find(x=>x.id===pid);if(!p)return;const n=prompt('게시글 제목 변경',p.title);if(n?.trim()){p.title=n.trim();savePosts();renderAll()}}function deletePost(pid){const p=posts.find(x=>x.id===pid);if(!p)return;if(confirm(`"${p.title}" 게시글을 삭제할까요?`)){posts=posts.filter(x=>x.id!==pid);savePosts();renderAll()}}function renameCategory(c){const n=prompt('카테고리 이름 변경',c);if(n?.trim()){posts.forEach(p=>{if((p.category||'기본')===c)p.category=n.trim()});savePosts();renderAll()}}function deleteCategory(c){if(confirm(`"${c}" 카테고리와 게시글을 삭제할까요?`)){posts=posts.filter(p=>(p.category||'기본')!==c);savePosts();renderAll()}}
 function renderMessages(){const r=activeRoom(),box=$('#messages');box.innerHTML='';(r?.messages||[]).forEach(m=>addMessage(m.role,m.text,false));box.scrollTop=box.scrollHeight;renderHeader()}function addMessage(role,text,persist=true,meta={}){const box=$('#messages'),row=document.createElement('div');row.className='row '+role;if(role==='ai'){const av=document.createElement('div');av.className='avatar';av.textContent='S';row.appendChild(av)}const b=document.createElement('div');b.className='bubble';role==='ai'?renderAnswer(b,text):b.textContent=text;if(role==='user'&&meta.attachments?.length){const d=document.createElement('div');d.style.marginTop='8px';d.style.color='#6b7280';d.textContent=meta.attachments.map(f=>'첨부 '+f.name).join(', ');b.appendChild(d)}row.appendChild(b);box.appendChild(row);box.scrollTop=box.scrollHeight;if(persist){const r=activeRoom();r.messages.push({role,text,createdAt:new Date().toISOString()});r.updatedAt=new Date().toISOString();if(role==='user'&&(r.name==='새 채팅'||!r.name))r.name=text.slice(0,28)||'첨부 파일 분석';saveRooms();renderHeader();renderProjectTree();renderChatTree()}}
-function renderAnswer(el,text){const tools=document.createElement('div');tools.className='download-tools';const stamp=new Date().toISOString().replace(/[:.]/g,'-').slice(0,19);tools.append(btn('TXT 다운로드',()=>downloadText(`stella-answer-${stamp}.txt`,text,'text/plain;charset=utf-8')));tools.append(btn('Markdown 다운로드',()=>downloadText(`stella-answer-${stamp}.md`,text,'text/markdown;charset=utf-8')));el.appendChild(tools);String(text||'').split(/\n{2,}/).map(x=>x.trim()).filter(Boolean).forEach(t=>{const pp=document.createElement('p');pp.textContent=t;el.appendChild(pp)})}
 function btn(t,fn){const b=document.createElement('button');b.className='download-btn';b.type='button';b.textContent=t;b.onclick=fn;return b}function downloadText(name,content,mime){const blob=new Blob([content],{type:mime});const url=URL.createObjectURL(blob);const a=document.createElement('a');a.href=url;a.download=name;document.body.appendChild(a);a.click();setTimeout(()=>{a.remove();URL.revokeObjectURL(url)},1000)}function roomText(r=activeRoom()){return (r?.messages||[]).map(m=>`${m.role==='ai'?'Stella':'나'}:\n${m.text}`).join('\n\n---\n\n')}
 async function extractFile(file){const name=file.name||'file',lower=name.toLowerCase(),type=file.type||'';try{if(type.startsWith('image/')||/\.(png|jpe?g|webp|bmp)$/i.test(lower)){const rawUrl=await readData(file);const dataUrl=await resizeImageDataUrl(rawUrl,1568,0.85);let text=`[이미지 첨부: ${name}]`;if(window.Tesseract){try{const res=await Promise.race([Tesseract.recognize(dataUrl,'kor+eng'),new Promise((_,rej)=>setTimeout(()=>rej(new Error('OCR 시간초과(이미지는 첨부됨)')),20000))]);text+='\n\n[OCR 추출 텍스트]\n'+(res?.data?.text?.trim()||'추출된 텍스트 없음')}catch(e){text+='\n\n[OCR 오류] '+(e.message||e)}}return{name,type:'image/jpeg',size:file.size,dataUrl,text}}if(lower.endsWith('.pdf')&&window.pdfjsLib){const pdf=await pdfjsLib.getDocument({data:await file.arrayBuffer()}).promise;let pages=[];for(let p=1;p<=Math.min(pdf.numPages,30);p++){const page=await pdf.getPage(p),tc=await page.getTextContent();pages.push(`[PDF ${p}페이지]\n`+tc.items.map(i=>i.str).join(' '))}return{name,type,size:file.size,text:pages.join('\n\n')}}if(/\.docx$/i.test(lower)&&window.mammoth){const r=await mammoth.extractRawText({arrayBuffer:await file.arrayBuffer()});return{name,type,size:file.size,text:r.value||''}}if(/\.(xlsx|xls|csv)$/i.test(lower)&&window.XLSX){const wb=XLSX.read(await file.arrayBuffer(),{type:'array'});return{name,type,size:file.size,text:wb.SheetNames.map(sn=>`[시트: ${sn}]\n`+XLSX.utils.sheet_to_csv(wb.Sheets[sn])).join('\n\n')}}return{name,type,size:file.size,text:await file.text()}}catch(e){return{name,type,size:file.size,text:`파일 읽기 오류: ${e.message||e}`}}}function readData(file){return new Promise((res,rej)=>{const r=new FileReader();r.onload=()=>res(String(r.result||''));r.onerror=()=>rej(r.error);r.readAsDataURL(file)})}
 /* 큰 이미지를 긴 변 maxDim(px)로 canvas 리사이즈 + JPEG 압축 (Vercel 4.5MB 본문/비전 토큰 절감) */
@@ -1310,7 +1311,54 @@ function xlsxUrlFromText(text){const rows=tableRowsFromText(text);if(window.XLSX
 function downloadBlobFile(name,content,mime){const url=blobUrl(content,mime);const a=makeDownloadLink('',name,url);document.body.appendChild(a);a.click();setTimeout(function(){a.remove()},1000)}
 function downloadDocFromText(name,text){const html='<!doctype html><html><head><meta charset="utf-8"></head><body style="font-family:Arial, sans-serif;line-height:1.7;white-space:pre-wrap">'+mdEscapeHtml(text)+'</body></html>';downloadBlobFile(name,html,'application/msword;charset=utf-8')}
 function downloadPptFromText(name,text){const html='<!doctype html><html><head><meta charset="utf-8"></head><body><section style="font-family:Arial, sans-serif;font-size:24px;line-height:1.6;white-space:pre-wrap">'+mdEscapeHtml(text)+'</section></body></html>';downloadBlobFile(name,html,'application/vnd.ms-powerpoint;charset=utf-8')}
-function renderAnswer(el,text){try{const stamp=new Date().toISOString().replace(/[:.]/g,'-').slice(0,19);const hasTable=tableRowsFromText(text).length>0;if(wantsDownload()||hasTable){const tools=document.createElement('div');tools.className='download-tools';try{const xl=xlsxUrlFromText(text);if(xl&&xl.url)tools.append(makeDownloadLink('📥 Excel 파일 다운로드','stella-answer-'+stamp+'.'+xl.ext,xl.url));}catch(e){}if(wantsDownload()){try{tools.append(makeDownloadLink('TXT 다운로드','stella-answer-'+stamp+'.txt',blobUrl(text,'text/plain;charset=utf-8')));tools.append(btn('Word 다운로드',function(){downloadDocFromText('stella-answer-'+stamp+'.doc',text)}));tools.append(btn('PPT 다운로드',function(){downloadPptFromText('stella-answer-'+stamp+'.ppt',text)}));tools.append(makeDownloadLink('Markdown 다운로드','stella-answer-'+stamp+'.md',blobUrl(text,'text/markdown;charset=utf-8')))}catch(e){}}if(tools.childNodes.length)el.appendChild(tools)}}catch(e){}if(!(window.stellaRenderMarkdown&&window.stellaRenderMarkdown(el,text)))renderMarkdownLite(el,text)}
+// PDF 다운로드 — jsPDF 표준폰트는 한글 글리프가 없어(빈 박스로 깨짐) html2canvas로
+// 실제 렌더된 DOM(브라우저 폰트=한글 정상 표시)을 캡처해 이미지로 여러 페이지에 붙인다.
+async function downloadPdfFromText(name,text,btnEl){
+  var origLabel = btnEl ? btnEl.textContent : '';
+  if(!(window.jspdf&&window.jspdf.jsPDF&&window.html2canvas)){ stellaShowToast('PDF 라이브러리 로딩 중입니다. 잠시 후 다시 시도해 주세요.'); return; }
+  if(btnEl){ btnEl.textContent='생성 중…'; btnEl.disabled=true; }
+  var holder=document.createElement('div');
+  holder.style.cssText='position:fixed;left:-99999px;top:0;width:760px;padding:36px;background:#fff;color:#111827;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"Malgun Gothic",sans-serif;font-size:14px;line-height:1.75;';
+  document.body.appendChild(holder);
+  try{
+    if(!(window.stellaRenderMarkdown&&window.stellaRenderMarkdown(holder,text))) holder.textContent=String(text||'');
+    holder.querySelectorAll('.stella-table-tools,.copy-btn,.url-copy').forEach(function(n){n.remove();});
+    await new Promise(function(r){setTimeout(r,60);}); // 레이아웃 안정화
+    var canvas=await window.html2canvas(holder,{scale:2,backgroundColor:'#ffffff',useCORS:true});
+    var jsPDF=window.jspdf.jsPDF;
+    var pdf=new jsPDF({unit:'pt',format:'a4'});
+    var pageW=pdf.internal.pageSize.getWidth(), pageH=pdf.internal.pageSize.getHeight();
+    var imgW=pageW, imgH=canvas.height*(imgW/canvas.width);
+    var imgData=canvas.toDataURL('image/jpeg',0.95);
+    var heightLeft=imgH, pos=0;
+    pdf.addImage(imgData,'JPEG',0,pos,imgW,imgH);
+    heightLeft-=pageH;
+    while(heightLeft>0){ pos=heightLeft-imgH; pdf.addPage(); pdf.addImage(imgData,'JPEG',0,pos,imgW,imgH); heightLeft-=pageH; }
+    pdf.save(name);
+  }catch(e){ console.error('[PDF]',e); stellaShowToast('PDF 생성 실패: '+(e.message||e)); }
+  finally{ holder.remove(); if(btnEl){ btnEl.textContent=origLabel; btnEl.disabled=false; } }
+}
+// 답변 하단 다운로드 툴바 — 표 유무·요청 문구와 무관하게 항상 제공(전체 내용 TXT/Word/PDF/PPT/MD +
+// 표가 있으면 Excel). 특정 키워드로 물어야만 버튼이 뜨던 문제(요청해도 안 뜸) 근본 해결.
+function renderAnswer(el,text){
+  try{
+    const stamp=new Date().toISOString().replace(/[:.]/g,'-').slice(0,19);
+    const hasTable=tableRowsFromText(text).length>0;
+    if(String(text||'').trim()){
+      const tools=document.createElement('div');tools.className='download-tools';
+      try{ if(hasTable){ const xl=xlsxUrlFromText(text); if(xl&&xl.url)tools.append(makeDownloadLink('📥 Excel 다운로드','stella-answer-'+stamp+'.'+xl.ext,xl.url)); } }catch(e){}
+      try{
+        tools.append(makeDownloadLink('TXT 다운로드','stella-answer-'+stamp+'.txt',blobUrl(text,'text/plain;charset=utf-8')));
+        tools.append(btn('Word 다운로드',function(){downloadDocFromText('stella-answer-'+stamp+'.doc',text)}));
+        tools.append(btn('📄 PDF 다운로드',function(){downloadPdfFromText('stella-answer-'+stamp+'.pdf',text,this)}));
+        tools.append(btn('PPT 다운로드',function(){downloadPptFromText('stella-answer-'+stamp+'.ppt',text)}));
+        tools.append(makeDownloadLink('Markdown 다운로드','stella-answer-'+stamp+'.md',blobUrl(text,'text/markdown;charset=utf-8')));
+      }catch(e){}
+      if(tools.childNodes.length)el.appendChild(tools);
+    }
+  }catch(e){}
+  if(!(window.stellaRenderMarkdown&&window.stellaRenderMarkdown(el,text)))renderMarkdownLite(el,text);
+}
 /* /stella-rich-answer-download-override */
 var _stLastW=window.innerWidth;window.addEventListener('resize',function(){/* 키보드(높이만 변함)로 인한 리사이즈에선 사이드바 상태 유지 → 검색창 탭 시 드로어 닫힘 방지. 가로폭 변할 때(브레이크포인트 전환)만 재설정 */if(window.innerWidth===_stLastW)return;_stLastW=window.innerWidth;syncSidebarLayout();});
 window.addEventListener('DOMContentLoaded',()=>{ensureModelOptions();initEvents();initAuth();syncSidebarLayout();try{warmupDb();}catch(e){}});
