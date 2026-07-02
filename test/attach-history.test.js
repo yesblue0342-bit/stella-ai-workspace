@@ -79,5 +79,42 @@ test("첨부 주입 총량 예산 8,000자(최신 우선) — TPM 429 방지", (
 
 test("addMessage persist 가 att 를 저장하도록 변경됐는지(소스 검증)", () => {
   assert.match(html, /_msg\.att=meta\.attachments/, "메시지 저장 시 첨부 텍스트 보존");
-  assert.match(html, /buildChatHistory\(activeRoom\(\)\?\.messages,10\)/, "send()가 buildChatHistory 사용");
+  assert.match(html, /buildChatHistory\(activeRoom\(\)\?\.messages,10,msg\)/, "send()가 buildChatHistory(+query) 사용");
+  assert.match(html, /stellaCondense\(f\.text,msg,12000\)/, "현재 턴 첨부도 발췌 캡 적용(무제한 금지)");
+});
+
+// ── stellaCondense: 질문 관련부분 발췌(토큰 절약, ChatGPT식 검색·발췌 경량판) ──
+function loadCondense() {
+  const start = html.indexOf("function stellaCondense(");
+  assert.ok(start >= 0, "stellaCondense 정의 존재");
+  let i = html.indexOf("{", start), depth = 0, end = -1;
+  for (let j = i; j < html.length; j++) {
+    const c = html[j];
+    if (c === "{") depth++;
+    else if (c === "}") { depth--; if (depth === 0) { end = j + 1; break; } }
+  }
+  return new Function(html.slice(start, end) + "; return stellaCondense;")();
+}
+
+test("stellaCondense: 짧은 파일은 그대로(무손실)", () => {
+  const f = loadCondense();
+  const t = "짧은 양식 내용";
+  assert.equal(f(t, "양식대로 만들어줘", 8000), t);
+});
+
+test("stellaCondense: 큰 파일은 질문 키워드 구간만 발췌 + 캡", () => {
+  const f = loadCondense();
+  const filler = Array.from({ length: 500 }, (_, i) => "무관한 내용 라인 " + i).join("\n");
+  const t = filler + "\nQM022 검사 특성 조회 절차\n입력: Plant US11\n" + filler;
+  const out = f(t, "QM022 테스트 절차 알려줘", 2000);
+  assert.ok(out.length <= 2100, "캡 준수: " + out.length);
+  assert.ok(out.includes("QM022"), "키워드 구간 포함");
+  assert.ok(out.includes("US11"), "주변(±2줄) 문맥 포함");
+});
+
+test("stellaCondense: 키워드 미매칭 시 앞부분 폴백", () => {
+  const f = loadCondense();
+  const t = "z".repeat(20000);
+  const out = f(t, "완전무관질문", 3000);
+  assert.ok(out.length <= 3100 && out.startsWith("zzz"));
 });
