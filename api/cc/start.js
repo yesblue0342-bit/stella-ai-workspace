@@ -5,14 +5,15 @@ import { getMeta, setMeta, saveSession } from "../../lib/cc-db.mjs";
 export default async function handler(req, res) {
   if (req.method !== "POST") return res.status(405).json({ error: "POST only" });
   try {
-    const { model: reqModel, prompt, title, budgetUsd, omc, attachments } = req.body || {};
+    const { model: reqModel, prompt, title, budgetUsd, omc, vff, attachments } = req.body || {};
     if (!prompt || !String(prompt).trim()) return res.status(400).json({ error: "prompt required" });
     const model = isValidModel(reqModel) ? reqModel : DEFAULT_MODEL; // 화이트리스트 검증
     const budget = Math.max(0.01, Math.min(Number(budgetUsd) || 20, 50)); // 기본 $20, 상한 $50
     const useOmc = !!omc;
+    const useVff = vff === true;
 
     const environmentId = await MA.getOrCreateEnvironment(getMeta, setMeta);
-    const agentId = await MA.getOrCreateAgent(model, useOmc, getMeta, setMeta);
+    const agentId = await MA.getOrCreateAgent(model, useOmc, useVff, getMeta, setMeta);
     const rawTitle = (title && String(title).trim()) || String(prompt).trim();
     const title2 = rawTitle.replace(/[\p{Cc}\p{Cf}]/gu, " ").replace(/\s+/g, " ").trim().slice(0, 60) || "Stella Agent Code";
     const sessionId = await MA.createSession(agentId, environmentId, title2);

@@ -53,17 +53,17 @@ export async function getOrCreateEnvironment(getMeta, setMeta) {
   try { setMeta && (await setMeta("cc_env_id", _envId)); } catch {}
   return _envId;
 }
-export async function getOrCreateAgent(model, omc, getMeta, setMeta) {
-  const cacheKey = model + (omc ? "+omc" : "");
+export async function getOrCreateAgent(model, omc, vff, getMeta, setMeta) {
+  const cacheKey = model + (omc ? "+omc" : "") + (vff ? "+vff" : "");
   if (_agentCache.has(cacheKey)) return _agentCache.get(cacheKey);
   const metaKey = "cc_agent_" + cacheKey;
   try { const m = getMeta && (await getMeta(metaKey)); if (m) { _agentCache.set(cacheKey, m); return m; } } catch {}
   const agent = await maFetch("/v1/agents", {
     method: "POST",
     body: {
-      name: "Stella Agent Code" + (omc ? " +OMC" : "") + " (" + model + ")",
+      name: "Stella Agent Code" + (omc ? " +OMC" : "") + (vff ? " +VFF" : "") + " (" + model + ")",
       model,
-      system: buildAgentSystem(omc),
+      system: buildAgentSystem(omc, vff),
       tools: [{ type: "agent_toolset_20260401" }],
     },
   });
