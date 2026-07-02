@@ -41,12 +41,17 @@ jobs:
       - name: SSH deploy (git pull + 도커 재빌드/재실행)
         if: steps.chk.outputs.ready == 'true'
         uses: appleboy/ssh-action@v1.2.0
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_SHA: ${{ github.sha }}
+          GH_REPO: ${{ github.repository }}
         with:
           host: ${{ secrets.OCI_SSH_HOST }}
           username: ${{ secrets.OCI_SSH_USER }}
           key: ${{ secrets.OCI_SSH_KEY }}
           port: ${{ secrets.OCI_SSH_PORT || '22' }}
           command_timeout: 20m
+          envs: GH_TOKEN,GH_SHA,GH_REPO
           script: |
             set -e
             APP_DIR="${{ secrets.OCI_APP_DIR }}"
@@ -60,38 +65,16 @@ jobs:
             git reset --hard origin/main
             bash deploy/run-stella-oci.sh
             echo "✅ OCI 재배포 완료"
-            # ── 배포 후 스모크: 0Program 저장 파이프라인 실확인 ──
-            # 고정 파일명(_deploy_smoke.txt) 업서트 → Drive 스모크 파일은 항상 1개만 유지(중복 없음).
-            # ★ 컨테이너는 호스트에 포트를 열지 않음(npm_default 내부 전용) → docker exec 로 내부에서 호출.
-            # 실패해도 배포는 성공 처리하되 로그로 결과를 남긴다.
+            # ── 배포 후 스모크: 0Program 저장 실검증(컨테이너 내부) + 진단 + 결과 공개 ──
+            # 결과는 ci-smoke 브랜치 ci/smoke-latest.json 으로 푸시(외부 raw 확인용). 시크릿 값 미노출.
             sleep 6
             if docker info >/dev/null 2>&1; then D="docker"; else D="sudo docker"; fi
-            SMOKE=$($D exec stella-workspace curl -s -m 25 -X POST http://127.0.0.1:8970/api/db/save-program \
+            DIAG=$($D exec stella-workspace curl -s -m 20 http://127.0.0.1:8970/api/drive-diagnostics || echo '{"err":"diag_fail"}')
+            SMOKE=$($D exec stella-workspace curl -s -m 30 -X POST http://127.0.0.1:8970/api/db/save-program \
               -H 'Content-Type: application/json' \
-              -d "{\"app\":\"deploy\",\"title\":\"smoke\",\"ext\":\"txt\",\"fixedName\":\"_deploy_smoke.txt\",\"content\":\"deploy smoke $(git rev-parse --short HEAD) $(date -u +%FT%TZ)\"}" || true)
+              -d "{\"app\":\"deploy\",\"title\":\"smoke\",\"ext\":\"txt\",\"fixedName\":\"_deploy_smoke.txt\",\"content\":\"deploy smoke $GH_SHA $(date -u +%FT%TZ)\"}" || echo '{"err":"smoke_fail"}')
             echo "SMOKE_0PROGRAM: $SMOKE"
-
-      - name: Smoke — 0Program 저장 실검증 + 진단(결과를 ci-smoke 브랜치 파일로 공개)
-        if: steps.chk.outputs.ready == 'true'
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          sleep 3
-          BASE=https://stella.xn--hu5b23z.com
-          DIAG=$(curl -s -m 20 "$BASE/api/drive-diagnostics" || echo '{"err":"diag_curl_fail"}')
-          BODY=$(curl -s -m 30 -X POST "$BASE/api/db/save-program" \
-            -H 'Content-Type: application/json' \
-            -d "{\"app\":\"deploy\",\"title\":\"smoke\",\"ext\":\"txt\",\"fixedName\":\"_deploy_smoke.txt\",\"content\":\"deploy smoke ${GITHUB_SHA::7} $(date -u +%FT%TZ)\"}" || echo '{"err":"curl_fail"}')
-          echo "SMOKE_0PROGRAM: $BODY"
-          echo "DIAG: $DIAG"
-          # 결과를 ci-smoke 브랜치의 ci/smoke-latest.json 으로 커밋(외부에서 raw 로 확인 가능)
-          API="https://api.github.com/repos/${GITHUB_REPOSITORY}"
-          AUTH="Authorization: Bearer $GH_TOKEN"
-          curl -s -X POST -H "$AUTH" "$API/git/refs" -d "{\"ref\":\"refs/heads/ci-smoke\",\"sha\":\"$GITHUB_SHA\"}" >/dev/null 2>&1 || true
-          CONTENT=$(jq -n --arg sha "$GITHUB_SHA" --argjson smoke "${BODY:-null}" --argjson diag "${DIAG:-null}" \
-            '{sha:$sha, at:(now|todate), smoke:$smoke, diag:$diag}' 2>/dev/null | base64 -w0)
-          PREV=$(curl -s -H "$AUTH" "$API/contents/ci/smoke-latest.json?ref=ci-smoke" | jq -r '.sha // empty')
-          jq -n --arg c "$CONTENT" --arg p "$PREV" \
-            '{message:"ci: smoke result", content:$c, branch:"ci-smoke"} + (if $p=="" then {} else {sha:$p} end)' \
-            | curl -s -X PUT -H "$AUTH" "$API/contents/ci/smoke-latest.json" -d @- >/dev/null || true
-          echo "$BODY" | grep -q '"ok":true' || { echo "::error::0Program 스모크 실패"; exit 1; }
+            echo "DIAG: $DIAG"
+            export SMOKE DIAG
+            echo aW1wb3J0IGpzb24sb3MsYmFzZTY0LHVybGxpYi5yZXF1ZXN0CmRlZiBsb2Fkaih2KToKICAgIHRyeTogcmV0dXJuIGpzb24ubG9hZHModikKICAgIGV4Y2VwdCBFeGNlcHRpb246IHJldHVybiB7InJhdyI6IHN0cih2KVs6NDAwXX0KcGF5bG9hZD17InNoYSI6b3MuZW52aXJvbi5nZXQoIkdIX1NIQSIsIiIpLCJzbW9rZSI6bG9hZGoob3MuZW52aXJvbi5nZXQoIlNNT0tFIiwiIikpLCJkaWFnIjpsb2Fkaihvcy5lbnZpcm9uLmdldCgiRElBRyIsIiIpKX0KYm9keT1iYXNlNjQuYjY0ZW5jb2RlKGpzb24uZHVtcHMocGF5bG9hZCxlbnN1cmVfYXNjaWk9RmFsc2UsaW5kZW50PTEpLmVuY29kZSgpKS5kZWNvZGUoKQpyZXBvPW9zLmVudmlyb24uZ2V0KCJHSF9SRVBPIik7IHRvaz1vcy5lbnZpcm9uLmdldCgiR0hfVE9LRU4iKQphcGk9Imh0dHBzOi8vYXBpLmdpdGh1Yi5jb20vcmVwb3MvIityZXBvCmRlZiByZXEobWV0aG9kLHVybCxkYXRhPU5vbmUpOgogICAgcj11cmxsaWIucmVxdWVzdC5SZXF1ZXN0KHVybCxtZXRob2Q9bWV0aG9kLGRhdGE9KGpzb24uZHVtcHMoZGF0YSkuZW5jb2RlKCkgaWYgZGF0YSBlbHNlIE5vbmUpLAogICAgICAgIGhlYWRlcnM9eyJBdXRob3JpemF0aW9uIjoiQmVhcmVyICIrdG9rLCJBY2NlcHQiOiJhcHBsaWNhdGlvbi92bmQuZ2l0aHViK2pzb24iLCJVc2VyLUFnZW50Ijoic21va2UifSkKICAgIHRyeToKICAgICAgICB3aXRoIHVybGxpYi5yZXF1ZXN0LnVybG9wZW4ocix0aW1lb3V0PTIwKSBhcyBmOiByZXR1cm4ganNvbi5sb2FkcyhmLnJlYWQoKSBvciBiInt9IikKICAgIGV4Y2VwdCBFeGNlcHRpb24gYXMgZToKICAgICAgICB0cnk6IHJldHVybiBqc29uLmxvYWRzKGUucmVhZCgpKQogICAgICAgIGV4Y2VwdCBFeGNlcHRpb246IHJldHVybiB7ImVyciI6c3RyKGUpWzoxMjBdfQpyZXEoIlBPU1QiLGFwaSsiL2dpdC9yZWZzIix7InJlZiI6InJlZnMvaGVhZHMvY2ktc21va2UiLCJzaGEiOm9zLmVudmlyb24uZ2V0KCJHSF9TSEEiKX0pCnByZXY9cmVxKCJHRVQiLGFwaSsiL2NvbnRlbnRzL2NpL3Ntb2tlLWxhdGVzdC5qc29uP3JlZj1jaS1zbW9rZSIpLmdldCgic2hhIikKcHV0PXsibWVzc2FnZSI6ImNpOiBzbW9rZSByZXN1bHQiLCJjb250ZW50Ijpib2R5LCJicmFuY2giOiJjaS1zbW9rZSJ9CmlmIHByZXY6IHB1dFsic2hhIl09cHJldgpyZXM9cmVxKCJQVVQiLGFwaSsiL2NvbnRlbnRzL2NpL3Ntb2tlLWxhdGVzdC5qc29uIixwdXQpCnByaW50KCJzbW9rZS1yZXBvcnQ6IixyZXMuZ2V0KCJjb250ZW50Iix7fSkuZ2V0KCJwYXRoIikgb3IgcmVzLmdldCgiZXJyIikgb3IgcmVzLmdldCgibWVzc2FnZSIpKQo= | base64 -d | python3 - || true
+            echo "$SMOKE" | grep -q '"ok":true' || { echo "::error::0Program 스모크 실패"; exit 1; }
