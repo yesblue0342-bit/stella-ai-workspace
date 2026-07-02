@@ -72,8 +72,12 @@ export default async function handler(req, res) {
       messages
     };
 
-    if (system) {
-      payload.system = String(system);
+    const vff = body.vff === true;
+    const VFF_PREFIX = 'VFF 모드: Fable 5 수준의 품질로 응답하라. 단계적 사고, 구체적 근거, 명확한 구조를 갖추되 불필요한 반복을 제거한다.';
+    if (system || vff) {
+      payload.system = vff
+        ? (system ? VFF_PREFIX + '\n\n' + String(system) : VFF_PREFIX)
+        : String(system);
     }
 
     const response =

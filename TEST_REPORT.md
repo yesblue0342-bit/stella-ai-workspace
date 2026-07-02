@@ -607,3 +607,19 @@
 - 이번 세션 커밋 7건: 메타DB 풀재연결 / Drive resumable 업로드 / Vercel 제거 1·2·3 / Vercel 문자열정리 / SW v90.
 - node --check: 변경된 모든 .js/.mjs 통과. tests/test_cli.mjs 8/8(수동).
 - 라이브 스모크(server.mjs :8971): /talk·/hub 200, 차단 api 404, /api/health 핸들러 실행, CSP 헤더 정상.
+
+## 2026-07-02 · VFF(Value-for-Fable) 토글 UI 추가
+
+| 파일 | 변경 | 검증 |
+|------|------|------|
+| claude.client.js | VFF_PROMPT, VFF_STORAGE_KEY, getVffEnabled(), setVffEnabled() export 추가 | node --check OK |
+| api/claude.js | body.vff===true 시 시스템 프롬프트 앞에 VFF 지시문 주입 | node --check OK |
+| api/chat.js | Claude 경로(isClaudeModel)에서 body.vff===true 시 VFF 지시문 주입 | node --check OK |
+| gpt.html | CSS #vffWrap/toggle + HTML #vffWrap 체크박스 + getVff/onVffChange/syncModelBtn(VFF 쇼하이드) + API 호출 2곳에 vff: 추가 | new Function 3블록 OK |
+| abap.html | HTML #abapVffWrap 체크박스 + abapGetVff/onAbapVffChange/syncAbapVff + initEvents에 model change→syncAbapVff + API 호출 vff: 추가 | new Function 4블록 OK |
+| sw.js | stella-v100 → stella-v101 (캐시 버전 bump) | node --check OK |
+
+- 동작: Claude 모델 선택 시 VFF 체크박스 자동 표시(디폴트 ON), 비-Claude 선택 시 숨김
+- localStorage: stella_vff_enabled (미설정=true, 'true'=true, 'false'=false)
+- VFF 지시문: "VFF 모드: Fable 5 수준의 품질로 응답하라. 단계적 사고, 구체적 근거, 명확한 구조를 갖추되 불필요한 반복을 제거한다." → 시스템 프롬프트 앞에 삽입
+- 회귀: vff 미전달(=false) 시 지시문 미삽입으로 기존 동작 완전 보장. SW v101 캐시 갱신

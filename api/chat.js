@@ -565,7 +565,10 @@ export default async function handler(req, res) {
       timings.routed = true; timings.searchAlways = useSearch; timings.driveFirst = needsDrive; timings.tableUsed = wantTable;
     } else if (isClaudeModel) {
       provider = "claude";
-      answer = await callClaude({ model, system: prompt, history, message: aiMessage, images });
+      const _vff = body.vff === true;
+      const _vffPrefix = 'VFF 모드: Fable 5 수준의 품질로 응답하라. 단계적 사고, 구체적 근거, 명확한 구조를 갖추되 불필요한 반복을 제거한다.';
+      const _finalPrompt = _vff ? _vffPrefix + '\n\n' + prompt : prompt;
+      answer = await callClaude({ model, system: _finalPrompt, history, message: aiMessage, images });
     } else {
       provider = "openai";
       answer = await callOpenAI({ model, system: prompt, history, message: aiMessage, images, bare: !!body.bare });

@@ -33,6 +33,20 @@ export function isClaudeModel(modelId) {
     .includes("claude");
 }
 
+export const VFF_PROMPT = 'VFF 모드: Fable 5 수준의 품질로 응답하라. 단계적 사고, 구체적 근거, 명확한 구조를 갖추되 불필요한 반복을 제거한다.';
+export const VFF_STORAGE_KEY = 'stella_vff_enabled';
+
+export function getVffEnabled() {
+  try {
+    const v = localStorage.getItem(VFF_STORAGE_KEY);
+    return v === null ? true : v === 'true';
+  } catch { return true; }
+}
+
+export function setVffEnabled(val) {
+  try { localStorage.setItem(VFF_STORAGE_KEY, String(!!val)); } catch {}
+}
+
 export function normalizeClaudeModel(modelId) {
   const model = String(modelId || "").toLowerCase();
 
@@ -105,5 +119,9 @@ export default {
   isClaudeModel,
   normalizeClaudeModel,
   buildClaudeMessages,
-  callClaude
+  callClaude,
+  VFF_PROMPT,
+  VFF_STORAGE_KEY,
+  getVffEnabled,
+  setVffEnabled
 };

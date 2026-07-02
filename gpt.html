@@ -18,6 +18,7 @@ body:not(.dark) pre.code{background:#1e293b;color:#e2e8f0}
 .modelWrap{position:relative}
 .modelBtn{font-size:12px;padding:8px 12px;border-radius:14px;background:#f3f4f6;border:1px solid #d1d5db;font-weight:800;white-space:nowrap;cursor:pointer}
 body.dark .modelBtn{background:#21262d;border-color:#30363d;color:#e6edf3}
+#vffWrap{display:none;align-items:center;gap:4px;margin-left:4px}#vffToggle{width:13px;height:13px;cursor:pointer}body.dark #vffWrap label{color:#8b949e}
 .composeModel{display:flex;align-items:center;gap:8px;margin-bottom:8px;flex-wrap:wrap}
 .attach-preview{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:6px}
 .attach-thumb{position:relative;width:56px;height:56px;border-radius:10px;overflow:hidden;border:1px solid var(--border)}
@@ -137,7 +138,7 @@ body.dark .np-content textarea{background:#0d1117;color:#e6edf3}
     <div id="apList"><div class="muted">불러오는 중...</div></div>
   </div>
 </div>
-</aside><main class="main"><div class="top"><button class="btn hamb" type="button" onclick="toggleSide()">☰</button><div id="title" class="title">새 채팅</div><div class="spacer"></div><button class="btn themeBtn" type="button" onclick="installPWA()" id="installBtn" style="display:none;font-size:16px;padding:8px 10px;border-radius:12px" title="앱 설치">📲</button><button class="btn themeBtn" type="button" onclick="toggleTheme()" id="themeBtn">🌙</button></div><div id="msgs" class="msgs"></div><div class="compose"><div class="composeModel"><div class="modelWrap"><button class="modelBtn" type="button" onclick="toggleModelMenu()" id="modelBtn">Opus 4.8</button></div><select id="model" style="display:none"><optgroup label="── GPT ──"><option value="chatgpt-5.5-latest">GPT-5.5 최신</option><option value="gpt-5">GPT-5</option><option value="gpt-4o">GPT-4o</option><option value="gpt-4.1">GPT-4.1</option><option value="gpt-4.1-mini">GPT-4.1 Mini</option><option value="gpt-4o-mini">GPT-4o Mini</option></optgroup><optgroup label="── Claude ──"><option value="claude-fable-5">Claude Fable 5 (최신)</option><option value="claude-opus-4-8">Claude Opus 4.8</option><option value="claude-opus-4-7">Claude Opus 4.7</option><option value="claude-opus-4-6">Claude Opus 4.6</option><option value="claude-sonnet-4-6">Claude Sonnet 4.6</option><option value="claude-haiku-4-5-20251001">Claude Haiku 4.5</option></optgroup></select></div><div id="attachPreview" class="attach-preview"></div>
+</aside><main class="main"><div class="top"><button class="btn hamb" type="button" onclick="toggleSide()">☰</button><div id="title" class="title">새 채팅</div><div class="spacer"></div><button class="btn themeBtn" type="button" onclick="installPWA()" id="installBtn" style="display:none;font-size:16px;padding:8px 10px;border-radius:12px" title="앱 설치">📲</button><button class="btn themeBtn" type="button" onclick="toggleTheme()" id="themeBtn">🌙</button></div><div id="msgs" class="msgs"></div><div class="compose"><div class="composeModel"><div class="modelWrap"><button class="modelBtn" type="button" onclick="toggleModelMenu()" id="modelBtn">Opus 4.8</button></div><select id="model" style="display:none"><optgroup label="── GPT ──"><option value="chatgpt-5.5-latest">GPT-5.5 최신</option><option value="gpt-5">GPT-5</option><option value="gpt-4o">GPT-4o</option><option value="gpt-4.1">GPT-4.1</option><option value="gpt-4.1-mini">GPT-4.1 Mini</option><option value="gpt-4o-mini">GPT-4o Mini</option></optgroup><optgroup label="── Claude ──"><option value="claude-fable-5">Claude Fable 5 (최신)</option><option value="claude-opus-4-8">Claude Opus 4.8</option><option value="claude-opus-4-7">Claude Opus 4.7</option><option value="claude-opus-4-6">Claude Opus 4.6</option><option value="claude-sonnet-4-6">Claude Sonnet 4.6</option><option value="claude-haiku-4-5-20251001">Claude Haiku 4.5</option></optgroup></select><div id="vffWrap"><label style="font-size:11px;color:#6b7280;cursor:pointer;display:flex;align-items:center;gap:4px" title="VFF: Fable 5 수준 응답 품질"><input type="checkbox" id="vffToggle" onchange="onVffChange(this.checked)">VFF</label></div></div><div id="attachPreview" class="attach-preview"></div>
 <div class="bar">
 <button type="button" onclick="document.getElementById(\'attachInput\').click()" style="background:none;border:none;cursor:pointer;font-size:20px;padding:4px 6px;color:#6b7280" title="파일/이미지 첨부">+</button>
 <input type="file" id="attachInput" multiple accept="image/*,.pdf,.txt,.md,.csv,.xlsx,.docx" style="display:none" onchange="handleAttach(this.files)">
@@ -443,7 +444,7 @@ async function send(){
           }
           // AI 분석 요청
           const aiPrompt=text+'\n\n'+driveContent+'\n\n위 실제 파일 내용을 바탕으로 분석/요약해주세요. 읽지 못한 파일은 추측하지 마세요.';
-          const d=await api('/api/chat',{model:$('model').value,userId:user.id,message:aiPrompt,history:[]});
+          const d=await api('/api/chat',{model:$('model').value,userId:user.id,message:aiPrompt,history:[],vff:String($('model').value||'').includes('claude')&&getVff()});
           c.messages.push({role:'ai',text:d.text||d.answer||'분석 실패'});
         }else{
           c.messages.push({role:'ai',text:'❌ "'+searchTerm+'" 폴더를 찾지 못했거나 읽을 파일이 없습니다.\n\n경로를 정확히 입력해주세요. 예: #구글드라이브폴더 3디와이/SAP 분석해줘'});
@@ -488,7 +489,7 @@ async function send(){
     const _fnames=_attachedFiles.map(x=>x.name).join(', ');
     const _fullText=text+(_fnames?' [첨부파일: '+_fnames+']':'');
     _attachedImages=[];_attachedFiles=[];renderAttachPreview();
-    const d=await api('/api/chat',{model:$('model').value,userId:user.id,message:_fullText,images:_imgs,history:c.messages.slice(-10).map(m=>({role:m.role==='ai'?'assistant':'user',content:m.text||(m.images&&m.images.length?'[이미지 첨부]':'')||(m.files&&m.files.length?'[파일: '+m.files.join(', ')+']':'')||' '})).filter(m=>m.content&&m.content.trim())});
+    const d=await api('/api/chat',{model:$('model').value,userId:user.id,message:_fullText,images:_imgs,history:c.messages.slice(-10).map(m=>({role:m.role==='ai'?'assistant':'user',content:m.text||(m.images&&m.images.length?'[이미지 첨부]':'')||(m.files&&m.files.length?'[파일: '+m.files.join(', ')+']':'')||' '})).filter(m=>m.content&&m.content.trim()),vff:String($('model').value||'').includes('claude')&&getVff()});
     c.messages.push({role:'ai',text:d.text||d.answer||d.message||'응답 없음'});
     try{await api('/api/hybrid-chat-save',{userId:user.id,roomId:c.id,title:c.title,messages:c.messages})}catch{}
     saveLocal();saveToServer(c);render();
@@ -527,7 +528,9 @@ function applyTheme(){
   }
 }
 function toggleModelMenu(){const s=$('model');s.style.display=s.style.display==='none'?'inline-block':'none'}
-function syncModelBtn(){const s=$('model');if(!s||!$('modelBtn'))return;const o=s.options[s.selectedIndex];$('modelBtn').textContent=o?o.textContent:'모델';s.style.display='none'}
+function getVff(){try{const v=localStorage.getItem('stella_vff_enabled');return v===null||v==='true';}catch{return true;}}
+function onVffChange(v){try{localStorage.setItem('stella_vff_enabled',String(v));}catch{}}
+function syncModelBtn(){const s=$('model');if(!s||!$('modelBtn'))return;const o=s.options[s.selectedIndex];$('modelBtn').textContent=o?o.textContent:'모델';s.style.display='none';const w=$('vffWrap');if(w){const isClaude=o&&String(o.value||'').toLowerCase().includes('claude');w.style.display=isClaude?'flex':'none';const t=$('vffToggle');if(t&&isClaude){t.checked=getVff();}}}
 function copyCode(btn){const pre=btn.parentElement;const code=pre.querySelector('code')||pre;const t=code.innerText.replace(/복사$|복사됨$/,'');navigator.clipboard.writeText(t).then(()=>{btn.textContent='복사됨';setTimeout(()=>btn.textContent='복사',1200)})}
 boot();
 // ════════════════════════════════
