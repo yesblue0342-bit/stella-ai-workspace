@@ -72,3 +72,14 @@ test("Stella GPT 자동저장 연결(소스 검증)", async () => {
   assert.match(html, /source-guard\.js/, "index.html 이 source-guard 로드");
   assert.match(html, /app:'StellaGPT',programName:_pn/, "답변 후 0Program 자동저장 호출 존재");
 });
+
+test("★폴더ID 정규화: env에 URL 전체가 와도 ID 추출(실사고 회귀 방지)", async () => {
+  const { normalizeDriveFolderId } = await import("../lib/drive-utils.js");
+  const id = "1ryWsG8Shp_-_rrQb6rLZ-RpAk1qUk2W-";
+  assert.equal(normalizeDriveFolderId(`https://drive.google.com/drive/folders/${id}`), id);
+  assert.equal(normalizeDriveFolderId(`https://drive.google.com/drive/u/0/folders/${id}?usp=sharing`), id);
+  assert.equal(normalizeDriveFolderId(`https://drive.google.com/open?id=${id}`), id);
+  assert.equal(normalizeDriveFolderId(id), id, "생 ID는 그대로");
+  assert.equal(normalizeDriveFolderId(`${id}?x=1`), id, "쿼리 꼬리 제거");
+  assert.equal(normalizeDriveFolderId(""), "");
+});
