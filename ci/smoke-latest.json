@@ -1,8 +1,12 @@
 {
- "sha": "3ca56d2cf6e7b3db856240936f2f46a76ec97093",
+ "sha": "b1a1fdb4c019954b2d0498eb5869f3e92f71f7ae",
  "smoke": {
-  "ok": false,
-  "error": "File not found: ."
+  "ok": true,
+  "folder": "StellaGPT/0Program",
+  "folderId": "1qxJABoTZnJYtbs0UclqOv_TYUTv2mGhB",
+  "fileId": "13_64RsgJPKruDB-k3YdPoHpd7iDSvGC4",
+  "name": "_deploy_smoke.txt",
+  "link": "https://drive.google.com/file/d/13_64RsgJPKruDB-k3YdPoHpd7iDSvGC4/view?usp=drivesdk"
  },
  "diag": {
   "ok": true,
