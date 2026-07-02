@@ -7,10 +7,15 @@ STATUS: DONE
 |---|---|---|
 | 경로 불일치(0download) | **부분 사실(과거)** | BASE_FOLDER는 2026-06-23 커밋 `e616aa8`에서 이미 0Program으로 통일. UI/주석 잔재만 0download |
 | OCI 라우트 누락 | **아님** | server.mjs는 api/ 전체 동적 마운트, save-drive 정상 라우팅(BLOCKED_API에 없음) |
-| Drive OAuth 만료 | **아님** | 운영 서버가 7/1~7/2에도 채팅 JSON을 Drive에 생성 중(쓰기 생존 확인). googleapis OAuth2가 refresh 자동 처리 |
+| Drive OAuth 만료 | **아님** | OAuth 자체는 정상(읽기 생존). ※7/1~2 쓰기는 별개 앱(stellaclover) 소행으로 판명 |
+| **env 이관 누락** | **★진범** | Drive 실사: 이 레포 서버의 ensurePath 쓰기(chatgpt/chats 등)가 **6/26에서 중단** = Vercel→OCI 전환 시점. `.env.example`에 `GOOGLE_DRIVE_FOLDER_ID`가 아예 없어 OCI `.env`에도 누락 → `getDriveRootId()` throw → 모든 서버측 Drive 쓰기(채팅백업·노트·0Program) 조용히 실패. 읽기는 폴더ID 직접 지정 경로라 생존 |
 | 규칙 미구현 | **사실** | CLAUDE.md에 저장 규칙/Autopilot 블록 부재 → 추가함 |
 
-### 진짜 근본 원인 (2가지)
+### 진짜 근본 원인 (3가지)
+0. **[치명] GOOGLE_DRIVE_FOLDER_ID 이관 누락** — 6/26 이후 서버측 Drive 쓰기 전면 마비(위 표).
+   → 수정: `getDriveRootIdSafe()` 신설 — env 없으면 'StellaGPT' 폴더 자동 탐색/생성·캐시.
+   ensurePath 및 전 쓰기 경로가 이를 사용 → **.env 수정 없이도 채팅백업/노트/0Program 쓰기 전부 부활**.
+   `.env.example`에 변수 문서화(재발 방지).
 1. **Stella GPT(index.html) — 주력 앱에 저장 연결 자체가 없었음.** cc/codex/abap만 자동저장.
 2. **소스 가드(코드펜스 ``` 필수)** — 테스트 대본·스펙 등 산문형 산출물은 가드에 걸려 저장 스킵.
    → 0Program 빈 폴더 + 사용자가 0download에 수동 업로드로 우회(오늘 "Unit Test BB" 등).

@@ -1,6 +1,6 @@
 import { getPool, sql } from "../lib/db.js";
 import {
-  getDriveRootId,
+  getDriveRootId, getDriveRootIdSafe,
   getDrive,
   findFolderByName,
   extractDriveFileText,
@@ -31,7 +31,7 @@ CREATE TABLE dbo.chatgpt_index(
 async function resolveChatsFolderId(folderParam) {
   const parts = String(folderParam || "chatgpt/chats")
     .split(/[\/>]/).map((s) => s.trim()).filter(Boolean);
-  let parentId = getDriveRootId();
+  let parentId = await getDriveRootIdSafe();
   for (const p of parts) {
     const f = await findFolderByName(p, parentId);
     if (!f) {

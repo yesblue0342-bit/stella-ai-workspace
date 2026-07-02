@@ -2,7 +2,7 @@
 // 이미지/파일을 서버에서 Drive에 업로드하고 공개 URL 반환
 // base64 또는 multipart/form-data 지원
 
-import { getDrive, getDriveRootId, FOLDER_MIME } from "../lib/drive-utils.js";
+import { getDrive, getDriveRootId, getDriveRootIdSafe, FOLDER_MIME } from "../lib/drive-utils.js";
 import { kstDateString, familyPhotoPath } from "../lib/kst-date.js";
 
 // PART E: 첨부 사본을 "내 드라이브 / 0가족 / 1_사진 / stella talk / [KST날짜]" 에 보관.
@@ -104,7 +104,7 @@ export default async function handler(req, res) {
     if (!buffer.length) return res.status(400).json({ ok: false, message: "이미지 데이터 변환 실패" });
 
     const drive = getDrive();
-    const rootId = getDriveRootId();
+    const rootId = await getDriveRootIdSafe();
     const folderId = await ensureImagesFolder(drive, rootId);
 
     // Drive에 업로드

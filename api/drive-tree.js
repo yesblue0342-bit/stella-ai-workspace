@@ -27,7 +27,7 @@ async function scanFolder(drive, folderId, name, depth, maxDepth, results) {
 export default async function handler(req, res) {
   try {
     const drive = getDrive();
-    const rootId = getDriveRootId();
+    const rootId = await getDriveRootIdSafe();
     const results = [];
     await scanFolder(drive, rootId, 'StellaGPT', 0, 3, results);
     const noteRelated = results.filter(r =>

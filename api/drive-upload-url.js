@@ -1,9 +1,9 @@
-import { getDrive, getDriveRootId, FOLDER_MIME } from "../lib/drive-utils.js";
+import { getDrive, getDriveRootId, getDriveRootIdSafe, FOLDER_MIME } from "../lib/drive-utils.js";
 
 // MemberChat/images 폴더 ID를 찾거나 생성
 async function ensureMediaFolder() {
   const drive = getDrive();
-  const rootId = getDriveRootId();
+  const rootId = await getDriveRootIdSafe();
 
   // MemberChat 폴더 찾기
   let chatFolderId = rootId;
