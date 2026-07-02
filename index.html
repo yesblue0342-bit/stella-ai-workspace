@@ -1377,6 +1377,11 @@ async function downloadPdfFromText(name,text,btnEl){
 // 답변 하단 다운로드 툴바 — 표 유무·요청 문구와 무관하게 항상 제공(전체 내용 TXT/Word/PDF/PPT/MD +
 // 표가 있으면 Excel). 특정 키워드로 물어야만 버튼이 뜨던 문제(요청해도 안 뜸) 근본 해결.
 function renderAnswer(el,text){
+  // ★ 순서 주의: 마크다운을 먼저 렌더한 뒤 다운로드 툴바를 append 한다.
+  //   stellaRenderMarkdown(el,text)는 el.innerHTML=... 로 el 내용을 통째 교체하므로,
+  //   툴바를 먼저 붙이면 마크다운 렌더가 방금 붙인 버튼을 지워버린다(고질 버그의 진범).
+  //   → 렌더 먼저, 툴바 나중 = 버튼이 답변 아래에 항상 살아남는다.
+  if(!(window.stellaRenderMarkdown&&window.stellaRenderMarkdown(el,text)))renderMarkdownLite(el,text);
   try{
     const stamp=new Date().toISOString().replace(/[:.]/g,'-').slice(0,19);
     const hasTable=tableRowsFromText(text).length>0;
@@ -1393,7 +1398,6 @@ function renderAnswer(el,text){
       if(tools.childNodes.length)el.appendChild(tools);
     }
   }catch(e){}
-  if(!(window.stellaRenderMarkdown&&window.stellaRenderMarkdown(el,text)))renderMarkdownLite(el,text);
 }
 /* /stella-rich-answer-download-override */
 var _stLastW=window.innerWidth;window.addEventListener('resize',function(){/* 키보드(높이만 변함)로 인한 리사이즈에선 사이드바 상태 유지 → 검색창 탭 시 드로어 닫힘 방지. 가로폭 변할 때(브레이크포인트 전환)만 재설정 */if(window.innerWidth===_stLastW)return;_stLastW=window.innerWidth;syncSidebarLayout();});
