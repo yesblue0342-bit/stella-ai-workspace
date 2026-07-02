@@ -1,0 +1,67 @@
+// 첨부 파일 후속 턴 기억상실 버그 회귀 테스트.
+// 버그: 첨부 텍스트가 현재 턴 message 에만 주입되고 대화 저장/히스토리에는 빠져,
+// 다음 턴("아니 첨부한 양식대로 해줘")에서 AI가 "양식을 알지 못해"라고 답함.
+// 수정: 메시지에 att(파일명+텍스트) 저장 + buildChatHistory 가 히스토리에 주입
+// (마지막=현재 메시지는 제외 — 현재 턴 첨부는 message 본문으로 전문 전달됨).
+import { test } from "node:test";
+import assert from "node:assert/strict";
+import fs from "node:fs";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
+
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+const html = fs.readFileSync(path.join(__dirname, "..", "index.html"), "utf8");
+
+// index.html 에서 buildChatHistory(순수 함수) 소스 추출 후 평가
+function loadBuildChatHistory() {
+  const start = html.indexOf("function buildChatHistory(");
+  assert.ok(start >= 0, "buildChatHistory 정의 존재");
+  let i = html.indexOf("{", start), depth = 0, end = -1;
+  for (let j = i; j < html.length; j++) {
+    const c = html[j];
+    if (c === "{") depth++;
+    else if (c === "}") { depth--; if (depth === 0) { end = j + 1; break; } }
+  }
+  return new Function(html.slice(start, end) + "; return buildChatHistory;")();
+}
+
+test("이전 턴의 첨부 텍스트가 히스토리에 주입된다", () => {
+  const f = loadBuildChatHistory();
+  const msgs = [
+    { role: "user", text: "QM022 대본 만들어줘", att: [{ name: "QM script.docx", text: "1. Purpose\n2. Test Steps\n3. Expected Result" }] },
+    { role: "ai", text: "네, 작성했습니다." },
+    { role: "user", text: "아니 첨부한 양식대로 만들어줘" },
+  ];
+  const h = f(msgs, 10);
+  assert.equal(h.length, 3);
+  assert.match(h[0].content, /\[첨부파일: QM script\.docx\]/, "첫 턴 첨부가 히스토리에 포함");
+  assert.match(h[0].content, /Test Steps/, "첨부 실제 내용 포함");
+  assert.equal(h[1].role, "assistant");
+  assert.equal(h[2].content, "아니 첨부한 양식대로 만들어줘");
+});
+
+test("마지막(현재) 메시지의 첨부는 히스토리에 중복 주입하지 않는다", () => {
+  const f = loadBuildChatHistory();
+  const msgs = [
+    { role: "user", text: "안녕" },
+    { role: "user", text: "이 파일 분석해줘", att: [{ name: "a.xlsx", text: "PLANT\tUS11" }] },
+  ];
+  const h = f(msgs, 10);
+  assert.ok(!h[1].content.includes("첨부파일"), "현재 턴 첨부는 message 본문으로 가므로 히스토리 중복 금지");
+});
+
+test("첨부 텍스트는 4000자로 캡", () => {
+  const f = loadBuildChatHistory();
+  const big = "x".repeat(9000);
+  const msgs = [
+    { role: "user", text: "파일", att: [{ name: "big.txt", text: big }] },
+    { role: "ai", text: "ok" },
+  ];
+  const h = f(msgs, 10);
+  assert.ok(h[0].content.length < 4200 + 100, "히스토리 첨부 4000자 캡");
+});
+
+test("addMessage persist 가 att 를 저장하도록 변경됐는지(소스 검증)", () => {
+  assert.match(html, /_msg\.att=meta\.attachments/, "메시지 저장 시 첨부 텍스트 보존");
+  assert.match(html, /buildChatHistory\(activeRoom\(\)\?\.messages,10\)/, "send()가 buildChatHistory 사용");
+});

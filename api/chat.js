@@ -461,6 +461,7 @@ export default async function handler(req, res) {
     const needsSearch  = /구글|검색|최신|뉴스|오늘|지금|현재|실시간/.test(msg);
     const needsWeather = /날씨|기온|우산|비|눈|더위|추위|forecast|weather/.test(msg);
     const needsDrive   = /내 드라이브|my drive|#폴더|드라이브|drive/.test(msg)
+                      || /docs\.google\.com/.test(msg) // ★ Docs/Sheets/Slides 공유 링크도 Drive 읽기
                       || /내 드라이브/.test(message) // 원문 대소문자 유지
                       || /^#/.test(String(message).trim()) // ★ #으로 시작하면 드라이브 읽기
                       || String(message).split(/\r?\n/).some(l => l.trim().startsWith("#"));
