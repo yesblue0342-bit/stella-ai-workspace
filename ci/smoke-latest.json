@@ -1,0 +1,10 @@
+{
+  "sha": "35d8d109ad6c8bcf554f9649679422736e3e1a42",
+  "at": "2026-07-02T14:13:50Z",
+  "smoke": {
+    "err": "curl_fail"
+  },
+  "diag": {
+    "err": "diag_curl_fail"
+  }
+}
