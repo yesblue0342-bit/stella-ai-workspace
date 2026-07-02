@@ -18,3 +18,9 @@ test("다운로드 능력 고지 포함", () => {
   assert.match(buildSystemPrompt({}), /다운로드 버튼/);
   assert.match(buildSystemPrompt({}), /직접 복사/);
 });
+// '파일 준비 중/잠시만 기다려 달라' 거짓 비동기 약속 금지 문구 포함
+test("거짓 비동기(기다려 달라) 금지 문구 포함", () => {
+  const p = buildSystemPrompt({});
+  assert.match(p, /잠시만 기다려/);
+  assert.match(p, /즉시 작성/);
+});
