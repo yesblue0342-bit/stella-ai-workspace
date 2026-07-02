@@ -503,7 +503,7 @@ export default async function handler(req, res) {
       try {
         actualDriveContext = await buildDriveContextForChat(message);
         if (actualDriveContext?.prompt) {
-          // Drive 파일 내용이 너무 크면 context 초과 방지를 위해 60,000자로 truncate
+          // Drive 파일 내용이 너무 크면 context 초과 방지를 위해 28,000자로 truncate
           let driveContent = actualDriveContext.prompt;
           if (driveContent.length > 28000) {
             driveContent = driveContent.slice(0, 28000) + "\n\n⚠️ 파일이 너무 커서 앞부분(28,000자)만 분석합니다. 전체 내용은 파일 링크로 열어보세요.";
@@ -679,9 +679,14 @@ async function searchDriveContext(message) {
     const driveKw = ["sap","qa32","qm","pp","abap","inspection","lot","bom","mr21","migo","mb51","검사","품질","공정","자재","트랜잭션"];
     if (!driveKw.some(k => msg.includes(k))) return null;
     const { searchDrive } = await import("../lib/drive-utils.js");
-    const results = await searchDrive(message, { scope: "StellaGPT", pageSize: 5 }).catch(() => null);
-    if (!results || !results.length) return null;
-    return results.slice(0,3).map(r => `[Drive:${r.name}] ${(r.snippet||r.name).slice(0,200)}`).join("\n");
+    // searchDrive는 {folder, files} 객체를 반환 — 배열로 다루면 length가 undefined라 항상 null이 되어
+    // SAP 키워드 Drive 컨텍스트가 무음 실패하던 버그 수정.
+    const result = await searchDrive(message, { scope: "StellaGPT", pageSize: 5 }).catch(() => null);
+    const files = Array.isArray(result?.files) ? result.files : [];
+    if (!files.length) return null;
+    return files.slice(0, 3)
+      .map(f => `[Drive:${f.name}] ${f.webViewLink || ""}${f.modifiedTime ? ` (수정 ${String(f.modifiedTime).slice(0, 10)})` : ""}`)
+      .join("\n");
   } catch { return null; }
 }
 
