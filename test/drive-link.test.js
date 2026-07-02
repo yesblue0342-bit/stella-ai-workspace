@@ -36,3 +36,22 @@ test("기존 #경로 감지는 회귀 없음", () => {
   assert.equal(detectDrivePathText("#StellaGPT > chatgpt"), "StellaGPT > chatgpt");
   assert.equal(detectDrivePathText("일반 질문"), "");
 });
+
+// 회귀: "#"나 "내 드라이브 > ..." 형식 없이 자연어로 중첩 폴더를 물으면 경로를 인식 못해
+// buildDriveContextForChat이 null → "정확한 폴더명으로 다시 시도하라"는 안내만 반복하던 버그.
+test("자연어 중첩 폴더 경로: 'A 폴더 하위의 B 폴더' → 'A > B'", () => {
+  const msg = "구글 드라이브 폴더 내 StellaGpt 폴더 하위의 Chatgpt 폴더 하위에 보면 Stella 개발 관련 파일 리스트를 알려주고 각 파일들의 내용을 표로 정리해줘";
+  assert.equal(detectDrivePathText(msg), "StellaGpt > Chatgpt");
+});
+
+test("자연어 단일 폴더: '구글 드라이브 SAP 폴더 확인해줘' → 'SAP'", () => {
+  assert.equal(detectDrivePathText("구글 드라이브 SAP 폴더 확인해줘"), "SAP");
+});
+
+test("자연어 폴더 오탐 방지: '폴더' 없이 드라이브만 언급하면 빈 문자열", () => {
+  assert.equal(detectDrivePathText("구글 드라이브 정리하는 법 알려줘"), "");
+});
+
+test("기존 '내 드라이브 > ...' 형식은 회귀 없음", () => {
+  assert.equal(detectDrivePathText("내 드라이브 > 문서 > 보고서"), "내 드라이브 > 문서 > 보고서");
+});
