@@ -822,7 +822,7 @@ function memoryToPrompt(memory) {
 function buildSystemPrompt(system, searchContext, driveContext) {
   let prompt = system;
   // 다운로드/복사 능력 고지 — 모델이 '기능 없음'이라 거절하지 않게(앱이 자동으로 버튼 부착).
-  prompt += `\n\n[다운로드/복사] 이 앱은 답변에 Excel·Word·PPT·TXT·Markdown 다운로드 버튼과 표·URL 복사 버튼을 자동으로 붙여줍니다. 따라서 '다운로드/엑셀 기능이 없다'거나 '직접 복사해서 붙여넣으라'고 말하지 마세요. 파일·엑셀·다운로드 요청 시, 필요한 내용을 깔끔한 마크다운 표(첫 행을 헤더로)로 정리해 제시하면 사용자가 버튼으로 바로 내려받고 복사합니다.`;
+  prompt += `\n\n[다운로드/복사] 이 앱은 답변에 Excel·Word·PPT·TXT·Markdown 다운로드 버튼과 표·URL 복사 버튼을 자동으로 붙여줍니다. 따라서 '다운로드/엑셀 기능이 없다'거나 '직접 복사해서 붙여넣으라'고 말하지 마세요. 파일·엑셀·다운로드 요청 시, 필요한 내용을 깔끔한 마크다운 표(첫 행을 헤더로, 헤더 다음 줄에 |---| 구분선 필수)로 정리해 제시하면 사용자가 버튼으로 바로 내려받고 복사합니다. ★표를 절대 코드블록(\`\`\`)으로 감싸지 마세요 — 표가 깨져 보입니다. 표는 본문에 직접 쓰세요.`;
   if (searchContext?.used && searchContext.context) {
     prompt += `\n\n[실시간 컨텍스트]\n${searchContext.context}`;
   }

@@ -87,8 +87,52 @@
       wrap.appendChild(tools);
     });
   }
+  // ── 표 정상화 ──────────────────────────────────────────────
+  // 모델이 표를 ```코드블록으로 감싸거나 구분선(|---|) 없이 내보내면 표가 '깨진' 파이프
+  // 텍스트로 보인다(간헐적 — 프롬프트로 줄여도 0이 안 됨). 렌더 전에 결정적으로 고친다:
+  //  ① 코드펜스 내용이 사실상 마크다운 표면 펜스를 벗겨 진짜 표로 렌더.
+  //  ② 파이프 행 묶음에 구분선이 없으면 헤더 다음에 |---| 를 만들어 GFM 표로 인식되게.
+  //  ③ 진짜 코드(쉘 파이프 등)가 든 펜스는 절대 건드리지 않는다.
+  function isPipeRow(l) { var t = String(l || "").trim(); return t.length > 1 && t.charAt(0) === "|" && t.indexOf("|", 1) > 0; }
+  function isSepRow(l) { var t = String(l || "").trim(); return t.indexOf("-") >= 0 && /^\|?[\s:\-|]+\|?$/.test(t); }
+  function looksLikeTable(body) {
+    var lines = String(body || "").split("\n").filter(function (l) { return l.trim() !== ""; });
+    if (lines.length < 2) return false;
+    var pipe = lines.filter(isPipeRow).length;
+    return pipe >= 2 && pipe / lines.length >= 0.8; // 대부분이 |행|이면 표로 판단
+  }
+  function unwrapTableFences(text) {
+    return String(text == null ? "" : text).replace(/```([a-zA-Z0-9_-]*)[ \t]*\n([\s\S]*?)```/g, function (m, lang, body) {
+      return looksLikeTable(body) ? "\n" + body.replace(/^\n+|\n+$/g, "") + "\n" : m;
+    });
+  }
+  function ensureSeparators(seg) {
+    var lines = String(seg == null ? "" : seg).split("\n"), out = [], i = 0;
+    while (i < lines.length) {
+      if (!isPipeRow(lines[i])) { out.push(lines[i]); i++; continue; }
+      var start = i; while (i < lines.length && isPipeRow(lines[i])) i++;
+      var run = lines.slice(start, i);
+      out.push(run[0]);
+      if (run.length >= 2 && !run.some(isSepRow)) {
+        var inner = run[0].trim().replace(/^\|/, "").replace(/\|$/, "");
+        var n = Math.max(1, inner.split("|").length);
+        out.push("|" + new Array(n + 1).join("---|"));
+      }
+      for (var k = 1; k < run.length; k++) out.push(run[k]);
+    }
+    return out.join("\n");
+  }
+  function normalizeMdTables(text) {
+    var s = unwrapTableFences(text);
+    // 남은(진짜 코드) 펜스 내부는 보호 — 바깥 텍스트만 구분선 보정
+    var parts = s.split(/(```[\s\S]*?```)/);
+    for (var i = 0; i < parts.length; i++) { if (parts[i].indexOf("```") !== 0) parts[i] = ensureSeparators(parts[i]); }
+    return parts.join("");
+  }
+
   function render(el, text) {
     var s = String(text == null ? "" : text);
+    try { s = normalizeMdTables(s); } catch (e) { /* 정상화 실패 시 원문 렌더 */ }
     try {
       if (el && window.marked && window.DOMPurify) {
         var html = window.marked.parse(s, { breaks: true, gfm: true });
@@ -99,5 +143,6 @@
     } catch (e) { /* 폴백으로 위임 */ }
     return false;
   }
+  window.stellaNormalizeMdTables = normalizeMdTables; // 폴백 렌더러(renderMarkdownLite)도 공용
   window.stellaRenderMarkdown = render;
 })();
