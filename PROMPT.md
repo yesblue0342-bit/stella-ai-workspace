@@ -1,80 +1,77 @@
-# AUTOPILOT — Stella GPT 로그인/회원가입 하드코딩 우회 + 내부 에러 노출 제거
+# Stella GPT AutoPilot Prompt
 
-사람은 자리에 없다(퇴근). 어떤 경우에도 질문하지 않는다. 끝까지 알아서 구현·테스트·배포하고 종료한다.
+> 무인 실행(Ralph Autopilot). 사람은 자리에 없다. **질문 0 / 확인 요청 0**.
+> 합리적 기본값으로 끝까지 진단 → 수정 → 테스트 → 커밋 → 배포 → 종료(RALPH_DONE).
 
----
+## 📋 역할 & 목표
+- **역할**: Stella GPT 코드 자동 개선 에이전트
+- **목표**: 코드 분석 → 개선/버그픽스 → 자동 커밋 → **main push** → GitHub Actions로 OCI 자동배포까지 완전 자동화
+- **실행 환경**: Ubuntu 24 + OCI ARM64 (Osaka) + Docker + GitHub Actions
+- **포트**: Stella GPT (8970)
+- **개발도구(이 워크스페이스)**: Stella GPT · **Stella Codex** · **Stella Agent Code** · ABAP
+  - ※ **Stella Clover는 별개 외부 앱**(stella-clover.vercel.app) — 이 저장소/배포 대상이 **아님**. 허브의 외부 링크로만 존재.
 
-## 0. 전제
-- **Google Drive 미연동 상태**다. 인증(로그인/권한/회원가입)은 **Drive에 절대 의존하지 않는다.**
-- 중요 데이터 없음. 단순·견고하게 "들어가지게" 만드는 게 목표.
+## ⚠️ 절대 규칙 (CLAUDE.md 준수)
+- **항상 `main`에 직접 커밋하고 push**한다. 새 브랜치·PR 만들지 않는다(개인 프로젝트, 코드리뷰 불필요).
+- push하면 GitHub Actions(`deploy-oci.yml`)가 OCI 서버에 **자동 재배포**한다.
+- 커밋 전 검증: `node --check`(문법) + `npm test`(회귀) 통과 필수.
+- 프로그램 산출물 완성 시 GitHub 커밋과 함께 Google Drive `StellaGPT/0Program` 저장까지 완료해야 DoD 충족(`node scripts/save-to-drive.mjs <파일>`). 0download 사용 금지.
+- 앱(Stella GPT/Codex/Agent Code/ABAP)은 답변 후 소스 가드 통과 시 `/api/cc/save-drive`로 자동 저장.
+- 저장소(실데이터): Google Drive API. 메타/검색: OCI 동거 SQL Server(`stella-mssql`, `npm_default` 네트워크). ※Azure SQL 미사용, Vercel 자동배포 미사용.
 
-## 1. 이번 실행에서 끝낼 목표
+## 🔍 작업 프로세스
 
-### (1) 하드코딩 화이트리스트 로그인
-- 허용 ID: `yesblue0342`, `dmswn8712`, `mjlee`
-- 이 3개 ID는 **비밀번호가 틀려도, 비어 있어도 로그인 성공**.
-- 로그인 성공 처리 시 **Drive 조회/저장 호출 없음**.
-- 그 외 ID는 기존 로직 유지하되, 실패 메시지는 (3)에 따라 일반화.
+### Phase 1: 현재 상태 분석
+```bash
+# 코드 상태
+cat ~/stella-ai-workspace/server.mjs | head -100
+cat ~/stella-ai-workspace/package.json
+ls -la ~/stella-ai-workspace/
 
-### (2) yesblue0342 = admin 동일 권한
-- 로그인 성공 시 사용자 객체에 역할 부여:
-  - `yesblue0342` → `role: 'admin'`, `isAdmin: true`
-  - `dmswn8712`, `mjlee` → `role: 'user'`, `isAdmin: false`
-- 권한 판정 로직은 **이 isAdmin 값을 직접 사용**. **Drive에서 권한을 읽는 코드는 제거/우회**.
+# 배포 상태 (Stella GPT 8970 단일 포트)
+curl -fsS http://localhost:8970/health || echo "Service down"
+```
 
-### (3) 내부 구조 노출 에러 제거 (보안)
-- 사용자에게 보이는 **모든 에러 메시지**에서 내부 구조 단서 제거:
-  - 금칙어: `Google Drive`, `Drive`, `환경 변수`, `environment`, `env`, 파일 경로, 스택트레이스, API 키 명칭 등.
-- 실패 시 화면 메시지는 일반 문구로 대체. 예: `잠시 후 다시 시도해주세요.`
-- Drive 저장/조회 실패는 **`console.*` 내부 로그로만** 남기고 화면 노출 금지.
-- **회원가입도** Drive 실패 시 화면에 Drive 오류를 띄우지 않는다. 일반 처리(또는 세션 fallback)로 끝내고, 화이트리스트 사용자는 회원가입 없이도 로그인 가능하게 한다.
+### Phase 2: 진단 (5개 영역)
+1. 시스템 프롬프트 — 명확한가? 엉뚱한 답/토큰 낭비 유발 요소는?
+2. Function Calling / 응답 흐름 — 스트리밍·툴콜·폴백 정상?
+3. Google Drive 효율 — 불필요한 전체 스캔·대용량 다운로드·토큰 낭비 없는가?
+4. 에러 처리 — try/catch, 사용자에게 명확한 한국어 메시지, 내부구조/시크릿 미노출?
+5. 배포 구조 — Dockerfile / deploy-oci.yml / env / health 정합?
 
-### (4) 데이터 유실 방지 (기존 버그 회피)
-- 세션/유저 ID는 **username 기반으로 고정**한다(예: `id = username`). **난수 재생성 금지** — 배포·SW 캐시 버전업 때 채팅/프로젝트/게시판 데이터가 orphan 되지 않게.
+발견 문제는 `PROBLEMS_LOOP_N.md`에 심각도(🔴/🟡/🟢)와 파일:줄로 기록.
 
----
+### Phase 3: 자동 수정
+- 각 문제를 최소·안전 수정. 회귀 방지 단위 테스트(가능하면 jsdom로 DOM 런타임까지) 추가.
+- 변경 내역을 `CHANGES_LOOP_N.md`에 기록.
 
-## 2. 제약·관례 (반드시 준수)
-- 화이트리스트 검사는 **가능하면 서버리스 함수(`api/*`) 쪽**에 둔다 → 클라이언트 소스에 명단이 그대로 노출되지 않게(구조 노출 = 해킹 위험). 구조상 불가하면 PROGRESS.md에 한 줄 적고 클라이언트에서 처리.
-- HTML 내장 JS의 줄바꿈/정규식 `\n`은 반드시 `\\n`로 이스케이프. 새 로직은 가능하면 별도 `.js`로 분리.
-- 비밀/키는 절대 코드에 넣지 않는다(이번 변경은 Drive 의존 제거이지 새 비밀 추가가 아님).
-- 파일 편집: GET → base64 decode → 수정 → `node --check` → PUT (또는 로컬 편집 후 커밋) 흐름 준수.
-- **회귀 금지**: 기존 채팅/프로젝트/게시판/메모리 기능을 깨지 않는다.
+### Phase 4: 테스트
+```bash
+cd ~/stella-ai-workspace
+# 서버측 JS 문법
+for f in api/**/*.js lib/*.js server.mjs; do node --check "$f" || exit 1; done
+# 회귀 스위트 (jsdom devDependency 필요)
+npm test
+```
+결과를 `TEST_REPORT.md`에 갱신(전 테스트 PASS 목표).
 
----
+### Phase 5: 커밋 & 배포
+```bash
+cd ~/stella-ai-workspace
+git add -A
+git commit -m "fix(stella-gpt): <요약>"
+git push origin main          # → deploy-oci.yml 자동배포
+```
+배포 후 스모크: Actions 워크플로 success + 컨테이너 내부 스모크(0Program 실쓰기, ci-smoke 브랜치 결과)로 검증.
 
-## 3. 작업 흐름 (매 항목: 구현 → 테스트 → 통과해야만 커밋)
-1. 인증 관련 위치 탐색: 로그인/회원가입 핸들러, `api/auth*`(또는 해당 함수), `index.html` 내 인증·권한 로직.
-2. 구현:
-   - `const ALLOWLIST = ['yesblue0342','dmswn8712','mjlee'];`
-   - `login(id, pw)`:
-     - `ALLOWLIST.includes(id)` → 즉시 `{ ok:true, user:{ id, role: id==='yesblue0342'?'admin':'user', isAdmin: id==='yesblue0342' } }` 반환. Drive 호출 없음. 비번 무시.
-     - 그 외 → 기존 로직, 단 실패 메시지 일반화.
-   - 권한 판정: `isAdmin` 직접 사용. Drive 권한 조회 제거.
-   - 에러 처리: 내부 에러 → 일반 메시지 매핑 함수 도입(예: `toUserError()`), 금칙어 미포함 보장.
-   - 회원가입: Drive 실패해도 화면엔 일반 처리. 화이트리스트는 가입 없이 로그인 가능.
-   - 유저 ID = username 고정.
-3. 검증:
-   - 변경된 `.js` 전부 `node --check`.
-   - `npm test` (스크립트 있으면) 실행.
-   - **신규/보강 테스트 작성**:
-     - a. `ALLOWLIST` 3개 ID가 **잘못된/빈 비밀번호**로 로그인 성공.
-     - b. `yesblue0342` → `isAdmin === true`, `role === 'admin'`.
-     - c. `dmswn8712`,`mjlee` → `isAdmin === false`.
-     - d. 사용자 노출 에러 매핑 결과에 금칙어(`Google Drive`,`Drive`,`환경 변수`,`environment`,`env`) **미포함**(회귀 가드).
-     - e. 동일 username 재로그인 시 유저 ID 동일(고정 확인).
-4. 결과를 `TEST_REPORT.md`에 누적: 시간 · 항목 · pass/total · 요약 3줄.
-5. 서비스워커 **캐시 버전 +1**.
-6. 통과 시 커밋:
-   `auto: 하드코딩 화이트리스트 로그인 + admin(yesblue0342) + 내부에러 노출제거 + 유저ID 고정 (tests: <pass>/<total>)`
+### Phase 6: 최종 리포트 & 종료
+- `STELLA_GPT_FINAL_REPORT.md` 생성(문제/수정/테스트/배포 요약).
+- 산출물은 `node scripts/save-to-drive.mjs <파일>`로 Drive 0Program 저장.
+- 마지막 줄에 `RALPH_DONE` 출력 후 종료.
 
-## 4. 모호하면
-- 가장 합리적인 가정을 `PROGRESS.md`에 **한 줄** 적고 그대로 진행. **질문 금지.**
-- 테스트 끝내 안 되는 항목만 `[!]` 보류 후 다음으로.
-
-## 5. 완료·배포·종료
-모든 목표 완료 + 전체 테스트 통과 시:
-1. 전체 테스트를 한 번 더 돌려 `TEST_REPORT.md` 맨 아래 `## FINAL`로 기록(pass/total + 위 a~e 결과 요약).
-2. `main` 브랜치에 **직접 커밋하고 push**한다. **절대 새 브랜치나 PR을 만들지 마라.** push하면 GitHub Actions가 OCI 서버에 자동배포한다.
-3. 배포 URL + 최종 pass/total 출력.
-4. 마지막 줄에 `RALPH_DONE` 출력.
+## ✅ DoD (Definition of Done)
+- [ ] 진단(PROBLEMS) → 수정(CHANGES) → 테스트(TEST_REPORT) 전부 PASS
+- [ ] main 커밋 & push 완료
+- [ ] GitHub Actions 자동배포 success + 스모크 ok:true 확인
+- [ ] 산출물 Drive 0Program 저장
+- [ ] 질문 0 / 확인 0 / `RALPH_DONE` 출력
