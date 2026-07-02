@@ -103,6 +103,10 @@ body.dark .app-ico-wrap{border-color:#fff!important;background:#000!important}
 body.dark .app-ico{filter:grayscale(1) brightness(0) invert(1)!important}
 body:not(.dark) .app-ico-wrap{border-color:#111!important;background:#fff!important}
 body:not(.dark) .app-ico{filter:grayscale(1) brightness(0)!important}
+/* 체크박스(OMC/VFF) 흑백화 — 체크 시 파란 배경이 튀지 않게, 앱 아이콘과 동일 톤.
+   라이트=흰바탕+검정체크, 다크(body.dark)=검은바탕+흰체크 */
+#omc,#ccVffToggle{accent-color:#ffffff}
+body.dark #omc,body.dark #ccVffToggle{accent-color:#000000}
 </style>
 <div class="top">
   <button type="button" class="hamb" id="hambBtn" title="상단 앱 전환 바 접기/펴기 (넓은 화면)">☰</button>

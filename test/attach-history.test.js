@@ -61,6 +61,22 @@ test("첨부 텍스트는 4000자로 캡", () => {
   assert.ok(h[0].content.length < 4200 + 100, "히스토리 첨부 4000자 캡");
 });
 
+test("첨부 주입 총량 예산 8,000자(최신 우선) — TPM 429 방지", () => {
+  const f = loadBuildChatHistory();
+  const big = (n) => "y".repeat(n);
+  const msgs = [
+    { role: "user", text: "옛날 첨부", att: [{ name: "old.docx", text: big(6000) }] },
+    { role: "ai", text: "ok" },
+    { role: "user", text: "최근 첨부", att: [{ name: "new.docx", text: big(6000) }] },
+    { role: "ai", text: "ok" },
+    { role: "user", text: "질문" },
+  ];
+  const h = f(msgs, 10);
+  const injected = h.reduce((s, m, i) => s + Math.max(0, m.content.length - String(msgs[i].text).length), 0);
+  assert.ok(injected <= 8000 + 200, "총 주입량 예산 내: " + injected);
+  assert.ok(h[2].content.includes("new.docx"), "최신 첨부 우선 포함");
+});
+
 test("addMessage persist 가 att 를 저장하도록 변경됐는지(소스 검증)", () => {
   assert.match(html, /_msg\.att=meta\.attachments/, "메시지 저장 시 첨부 텍스트 보존");
   assert.match(html, /buildChatHistory\(activeRoom\(\)\?\.messages,10\)/, "send()가 buildChatHistory 사용");

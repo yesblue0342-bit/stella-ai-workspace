@@ -130,6 +130,28 @@ ALLOWED only when user says "자세히", "설명해줘", "왜", "상세히":
 [REPO] yesblue0342-bit/stella-ai-workspace | main file: index.html
 [KH] SAP QM/PP consultant, Celltrion BISON project, novelist/poet/rapper/martial artist`;
 
+// ───────── TPM(분당 토큰) 가드 ─────────
+// 첨부 히스토리 + Drive 컨텍스트가 겹치면 요청이 40K+ 토큰으로 불어나
+// TPM 한도가 낮은 조직(gpt-4o 30K)에서 429 "Request too large"가 났다.
+// ① 히스토리 문자 총량을 최근 우선으로 제한, ② 429 시 한도 넉넉한 gpt-4o-mini 로 1회 자동 재시도.
+export function trimHistoryByChars(history, maxChars = 24000) {
+  const h = Array.isArray(history) ? history : [];
+  let total = 0;
+  const out = [];
+  for (let i = h.length - 1; i >= 0; i--) {
+    const len = String(h[i]?.content || "").length;
+    if (out.length && total + len > maxChars) break; // 최소 1개(최신)는 유지
+    total += len;
+    out.unshift(h[i]);
+  }
+  return out;
+}
+// OpenAI 429/TPM 초과 에러인가 (자동 폴백 대상 판별)
+export function isTpmError(err) {
+  const m = String((err && err.message) || err || "");
+  return /\b429\b|tokens per min|Request too large|rate[ _-]?limit/i.test(m);
+}
+
 // ───────── GitHub 의도 감지 (정밀) ─────────
 // ⚠️ 일반 업무 질문(예: "이 부분 스펙 정리해줘. SAP QM CBO프로그램")이 관리 액션으로
 //    오인되어 "auth 폴더 정리 완료" 같은 엉뚱한 답을 반환하던 버그 수정.
@@ -388,7 +410,9 @@ export default async function handler(req, res) {
     const message = String(body.message || "");
     let aiMessage = message;
     let actualDriveContext = null;
-    const history = Array.isArray(body.history) ? body.history : [];
+    // TPM(분당 토큰) 절약: 히스토리(첨부 텍스트 포함) 문자 총량을 최근 우선으로 제한 —
+    // 첨부·Drive 컨텍스트가 겹치면 요청이 40K+ 토큰으로 불어 429가 나던 문제의 1차 가드.
+    const history = trimHistoryByChars(Array.isArray(body.history) ? body.history : [], 24000);
     const model = body.model || "gpt-4.1-mini";
     const system = body.system || STELLA_SYSTEM_PROMPT;
     const images = Array.isArray(body.images) ? body.images.slice(0, 4) : [];
@@ -481,8 +505,8 @@ export default async function handler(req, res) {
         if (actualDriveContext?.prompt) {
           // Drive 파일 내용이 너무 크면 context 초과 방지를 위해 60,000자로 truncate
           let driveContent = actualDriveContext.prompt;
-          if (driveContent.length > 60000) {
-            driveContent = driveContent.slice(0, 60000) + "\n\n⚠️ 파일이 너무 커서 앞부분(60,000자)만 분석합니다. 전체 내용은 다운로드 버튼을 이용하세요.";
+          if (driveContent.length > 28000) {
+            driveContent = driveContent.slice(0, 28000) + "\n\n⚠️ 파일이 너무 커서 앞부분(28,000자)만 분석합니다. 전체 내용은 파일 링크로 열어보세요.";
           }
           aiMessage = message + driveContent;
           const readNames = (actualDriveContext.files||[]).filter(f=>f.read).map(f=>f.name);
@@ -562,7 +586,21 @@ export default async function handler(req, res) {
         });
         return;
       }
-      answer = await callResponses({ model: "gpt-4o", system: routeSys, history, message: aiMessage, images, search: useSearch });
+      try {
+        answer = await callResponses({ model: "gpt-4o", system: routeSys, history, message: aiMessage, images, search: useSearch });
+      } catch (e) {
+        if (!isTpmError(e)) throw e;
+        // TPM 한도 초과(429) → 한도가 훨씬 넉넉한 gpt-4o-mini 로 자동 재시도(내용 보존, 자가 치유).
+        // 그래도 초과하면 히스토리를 최근 4개로 줄여 마지막 재시도.
+        timings.tpmFallback = "gpt-4o-mini";
+        try {
+          answer = await callResponses({ model: "gpt-4o-mini", system: routeSys, history, message: aiMessage, images, search: useSearch });
+        } catch (e2) {
+          if (!isTpmError(e2)) throw e2;
+          timings.tpmFallback = "gpt-4o-mini+trim";
+          answer = await callResponses({ model: "gpt-4o-mini", system: routeSys, history: history.slice(-4), message: aiMessage, images, search: useSearch });
+        }
+      }
       timings.routed = true; timings.searchAlways = useSearch; timings.driveFirst = needsDrive; timings.tableUsed = wantTable;
     } else if (isClaudeModel) {
       provider = "claude";
