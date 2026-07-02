@@ -23,5 +23,14 @@
 - StellaGPT/0download: 1DzU3zLaXkbbj2cV3HpikpV6EWJ1O8rqw (수동 업로드 산출물 6개 폴더 — 우회 사용 흔적)
 - 배포 후: _deploy_smoke.txt fileId는 배포 로그(SMOKE_0PROGRAM)와 아래 갱신란에 기록.
 
-### 배포 후 스모크 확인 (배포 완료 후 갱신)
-- (배포 후 기입)
+### 배포 후 스모크 확인 — ✅ E2E 성공 (2026-07-02 14:23 UTC)
+- **_deploy_smoke.txt 생성 확인 (Drive 실사)**
+  - fileId: `13_64RsgJPKruDB-k3YdPoHpd7iDSvGC4`
+  - 위치: StellaGPT/0Program (folderId `1qxJABoTZnJYtbs0UclqOv_TYUTv2mGhB`)
+  - 내용: deploy smoke b1a1fdb… 2026-07-02T14:23:17Z / 소유자: yesblue0342@gmail.com
+- 이후 매 배포마다 같은 파일이 업서트되어(1개 유지) 파이프라인 생존을 자동 재검증.
+
+### 스모크가 밝혀낸 최종 진범 (진단 페이로드 원문 근거)
+- `rootFolderId: {configured:true, length:72, prefix:"https://dr", suffix:"k1qUk2W-"}`
+- → OCI `.env` 루트값이 **폴더 ID가 아닌 URL 전체** → 모든 쓰기 쿼리 "File not found: ."
+- 수정: `normalizeDriveFolderId()` — URL이 와도 ID 자동 추출(회귀 테스트 6종)

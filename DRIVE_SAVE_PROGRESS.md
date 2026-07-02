@@ -8,7 +8,7 @@ STATUS: DONE
 | 경로 불일치(0download) | **부분 사실(과거)** | BASE_FOLDER는 2026-06-23 커밋 `e616aa8`에서 이미 0Program으로 통일. UI/주석 잔재만 0download |
 | OCI 라우트 누락 | **아님** | server.mjs는 api/ 전체 동적 마운트, save-drive 정상 라우팅(BLOCKED_API에 없음) |
 | Drive OAuth 만료 | **아님** | OAuth 자체는 정상(읽기 생존). ※7/1~2 쓰기는 별개 앱(stellaclover) 소행으로 판명 |
-| **env 이관 누락** | **★진범** | Drive 실사: 이 레포 서버의 ensurePath 쓰기(chatgpt/chats 등)가 **6/26에서 중단** = Vercel→OCI 전환 시점. `.env.example`에 `GOOGLE_DRIVE_FOLDER_ID`가 아예 없어 OCI `.env`에도 누락 → `getDriveRootId()` throw → 모든 서버측 Drive 쓰기(채팅백업·노트·0Program) 조용히 실패. 읽기는 폴더ID 직접 지정 경로라 생존 |
+| **env 값 오염(URL)** | **★★최종 진범** | Drive 실사: 이 레포 서버의 ensurePath 쓰기(chatgpt/chats 등)가 **6/26에서 중단** = Vercel→OCI 전환 시점. OCI `.env`의 루트 변수에 폴더 **URL 전체**가 저장됨(진단: length 72, prefix https://dr) → 'File not found: .' → `getDriveRootId()` throw → 모든 서버측 Drive 쓰기(채팅백업·노트·0Program) 조용히 실패. 읽기는 폴더ID 직접 지정 경로라 생존 |
 | 규칙 미구현 | **사실** | CLAUDE.md에 저장 규칙/Autopilot 블록 부재 → 추가함 |
 
 ### 진짜 근본 원인 (3가지)
