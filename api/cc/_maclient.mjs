@@ -109,8 +109,19 @@ export async function interruptSession(sessionId) {
   });
 }
 export async function listEvents(sessionId) {
-  const r = await maFetch(SP(sessionId) + "/events?beta=true", { method: "GET" });
-  return Array.isArray(r.data) ? r.data : (Array.isArray(r) ? r : []);
+  // 이벤트 목록은 page/next_page 커서로 페이지네이션된다(기본 1000건/페이지).
+  // 단일 GET만 하면 1000건 초과 장기 세션에서 뒷부분 이벤트가 영영 안 보여 UI가 멈춘다 → 끝까지 순회.
+  const out = [];
+  let page = null;
+  for (let i = 0; i < 50; i++) { // 50페이지(5만 건) 안전 상한
+    const url = SP(sessionId) + "/events?beta=true" + (page ? "&page=" + encodeURIComponent(page) : "");
+    const r = await maFetch(url, { method: "GET" });
+    const items = Array.isArray(r?.data) ? r.data : (Array.isArray(r) ? r : []);
+    out.push(...items);
+    page = r && r.next_page;
+    if (!page) break;
+  }
+  return out;
 }
 export async function getSession(sessionId) {
   return maFetch(SP(sessionId) + "?beta=true", { method: "GET" });
@@ -153,7 +164,9 @@ export function normalizeEvents(rawList) {
 
 // ── 비용 추정(예산 가드레일용, 대략 단가 USD/1M tokens) ──
 const PRICE = {
-  "claude-opus-4-8": { in: 15, out: 75 },
+  // Opus 4.8 실단가는 $5/$25 per MTok — 이전 값($15/$75)은 3배 과다라 예산 가드가
+  // 설정 예산의 1/3 지점에서 세션을 조기 중단시켰다.
+  "claude-opus-4-8": { in: 5, out: 25 },
   "claude-sonnet-4-6": { in: 3, out: 15 },
   "claude-haiku-4-5-20251001": { in: 1, out: 5 },
 };

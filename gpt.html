@@ -435,16 +435,27 @@ async function send(){
           const readFiles=rd.files.filter(function(f){return f.read&&f.text;});
           const unreadFiles=rd.files.filter(function(f){return !f.read||!f.text;});
           // 읽은 파일 내용을 AI에게 전달
+          // 파일당 8,000자 × 20개면 최대 16만 자(≈10만+ 토큰)로 모델 컨텍스트/TPM을 초과한다
+          // → 전체 합산 24,000자 예산으로 제한 (파일당 최대 8,000자, 예산 소진 시 이후 파일은 목록만)
           let driveContent='[Google Drive 폴더 "'+searchTerm+'" 실제 파일 내용]\n\n';
+          let _budget=24000;
+          const _skipped=[];
           readFiles.forEach(function(f,i){
-            driveContent+='=== 파일 '+(i+1)+': '+f.name+' ===\n'+f.text.slice(0,8000)+'\n\n';
+            if(_budget<=800){_skipped.push(f.name);return;}
+            const chunk=String(f.text||'').slice(0,Math.min(8000,_budget));
+            _budget-=chunk.length;
+            driveContent+='=== 파일 '+(i+1)+': '+f.name+' ===\n'+chunk+'\n\n';
           });
+          if(_skipped.length){
+            driveContent+='[용량 제한으로 내용 생략된 파일]\n'+_skipped.map(function(n){return '- '+n;}).join('\n')+'\n\n';
+          }
           if(unreadFiles.length){
             driveContent+='[읽지 못한 파일]\n'+unreadFiles.map(function(f){return '- '+f.name+': '+(f.error||'읽기 실패');}).join('\n');
           }
           // AI 분석 요청
           const aiPrompt=text+'\n\n'+driveContent+'\n\n위 실제 파일 내용을 바탕으로 분석/요약해주세요. 읽지 못한 파일은 추측하지 마세요.';
-          const d=await api('/api/chat',{model:$('model').value,userId:user.id,message:aiPrompt,history:[],vff:String($('model').value||'').includes('claude')&&getVff()});
+          // skipDrive: 이미 위에서 폴더 내용을 읽어 프롬프트에 넣었으므로 서버가 같은 폴더를 중복으로 다시 읽지 않게
+          const d=await api('/api/chat',{model:$('model').value,userId:user.id,message:aiPrompt,history:[],skipDrive:true,vff:String($('model').value||'').includes('claude')&&getVff()});
           c.messages.push({role:'ai',text:d.text||d.answer||'분석 실패'});
         }else{
           c.messages.push({role:'ai',text:'❌ "'+searchTerm+'" 폴더를 찾지 못했거나 읽을 파일이 없습니다.\n\n경로를 정확히 입력해주세요. 예: #구글드라이브폴더 3디와이/SAP 분석해줘'});

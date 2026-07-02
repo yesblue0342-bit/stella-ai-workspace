@@ -1,4 +1,5 @@
-import { getDrive, getDriveRootId } from "../lib/drive-utils.js";
+// getDriveRootIdSafe 미임포트로 매 요청 ReferenceError → 항상 500이 나던 버그 수정
+import { getDrive, getDriveRootIdSafe } from "../lib/drive-utils.js";
 async function scanFolder(drive, folderId, name, depth, maxDepth, results) {
   if (depth > maxDepth) return;
   try {

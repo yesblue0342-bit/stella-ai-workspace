@@ -152,6 +152,30 @@ export function isTpmError(err) {
   return /\b429\b|tokens per min|Request too large|rate[ _-]?limit/i.test(m);
 }
 
+// ───────── Drive 의도 감지 (정밀) ─────────
+// ⚠️ 과거엔 영어 'drive' 부분 문자열('driver'/'driven'/'OneDrive')과 '아무 줄이나 #로 시작'
+//    (마크다운 제목, 파이썬/셸 주석, C '#include')에도 발동해 무관한 Drive 전체 스캔 +
+//    최대 28K자 무관 내용 주입 + web_search 비활성화가 일어났다.
+//    → 명시적 의도(한국어 '드라이브', 'my/google drive' 단어, Drive/Docs 링크, '#명령' 규약)만 인식.
+export function detectDriveIntent(message) {
+  const raw = String(message || "");
+  const msg = raw.toLowerCase();
+  if (/내 드라이브|드라이브/.test(raw)) return true;                       // 한국어는 기존 UX 유지
+  if (/\b(?:my|google)\s*drive\b|\bgdrive\b/.test(msg)) return true;      // 영어는 수식어+단어 경계 필수
+  if (/drive\.google\.com|docs\.google\.com/.test(msg)) return true;      // 공유 링크
+  if (/#폴더/.test(raw)) return true;
+  // '#폴더명' 명령 규약: '#'+비공백으로 시작하는 짧은 줄만.
+  // '# 제목'(공백), '##…', '#!'(셔뱅), C/전처리 지시문, 80자 초과 줄은 본문으로 간주.
+  for (const l of raw.split(/\r?\n/)) {
+    const t = l.trim();
+    if (!/^#[^#\s!]/.test(t)) continue;
+    if (/^#(?:include|define|pragma|if|ifdef|ifndef|endif|else|elif|error|undef|region|endregion)\b/i.test(t)) continue;
+    if (t.length > 80) continue;
+    return true;
+  }
+  return false;
+}
+
 // ───────── GitHub 의도 감지 (정밀) ─────────
 // ⚠️ 일반 업무 질문(예: "이 부분 스펙 정리해줘. SAP QM CBO프로그램")이 관리 액션으로
 //    오인되어 "auth 폴더 정리 완료" 같은 엉뚱한 답을 반환하던 버그 수정.
@@ -484,11 +508,9 @@ export default async function handler(req, res) {
     // [웹검색/날씨] 키워드가 있을 때만 실행
     const needsSearch  = /구글|검색|최신|뉴스|오늘|지금|현재|실시간/.test(msg);
     const needsWeather = /날씨|기온|우산|비|눈|더위|추위|forecast|weather/.test(msg);
-    const needsDrive   = /내 드라이브|my drive|#폴더|드라이브|drive/.test(msg)
-                      || /docs\.google\.com/.test(msg) // ★ Docs/Sheets/Slides 공유 링크도 Drive 읽기
-                      || /내 드라이브/.test(message) // 원문 대소문자 유지
-                      || /^#/.test(String(message).trim()) // ★ #으로 시작하면 드라이브 읽기
-                      || String(message).split(/\r?\n/).some(l => l.trim().startsWith("#"));
+    // skipDrive: 클라이언트(gpt.html 분석 플로우 등)가 이미 Drive 내용을 읽어 message에 넣은 경우
+    // 서버가 같은 폴더를 중복으로 다시 읽지 않게 하는 opt-in 플래그.
+    const needsDrive   = body.skipDrive === true ? false : detectDriveIntent(message);
     const needsSapSearch = /sap|qa32|qm|pp|abap|inspection|bom|migo|mb51|검사|품질|공정|자재|트랜잭션/.test(msg);
 
     // 웹/날씨 검색 (조건부)
@@ -541,8 +563,10 @@ export default async function handler(req, res) {
     // 메모리: Azure SQL 우선 → 빈값이면 Drive 폴백. warm 캐시(60s)로 반복 요청 fetch 제거.
     const memoryPrompt = await memoryPromise;
     mark("preModelMs"); // 모델 호출 직전까지 총 준비 시간
+    // 정적 시스템 프롬프트를 앞에, 자주 바뀌는 메모리를 뒤에 배치 —
+    // 프롬프트 프리픽스가 안정되어 제공자측 자동 프롬프트 캐싱에 유리하고, 지시문이 항상 먼저 온다.
     const prompt = buildSystemPrompt(
-      (memoryPrompt ? memoryPrompt + "\n\n" : "") + system,
+      system + (memoryPrompt ? "\n\n" + memoryPrompt : ""),
       searchContext,
       driveContext
     );
@@ -954,6 +978,10 @@ async function callClaude({ model, system, history, message, images = [] }) {
   if (!apiKey) throw new Error("ANTHROPIC_API_KEY not configured");
   const imgs = (Array.isArray(images) ? images : []).filter(u => u && String(u).startsWith("data:"));
   const selectedModel = ensureVisionModel(resolveClaudeModel(model), imgs.length > 0, "claude");
+  // Anthropic Messages API는 첫 메시지가 user여야 한다(assistant로 시작하면 400).
+  // trimHistoryByChars/slice(-12)가 자른 히스토리는 assistant로 시작할 수 있으므로 선두 assistant 제거.
+  const h = (Array.isArray(history) ? history : []).slice(-12);
+  while (h.length && h[0] && h[0].role === "assistant") h.shift();
   // 55초 타임아웃 가드 (장기 요청을 우아하게 종료해 좀비 연결 방지)
   const controller = new AbortController();
   const timeoutId = setTimeout(() => controller.abort(), 55000);
@@ -968,7 +996,7 @@ async function callClaude({ model, system, history, message, images = [] }) {
       max_tokens: 4096,
       system,
       messages: [
-        ...history.slice(-12).map(m => ({ role: m.role === "assistant" ? "assistant" : "user", content: String(m.content || "") })),
+        ...h.map(m => ({ role: m.role === "assistant" ? "assistant" : "user", content: String(m.content || "") })),
         { role: "user", content: imgs.length > 0
           ? [...imgs.map(u=>{ const { base64, mediaType } = parseDataUrl(u); return visionImageBlock({ api:"claude", base64, mediaType }); }), { type:"text", text:String(message||"") }]
           : String(message||"") }
@@ -977,7 +1005,12 @@ async function callClaude({ model, system, history, message, images = [] }) {
   });
   const data = await response.json();
   if (!response.ok) throw new Error(data.error?.message || "Claude API error");
-  return data.content?.map(c => c.text || "").join("\n") || "응답 없음";
+  let text = data.content?.map(c => c.text || "").join("\n") || "응답 없음";
+  // max_tokens에서 잘린 답변을 완결된 것처럼 반환하지 않는다 — 사용자에게 이어쓰기 안내.
+  if (data.stop_reason === "max_tokens") {
+    text += "\n\n⚠️ 답변이 최대 길이 제한으로 잘렸습니다. \"이어서 계속\"이라고 입력하면 이어서 작성합니다.";
+  }
+  return text;
   } catch(e) {
     if (e.name === "AbortError") throw new Error("응답 시간이 너무 깁니다. 질문을 더 짧게 해주세요.");
     throw e;

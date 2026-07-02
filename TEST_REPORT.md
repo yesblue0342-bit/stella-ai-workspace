@@ -1,36 +1,35 @@
-# TEST_REPORT — 산출물 Drive(0Program) 자동 저장 복구 (2026-07-02)
+# TEST_REPORT — Stella GPT 자동 반복 수정 (Autopilot Loop, 2026-07-02)
 
-| # | 테스트 | 결과 | 비고 |
+이전 리포트(0Program 자동 저장 복구, 2026-07-02 오전)는 git 이력에 보존.
+이번 리포트: 야간 Autopilot 루프(진단→수정→테스트) 결과.
+
+## 자동 테스트 케이스 결과
+
+| # | 테스트 | 결과 | 근거 |
 |---|---|---|---|
-| 1 | node --check 전 변경 파일 | ✅ 0 에러 | save-program.js / save-to-drive.mjs / drive-files.mjs / index.html 인라인 4블록 |
-| 2 | ensureFolder(0Program) | ✅ | Drive 실사: StellaGPT/0Program folderId=1qxJABoTZnJYtbs0UclqOv_TYUTv2mGhB (실존 확인) |
-| 3 | 샘플 업로드 | ✅(배포 스모크) | 매 배포 시 _deploy_smoke.txt 업서트 → 배포 후 Drive 실사로 fileId 확인(하단) |
-| 4 | Stella DB 목록 노출 | ✅ | DB는 Drive 폴더 프런트엔드 — 0Program 파일 생성 즉시 노출(폴더 실존/권한 동일) |
-| 5 | Stella GPT(신규 연결) 완료 플로우 | ✅(소스 검증+가드 단위테스트) | 답변→가드 통과→save-drive 호출 코드 존재 검증 |
-| 6 | Codex/Agent Code 완료 플로우 | ✅(기존 자동저장 회귀) | saveResultToDrive 자동 호출 유지, 문구 0Program 통일 |
-| 7 | 토큰 만료(401→refresh) | ✅(설계 확인) | googleapis OAuth2 클라이언트가 refresh_token으로 자동 갱신 — 운영 쓰기 생존(7/1~2 채팅 JSON) 실증 |
-| 8 | 실패 케이스 JSON | ✅ | env 미설정 환경에서 handler 호출 → throw 없이 {ok:false,error} 500, 시크릿 패턴 미노출 assert |
-| 9 | CLI 스크립트 | ✅(구문+폴백 설계) | node --check 통과. 직접 Drive → 서버 API 폴백. 실업로드는 OCI(.env 보유)에서 동작 |
-| 10 | 회귀 | ✅ 238/238 | GPT/Talk/DB/Hub/ABAP 관련 전 테스트 포함 0 fail |
-| 11 | 보안 | ✅ | 신규 코드에 키/토큰 리터럴 없음, 에러 메시지 시크릿 패턴 검사 테스트 포함 |
+| 1 | 전체 회귀 스위트 | ✅ **242/242** (fail 0, skip 0) | `npm test` — 기존 239 + 신규 3. 수정 전 기준선은 1 fail(jsdom 부재) + 15 skip이었음 |
+| 2 | Drive 의도 오탐 방지 | ✅ 11/11 | test/drive-intent.test.js — 'driver'/'OneDrive'/마크다운 제목/셔뱅/#include/80자 초과 해시줄에서 미발동 |
+| 3 | Drive 의도 정상 발동 | ✅ 11/11 | '내 드라이브'/'#Celltrion'/'#구글드라이브폴더 …'/Drive·Docs 링크/후행 줄 #명령에서 발동 |
+| 4 | skipDrive 이중읽기 차단 계약 | ✅ | 소스 계약 고정 테스트 + gpt.html 분석 플로우에 skipDrive:true 전달 확인 |
+| 5 | 문법 검증 (node --check) | ✅ 0 에러 | 수정 파일 전부: api/chat.js, api/claude.js, api/drive-tree.js, api/note-scan.js, api/cc/_maclient.mjs, lib/drive-utils.js |
+| 6 | 모듈 로드/시그니처 | ✅ | 전체 api/ 핸들러 import 스윕 0 실패, default export 전수 확인 |
+| 7 | HTML 인라인 스크립트 파싱 | ✅ | index/gpt/talk/db/abap/codex/hub 전부 통과 (cc.html은 type=module로 정상) |
+| 8 | DOM 런타임(jsdom) | ✅ | login-data-sync 회귀(교차기기 데이터 소실 가드) 포함 DOM 테스트 16종 실행·통과 — 기존엔 미설치로 skip/fail |
+| 9 | Claude API 정합성 | ✅(문서 검증) | claude-api 스킬 공식 문서로 검증: Opus 4.8 단가 $5/$25, Opus 4.7/4.8·Fable 5 temperature 400 거부, 캐시 최소 프리픽스(2048~4096토큰) |
+| 10 | 잘림 안내(stop_reason) | ✅(코드 검증) | callClaude가 max_tokens 잘림 시 이어쓰기 안내 부착 |
 
-## 신규 자동 테스트 (재발 방지, npm test 상시 포함)
-- test/save-program.test.js 7종: 파일명 규칙(KST)·405/400/500 JSON·dryRun 안전·시크릿 미노출·
-  소스가드 회귀·Stella GPT 연결 소스검증 — 7/7
+## 프롬프트 예산 검증 (토큰 낭비 방지)
+- Drive 발췌 총량: **≤ 22,000자 보장** (8파일 × 균등 배분, 하한 1,200자) — 기존엔 16파일 × 2,500자 ≈ 40K자로 예산 1.8배 초과 가능.
+- gpt.html 분석 플로우: 인라인 내용 **≤ 24,000자** + 서버 재읽기 skipDrive 차단 — 기존 최악 ~19만 자.
+- 무관 메시지의 Drive 스캔(오탐) 자체가 사라져 해당 케이스 Drive API 호출 10~30건/메시지 → 0건.
 
-## 실환경 증거 (Drive 실사, MCP)
-- StellaGPT/0Program: 1qxJABoTZnJYtbs0UclqOv_TYUTv2mGhB (수정 전: 비어 있음 — 원인 진단의 증거)
-- StellaGPT/0download: 1DzU3zLaXkbbj2cV3HpikpV6EWJ1O8rqw (수동 업로드 산출물 6개 폴더 — 우회 사용 흔적)
-- 배포 후: _deploy_smoke.txt fileId는 배포 로그(SMOKE_0PROGRAM)와 아래 갱신란에 기록.
+## 미실행(환경 제약) — 운영 배포 후 자동/수동 확인 항목
+- 실 API 호출 E2E(OpenAI/Anthropic/Drive 실호출)는 이 CI 컨테이너에 시크릿이 없어 실행 불가.
+  → main 반영 시 deploy-oci.yml이 배포 후 컨테이너 내부 스모크(/api/drive-diagnostics +
+  /api/db/save-program 실쓰기)를 자동 실행하고 결과를 ci-smoke 브랜치에 게시함.
+- 아침 수동 확인 권장 3건: ① "SAP QM이 뭐야?" ② "#구글드라이브폴더 <실폴더> 분석해줘"
+  ③ 마크다운 문서 붙여넣기(# 제목 포함) → Drive 스캔 없이 정상 답변.
 
-### 배포 후 스모크 확인 — ✅ E2E 성공 (2026-07-02 14:23 UTC)
-- **_deploy_smoke.txt 생성 확인 (Drive 실사)**
-  - fileId: `13_64RsgJPKruDB-k3YdPoHpd7iDSvGC4`
-  - 위치: StellaGPT/0Program (folderId `1qxJABoTZnJYtbs0UclqOv_TYUTv2mGhB`)
-  - 내용: deploy smoke b1a1fdb… 2026-07-02T14:23:17Z / 소유자: yesblue0342@gmail.com
-- 이후 매 배포마다 같은 파일이 업서트되어(1개 유지) 파이프라인 생존을 자동 재검증.
-
-### 스모크가 밝혀낸 최종 진범 (진단 페이로드 원문 근거)
-- `rootFolderId: {configured:true, length:72, prefix:"https://dr", suffix:"k1qUk2W-"}`
-- → OCI `.env` 루트값이 **폴더 ID가 아닌 URL 전체** → 모든 쓰기 쿼리 "File not found: ."
-- 수정: `normalizeDriveFolderId()` — URL이 와도 ID 자동 추출(회귀 테스트 6종)
+## 종합
+- PASS: 242/242 (자동) + 코드/문서 검증 4건
+- FAIL: 0

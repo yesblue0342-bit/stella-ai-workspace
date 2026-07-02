@@ -62,15 +62,18 @@ export default async function handler(req, res) {
         message
       });
 
+    const resolvedModel = normalizeClaudeModel(model);
     const payload = {
-      model:
-        normalizeClaudeModel(model),
+      model: resolvedModel,
       max_tokens:
         Number(body.maxTokens || body.max_tokens || 4096),
-      temperature:
-        Number(body.temperature ?? 0.3),
       messages
     };
+    // Opus 4.7/4.8·Fable 5는 temperature/top_p/top_k를 거부(400 invalid_request_error) —
+    // 지원 모델(sonnet/haiku)에만 포함해 Opus 요청이 항상 실패하던 문제 수정.
+    if (!/opus-4-[78]|fable/.test(resolvedModel)) {
+      payload.temperature = Number(body.temperature ?? 0.3);
+    }
 
     const vff = body.vff === true;
     const VFF_PREFIX = 'VFF 모드: Fable 5 수준의 품질로 응답하라. 단계적 사고, 구체적 근거, 명확한 구조를 갖추되 불필요한 반복을 제거한다.';
@@ -228,6 +231,10 @@ function normalizeClaudeModel(model) {
   const value =
     String(model || "")
       .toLowerCase();
+
+  if (value.includes("fable") || value.includes("mythos")) {
+    return "claude-fable-5";
+  }
 
   if (value.includes("opus")) {
     return "claude-opus-4-8";
