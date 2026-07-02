@@ -135,7 +135,7 @@ body.dark #omc,body.dark #ccVffToggle{accent-color:#000000}
         <button type="button" class="theme-toggle" id="themeToggle" title="다크/라이트 모드"></button>
         <label class="lbl" style="display:flex;align-items:center;gap:4px;cursor:pointer;white-space:nowrap" title="OMC 멀티에이전트 + 무인 오토파일럿: 구현→테스트→오류 자동수정 루프(질문 없이 RALPH_DONE까지)"><input type="checkbox" id="omc" style="width:auto"><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:16px;height:16px"><rect x="4" y="9" width="16" height="11" rx="2"/><path d="M12 9V5"/><circle cx="12" cy="4" r="1"/><circle cx="9" cy="14" r="1"/><circle cx="15" cy="14" r="1"/><path d="M9 17.5h6"/></svg> OMC</label>
         <label class="lbl" style="display:flex;align-items:center;gap:4px;cursor:pointer;white-space:nowrap" title="VFF: Fable 5 수준 응답 품질"><input type="checkbox" id="ccVffToggle" style="width:auto" onchange="onCcVffChange(this.checked)"> VFF</label>
-        <button type="button" id="saveGhBtn" title="이 세션 산출물을 Google Drive(StellaGPT/0download)에 저장" style="display:none">💾 Drive에 저장</button>
+        <button type="button" id="saveGhBtn" title="이 세션 산출물을 Google Drive(StellaGPT/0Program)에 저장" style="display:none">💾 Drive에 저장</button>
         <span class="status" id="status"></span>
       </div>
       <div id="attachStrip" style="display:none;gap:8px;flex-wrap:wrap;padding:4px 6px"></div>
@@ -242,7 +242,7 @@ function onCcVffChange(v){try{localStorage.setItem('stella_vff_enabled',String(v
 function esc(s){ return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
 function setStatus(html){ $('status').innerHTML = html || ''; }
 
-// C2: 작업 결과 전문을 Google Drive(StellaGPT/0download)에 {앱명}_{YYYYMMDD_HHMMSS}.txt로 자동 저장 + 토스트.
+// C2: 작업 결과 전문을 Google Drive(StellaGPT/0Program)에 {앱명}_{YYYYMMDD_HHMMSS}.txt로 자동 저장 + 토스트.
 function showToast(msg, ok){
   const t=document.createElement('div');
   t.textContent=msg;
@@ -355,13 +355,13 @@ async function finish(failed){
     }catch(e){}
     // PART B: 세션 완료 시 산출물 GitHub 자동 저장 (best-effort) + 수동 버튼 노출
     if(cur && cur.sessionId){ $('saveGhBtn').style.display=''; saveToGithub(true); }
-    // C2: 결과 전문(.txt)도 StellaGPT/0download에 자동 저장
+    // C2: 결과 전문(.txt)도 StellaGPT/0Program에 자동 저장
     if(!window.shouldSaveSource||window.shouldSaveSource(md)) saveResultToDrive('StellaAgentCode', cur.prompt, md); // 소스 가드 통과 시에만 0Program 자동 저장
   }
   loadSessions();
 }
 
-// PART B: 세션 산출물을 Google Drive(StellaGPT/0download)에 저장 (비공개) — auto/수동 공용
+// PART B: 세션 산출물을 Google Drive(StellaGPT/0Program)에 저장 (비공개) — auto/수동 공용
 async function saveToGithub(auto){
   if(!cur || !cur.sessionId){ if(!auto) setStatus('<span class="err">세션이 없습니다</span>'); return; }
   const btn=$('saveGhBtn'); const prev=btn.textContent; btn.disabled=true; btn.textContent='저장 중…';

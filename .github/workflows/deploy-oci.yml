@@ -57,3 +57,11 @@ jobs:
             git reset --hard origin/main
             bash deploy/run-stella-oci.sh
             echo "✅ OCI 재배포 완료"
+            # ── 배포 후 스모크: 0Program 저장 파이프라인 실확인 ──
+            # 고정 파일명(_deploy_smoke.txt) 업서트 → Drive 스모크 파일은 항상 1개만 유지(중복 없음).
+            # 실패해도 배포는 성공 처리하되 로그로 결과를 남긴다.
+            sleep 6
+            SMOKE=$(curl -s -m 25 -X POST http://127.0.0.1:8970/api/db/save-program \
+              -H 'Content-Type: application/json' \
+              -d "{\"app\":\"deploy\",\"title\":\"smoke\",\"ext\":\"txt\",\"fixedName\":\"_deploy_smoke.txt\",\"content\":\"deploy smoke $(git rev-parse --short HEAD) $(date -u +%FT%TZ)\"}" || true)
+            echo "SMOKE_0PROGRAM: $SMOKE"

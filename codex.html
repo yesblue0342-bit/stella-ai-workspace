@@ -229,7 +229,7 @@ $('themeToggle').addEventListener('click', toggleTheme);
 function esc(s){ return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
 function setStatus(html){ $('status').innerHTML = html || ''; }
 
-// C2: 작업 결과를 Google Drive(StellaGPT/0download)에 {앱명}_{YYYYMMDD_HHMMSS}.txt로 자동 저장 + 토스트.
+// C2: 작업 결과를 Google Drive(StellaGPT/0Program)에 {앱명}_{YYYYMMDD_HHMMSS}.txt로 자동 저장 + 토스트.
 function showToast(msg, ok){
   const t=document.createElement('div');
   t.textContent=msg;

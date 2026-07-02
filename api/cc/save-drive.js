@@ -1,4 +1,4 @@
-// POST /api/cc/save-drive — 세션 산출물(생성 파일)을 Google Drive(StellaGPT/0download)에 저장.
+// POST /api/cc/save-drive — 세션 산출물(생성 파일)을 Google Drive(StellaGPT/0Program)에 저장.
 // 공개 GitHub 노출 회피: 에이전트 생성물은 비공개 Drive로. 기존 Drive 인증 재사용(새 키/라우트 없음).
 import { listEvents, normalizeEvents } from "./_maclient.mjs";
 import { extractFilesFromEvents } from "../../lib/cc-files.mjs";
@@ -36,7 +36,7 @@ export default async function handler(req, res) {
       }
     }
 
-    // C2: 텍스트 전문 저장 모드 — {앱명}_{YYYYMMDD_HHMMSS}.txt 한 개를 StellaGPT/0download에 저장.
+    // C2: 텍스트 전문 저장 모드 — {앱명}_{YYYYMMDD_HHMMSS}.txt 한 개를 StellaGPT/0Program에 저장.
     //     세션 불필요(코덱스 챗 등 비세션 앱도 사용). text가 있으면 이 경로 우선.
     if (text != null && String(text).trim()) {
       const r = await saveTextToDrive({ app: app || "Stella", header, text });

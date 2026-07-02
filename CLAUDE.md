@@ -22,3 +22,15 @@
 - **절대 새 브랜치나 PR(Pull Request)을 만들지 마라.**
 - 개인 프로젝트이며 코드 리뷰가 필요 없다. main에 바로 올린다.
 - push하면 GitHub Actions(`deploy-oci.yml`)가 OCI 서버에 자동배포한다.
+
+## 산출물 저장 규칙 (필수)
+- 프로그램 산출물이 완성되면 GitHub 커밋과 함께
+  `node scripts/save-to-drive.mjs <파일>` 로 Google Drive
+  `StellaGPT/0Program` 업로드까지 완료해야 DoD 충족이다.
+- 저장 폴더는 0Program 단일 경로. 0download 사용 금지.
+- 앱(Stella GPT/Codex/Agent Code/ABAP)은 답변 후 소스 가드 통과 시
+  `/api/cc/save-drive` 로 자동 저장된다. 명시 저장은 `/api/db/save-program`.
+
+## Autopilot 계약 (필수)
+- 사람에게 질문/확인 요청 금지. 합리적 기본값으로 자동 진행.
+- 진행 → 테스트(TEST_REPORT.md) → 커밋 → main 푸시 → 배포 확인 → RALPH_DONE 종료.
