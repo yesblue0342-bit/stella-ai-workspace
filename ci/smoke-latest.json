@@ -1,10 +1,45 @@
 {
-  "sha": "35d8d109ad6c8bcf554f9649679422736e3e1a42",
-  "at": "2026-07-02T14:13:50Z",
-  "smoke": {
-    "err": "curl_fail"
+ "sha": "3ca56d2cf6e7b3db856240936f2f46a76ec97093",
+ "smoke": {
+  "ok": false,
+  "error": "File not found: ."
+ },
+ "diag": {
+  "ok": true,
+  "service": "drive-diagnostics",
+  "diagnostics": {
+   "clientId": {
+    "configured": true,
+    "length": 72,
+    "prefix": "6950008873",
+    "suffix": "tent.com"
+   },
+   "clientSecret": {
+    "configured": true,
+    "length": 35,
+    "prefix": "GOCSPX-Dez",
+    "suffix": "MoxFmmXO"
+   },
+   "refreshToken": {
+    "configured": true,
+    "length": 103,
+    "prefix": "1//0",
+    "suffix": "FhpLtKHE"
+   },
+   "rootFolderId": {
+    "configured": true,
+    "length": 72,
+    "prefix": "https://dr",
+    "suffix": "k1qUk2W-"
+   },
+   "redirectUri": "https://developers.google.com/oauthplayground",
+   "checks": {
+    "clientIdLooksOAuth": true,
+    "clientSecretLooksOAuth": true,
+    "refreshTokenLooksGoogle": true,
+    "rootFolderConfigured": true
+   }
   },
-  "diag": {
-    "err": "diag_curl_fail"
-  }
+  "note": "값 전체는 노출하지 않고 prefix/suffix/형식만 표시합니다."
+ }
 }
