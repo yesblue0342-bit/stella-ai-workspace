@@ -14,6 +14,9 @@ on:
     branches: [ main ]
   workflow_dispatch: {}
 
+permissions:
+  contents: write
+
 concurrency:
   group: deploy-oci
   cancel-in-progress: true
@@ -68,18 +71,27 @@ jobs:
               -d "{\"app\":\"deploy\",\"title\":\"smoke\",\"ext\":\"txt\",\"fixedName\":\"_deploy_smoke.txt\",\"content\":\"deploy smoke $(git rev-parse --short HEAD) $(date -u +%FT%TZ)\"}" || true)
             echo "SMOKE_0PROGRAM: $SMOKE"
 
-      - name: Smoke — 0Program 저장 실검증 (공개 도메인 → 결과를 커밋 코멘트로)
+      - name: Smoke — 0Program 저장 실검증 + 진단(결과를 ci-smoke 브랜치 파일로 공개)
         if: steps.chk.outputs.ready == 'true'
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           sleep 3
-          BODY=$(curl -s -m 30 -X POST https://stella.xn--hu5b23z.com/api/db/save-program \
+          BASE=https://stella.xn--hu5b23z.com
+          DIAG=$(curl -s -m 20 "$BASE/api/drive-diagnostics" || echo '{"err":"diag_curl_fail"}')
+          BODY=$(curl -s -m 30 -X POST "$BASE/api/db/save-program" \
             -H 'Content-Type: application/json' \
-            -d "{\"app\":\"deploy\",\"title\":\"smoke\",\"ext\":\"txt\",\"fixedName\":\"_deploy_smoke.txt\",\"content\":\"deploy smoke ${GITHUB_SHA::7} $(date -u +%FT%TZ)\"}" || echo CURL_FAIL)
+            -d "{\"app\":\"deploy\",\"title\":\"smoke\",\"ext\":\"txt\",\"fixedName\":\"_deploy_smoke.txt\",\"content\":\"deploy smoke ${GITHUB_SHA::7} $(date -u +%FT%TZ)\"}" || echo '{"err":"curl_fail"}')
           echo "SMOKE_0PROGRAM: $BODY"
-          # 결과를 커밋 코멘트로 남김(외부에서 확인 가능한 유일한 공개 채널)
-          jq -n --arg b "SMOKE_0PROGRAM: ${BODY:0:800}" '{body:$b}' \
-            | curl -s -X POST -H "Authorization: Bearer $GH_TOKEN" -H "Accept: application/vnd.github+json" \
-              "https://api.github.com/repos/${GITHUB_REPOSITORY}/commits/${GITHUB_SHA}/comments" -d @- >/dev/null || true
+          echo "DIAG: $DIAG"
+          # 결과를 ci-smoke 브랜치의 ci/smoke-latest.json 으로 커밋(외부에서 raw 로 확인 가능)
+          API="https://api.github.com/repos/${GITHUB_REPOSITORY}"
+          AUTH="Authorization: Bearer $GH_TOKEN"
+          curl -s -X POST -H "$AUTH" "$API/git/refs" -d "{\"ref\":\"refs/heads/ci-smoke\",\"sha\":\"$GITHUB_SHA\"}" >/dev/null 2>&1 || true
+          CONTENT=$(jq -n --arg sha "$GITHUB_SHA" --argjson smoke "${BODY:-null}" --argjson diag "${DIAG:-null}" \
+            '{sha:$sha, at:(now|todate), smoke:$smoke, diag:$diag}' 2>/dev/null | base64 -w0)
+          PREV=$(curl -s -H "$AUTH" "$API/contents/ci/smoke-latest.json?ref=ci-smoke" | jq -r '.sha // empty')
+          jq -n --arg c "$CONTENT" --arg p "$PREV" \
+            '{message:"ci: smoke result", content:$c, branch:"ci-smoke"} + (if $p=="" then {} else {sha:$p} end)' \
+            | curl -s -X PUT -H "$AUTH" "$API/contents/ci/smoke-latest.json" -d @- >/dev/null || true
           echo "$BODY" | grep -q '"ok":true' || { echo "::error::0Program 스모크 실패"; exit 1; }
