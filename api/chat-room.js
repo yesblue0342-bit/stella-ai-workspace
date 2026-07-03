@@ -113,7 +113,16 @@ export default async function handler(req, res) {
       if (!message && !fileName) return res.status(400).json({ ok: false, message: "메시지 또는 파일 필요" });
 
       // 기존 메시지 읽어서 append (덮어쓰기 방지)
-      const existing = await readJsonFromDrive({ folderPath: ["MemberChat"], fileName: roomId }).catch(() => null);
+      // ⚠️ readJsonFromDrive는 '파일 없음'일 때만 null을 반환하고, 실제 오류(429/5xx/토큰
+      //    갱신 실패/JSON 손상)는 throw한다. 오류를 .catch(()=>null)로 삼키면 기존 방을
+      //    "없음"으로 오인해 메시지 1개짜리로 덮어써 대화 전체가 영구 소실된다 → 오류는 503.
+      let existing;
+      try {
+        existing = await readJsonFromDrive({ folderPath: ["MemberChat"], fileName: roomId });
+      } catch (readErr) {
+        console.error('[chat-room:send] 방 읽기 오류:', String(readErr?.message || readErr));
+        return res.status(503).json({ ok: false, message: "채팅방을 잠시 읽지 못했습니다. 다시 시도해주세요." });
+      }
       const prevMessages = existing?.data?.messages || [];
       const prevMembers = existing?.data?.members || [];
       // STAGE 4 보안: 기존 방 + 멤버명단 있음 + 발신자 비멤버 + 코드방 아님 → 임의 전송 차단.
@@ -162,7 +171,14 @@ export default async function handler(req, res) {
       const title = clean(body.title || body.roomName || "");
       const add = (Array.isArray(body.members) ? body.members : [body.userId]).map(clean).filter(Boolean);
       if (!roomId || !add.length) return res.status(400).json({ ok: false, message: "roomId, members 필요" });
-      const existing = await readJsonFromDrive({ folderPath: ["MemberChat"], fileName: roomId }).catch(() => null);
+      // send와 동일: 읽기 '오류'를 새 방으로 오인하면 messages:[]로 덮어써 대화가 소실된다 → 503.
+      let existing;
+      try {
+        existing = await readJsonFromDrive({ folderPath: ["MemberChat"], fileName: roomId });
+      } catch (readErr) {
+        console.error('[chat-room:invite] 방 읽기 오류:', String(readErr?.message || readErr));
+        return res.status(503).json({ ok: false, message: "채팅방을 잠시 읽지 못했습니다. 다시 시도해주세요." });
+      }
       const base = existing?.data || { type: "memberChat", roomId, title: title || roomId, members: [], messages: [] };
       const prevMembers = Array.isArray(base.members) ? base.members.map(String) : [];
       const newMembers = [...new Set([...prevMembers, ...add])];

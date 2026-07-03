@@ -66,6 +66,14 @@ export default async function handler(req, res) {
     res.setHeader("Cache-Control", "private, no-store");
     return res.status(200).send(buf);
   } catch (e) {
+    // zip 스트리밍 중(헤더 전송 후) 오류면 JSON을 쓸 수 없다 — jsonErr가 ERR_HTTP_HEADERS_SENT를
+    // 던져 응답이 영영 안 닫히고, 클라이언트는 잘린 zip을 정상 다운로드로 오인한다.
+    // → 소켓을 끊어 브라우저가 '네트워크 오류'로 명확히 실패 처리하게 한다.
+    if (res.headersSent) {
+      console.error('[gh-file] 스트리밍 중 오류:', String(e?.message || e));
+      try { res.destroy(); } catch {}
+      return;
+    }
     return jsonErr(res, e.status || 500, "파일 프록시 실패: " + String(e.message || e));
   } finally { done(); }
 }

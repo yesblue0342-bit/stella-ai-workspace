@@ -5,6 +5,18 @@ test("검색 우선 문구", () => { assert.match(buildSystemPrompt({}), /추측
 test("표 기본 금지/요청 허용", () => { assert.match(buildSystemPrompt({table:false}), /표를 만들지 않습니다/); assert.match(buildSystemPrompt({table:true}), /마크다운 표로 정리/); });
 test("메모리 보존", () => assert.match(buildSystemPrompt({extra:"KH 메모리"}), /KH 메모리/));
 test("파싱/폴백", () => { assert.equal(extractText({output:[{type:"message",content:[{type:"output_text",text:"ok"}]}]}),"ok"); assert.equal(extractText({output:[]}),"응답을 생성하지 못했습니다."); });
+// 회귀: web_search 등으로 응답이 여러 message로 나뉘면 .find(첫 message만)는 최종 답변을 놓친다.
+test("extractText: 여러 message 아이템의 텍스트를 모두 이어붙인다", () => {
+  const data = { output: [
+    { type: "message", content: [{ type: "output_text", text: "검색을 수행했습니다." }] },
+    { type: "web_search_call", status: "completed" },
+    { type: "message", content: [{ type: "output_text", text: "최종 답변입니다." }] },
+  ]};
+  assert.equal(extractText(data), "검색을 수행했습니다.\n최종 답변입니다.");
+});
+test("extractText: output_text 우선(있으면 그대로)", () => {
+  assert.equal(extractText({ output_text: "빠른경로", output: [{ type:"message", content:[{type:"output_text",text:"무시됨"}] }] }), "빠른경로");
+});
 // 다운로드/엑셀/스펙 요청도 표로 처리(엑셀 다운로드 버그 수정)
 test("다운로드·엑셀·스펙 요청 → 표", () => {
   assert.equal(wantsTable("엑셀로 다운로드 받게 해줘"), true);

@@ -37,7 +37,9 @@ async function readNotesFromRoot(rootName, userId, noteMap) {
 }
 
 // folderPath 하위의 노트 JSON들을 noteMap에 수집 (userId 필터 옵션)
-async function collectNotes(folderPath, noteMap, filterUserId = null) {
+// errors: Drive 목록 조회 자체가 실패(연결 불가/429/토큰)하면 여기 push → 호출부가
+//         "빈 계정"과 "저장소 장애"를 구분할 수 있게 한다.
+async function collectNotes(folderPath, noteMap, filterUserId = null, errors = null) {
   try {
     const files = await listJsonFromDrive({ folderPath, pageSize: 100 });
     // 병렬 처리 (최대 10개씩 배치) - 타임아웃 방지
@@ -69,7 +71,7 @@ async function collectNotes(folderPath, noteMap, filterUserId = null) {
         }
       }
     }
-  } catch(e) {}
+  } catch(e) { if (errors) errors.push(String(e?.message || e)); }
 }
 
 export default async function handler(req, res) {
@@ -87,13 +89,21 @@ export default async function handler(req, res) {
     // ── 목록 조회 (users/notes + Board + boards 모든 경로 통합) ──
     if (action === "list") {
       const noteMap = new Map();
+      const errors = [];
 
       // 1) 표준 경로: users/{userId}/notes/
-      await collectNotes(notesPath, noteMap);
+      await collectNotes(notesPath, noteMap, null, errors);
 
       // 2) 레거시 경로들: Board/*, boards/* (대소문자 모두)
       for (const root of LEGACY_ROOTS) {
         await readNotesFromRoot(root, userId, noteMap);
+      }
+
+      // 저장소가 완전히 불통(모든 조회 실패)인데 결과가 0개면, "노트 없음"이 아니라
+      // "장애"다 → 빈 목록을 정답처럼 반환해 사용자가 노트가 사라졌다고 오해하지 않게 503.
+      if (noteMap.size === 0 && errors.length > 0) {
+        console.error("[note:list] 저장소 조회 실패:", errors.join(" | "));
+        return res.status(503).json({ ok: false, message: "노트 저장소를 읽지 못했습니다. 잠시 후 다시 시도해주세요." });
       }
 
       const notes = Array.from(noteMap.values());

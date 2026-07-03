@@ -34,9 +34,11 @@
     opts = opts || {};
     var container = document.getElementById(opts.messagesId || "messages");
     var body = {}; for (var k in bodyObj) body[k] = bodyObj[k]; body.stream = true;
+    // 스트리밍은 최대 ~290초 걸릴 수 있고, POST 재시도는 모델 호출을 이중으로 유발한다
+    // → 타임아웃 300초, 재시도 0(비스트리밍 폴백은 호출부가 담당).
     var res = await (window.stellaFetchRetry || fetch)(url, {
       method: "POST", headers: { "Content-Type": "application/json", "Cache-Control": "no-store" }, body: JSON.stringify(body),
-    });
+    }, { timeoutMs: 300000, retries: 0 });
     var ct = (res.headers && res.headers.get && res.headers.get("content-type")) || "";
     if (!res.ok || ct.indexOf("text/event-stream") < 0 || !res.body || !res.body.getReader) {
       var e = new Error("not-streamable"); e.code = "NO_STREAM"; throw e; // 비스트리밍 폴백 유도
@@ -62,6 +64,12 @@
       }
     } finally { if (bubble) bubble.remove(); }
     if (!full) { var e2 = new Error(errMsg || "empty-stream"); e2.code = "NO_STREAM"; throw e2; }
+    // 부분 델타가 온 뒤 서버 오류(o.error)로 끊긴 경우: 그동안의 텍스트를 완결된 답변처럼
+    // 저장하면 잘린 답을 정상으로 오인한다 → 중단 표시를 붙이고 truncated 플래그로 알린다.
+    // (여기서 비스트리밍 재요청은 같은 모델 호출을 한 번 더 유료로 돌리므로 하지 않는다.)
+    if (errMsg) {
+      return { text: full + "\n\n⚠️ 답변 생성이 중간에 중단되어 내용이 잘렸을 수 있습니다. 다시 시도해 주세요.", streamed: true, truncated: true, data: {} };
+    }
     return { text: full, streamed: true, data: {} };
   }
 

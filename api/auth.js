@@ -57,6 +57,14 @@ async function readUser(idKey, emailKey){
   return null;
 }
 
+// 회원가입 중복확인 전용 — 저장소 '오류'를 null(=중복 없음)로 삼키면 기존 계정 파일을
+// 새 가입 데이터로 덮어써(password_hash 교체) 계정 탈취가 가능하다 → 오류는 그대로 throw(fail-closed).
+async function readUserStrict(key){
+  if(!key) return null;
+  const f = await readJsonFromDrive({ folderPath:["auth","users"], fileName: key });
+  return f?.data || null;
+}
+
 // 공유 스키마 보장 (password_hash 포함). 기존 테이블이면 누락 컬럼만 ALTER ADD (데이터 보존).
 async function ensureUsersTable(pool, sql){
   await pool.request().query(`
@@ -179,8 +187,15 @@ export default async function handler(req, res){
     if(password.length < 4) return res.status(400).json({ ok:false, message:"비밀번호는 4자 이상 입력하세요." });
 
     // 중복 확인 (ID / e-mail 각각 키값으로 검사) — 비밀번호 무관 무조건 차단
-    const dupById    = idKey    ? await readUser(idKey, "")    : null;
-    const dupByEmail = emailKey ? await readUser("", emailKey) : null;
+    // fail-closed: 저장소 오류 시 가입을 진행하면 기존 계정을 덮어쓸 수 있으므로 503으로 중단.
+    let dupById, dupByEmail;
+    try{
+      dupById    = await readUserStrict(idKey);
+      dupByEmail = await readUserStrict(emailKey);
+    }catch(dupErr){
+      console.error("[auth] signup dup-check failed:", dupErr && dupErr.message); // 내부 로그만
+      return res.status(503).json({ ok:false, message:"잠시 후 다시 시도해주세요." });
+    }
     if(dupById){
       return res.status(409).json({ ok:false, code:"DUPLICATE_ID", field:"id", message:"가입한 ID가 존재합니다. 다른 ID로 신청하세요." });
     }

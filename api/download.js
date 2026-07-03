@@ -1,6 +1,7 @@
 // api/download.js — Drive 파일을 서버 OAuth로 받아 브라우저로 attachment 스트리밍
 // 대용량(40MB+)도 메모리에 통째로 안 올리고 흘려보낸다.
 import { Readable } from 'node:stream';
+import { pipeline } from 'node:stream/promises';
 
 // 기존 Drive 인증(refresh token → access token) 재사용. 테스트에선 __TEST_TOKEN__ 사용.
 async function getAccessToken() {
@@ -49,7 +50,15 @@ export default async function handler(req, res) {
     if (!fileRes.ok || !fileRes.body) return res.status(fileRes.status || 502).json({ error: 'media_failed' });
 
     res.statusCode = 200;
-    Readable.fromWeb(fileRes.body).pipe(res);
+    // ⚠️ .pipe(res)는 소스 스트림 'error'에 리스너가 없어, 전송 중 Drive 연결이 끊기면
+    //    unhandled 'error' → uncaughtException으로 Node 프로세스 전체가 죽는다(전 앱 동시 중단).
+    //    pipeline()은 소스/목적지 오류를 모두 promise로 수렴시켜 프로세스를 보호한다.
+    try {
+      await pipeline(Readable.fromWeb(fileRes.body), res);
+    } catch (streamErr) {
+      console.error('[download] 전송 중 스트림 오류:', String(streamErr?.message || streamErr));
+      try { res.destroy(); } catch {}
+    }
   } catch (e) {
     if (!res.headersSent) res.status(500).json({ error: 'download_exception', message: String(e?.message || e) });
   }
