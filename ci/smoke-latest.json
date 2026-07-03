@@ -1,5 +1,5 @@
 {
- "sha": "0c25283426e8f6af060e8eb072471ab0cc0e5088",
+ "sha": "02d760cdb6091f758d3a38a6f76ca8c9d2bc9957",
  "smoke": {
   "ok": true,
   "updated": true,
@@ -22,14 +22,14 @@
    "clientSecret": {
     "configured": true,
     "length": 35,
-    "prefix": "GOCSPX-Dez",
-    "suffix": "MoxFmmXO"
+    "prefix": "",
+    "suffix": ""
    },
    "refreshToken": {
     "configured": true,
     "length": 103,
-    "prefix": "1//0",
-    "suffix": "FhpLtKHE"
+    "prefix": "",
+    "suffix": ""
    },
    "rootFolderId": {
     "configured": true,
