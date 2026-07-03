@@ -43,7 +43,7 @@ export default async function handler(req, res) {
     const agentId = await MA.getOrCreateAgent(model, useOmc, useVff, getMeta, setMeta);
     const rawTitle = (title && String(title).trim()) || String(prompt).trim();
     const title2 = rawTitle.replace(/[\p{Cc}\p{Cf}]/gu, " ").replace(/\s+/g, " ").trim().slice(0, 60) || "Stella Agent Code";
-    const { id: sessionId, repoMounted } = await MA.createSession(agentId, environmentId, title2, resources);
+    const { id: sessionId, repoMounted, mountError } = await MA.createSession(agentId, environmentId, title2, resources);
 
     // 레포가 실제 마운트된 경우에만 프리앰블을 붙인다(마운트 실패 시 잘못된 안내 방지).
     const preamble = repoMounted
@@ -51,11 +51,16 @@ export default async function handler(req, res) {
       : "";
     await MA.sendUserMessage(sessionId, preamble + String(prompt), attachments);
 
+    // 레포를 원했는데 못 붙은 경우, 이유를 명확히 반환(토큰 미설정/권한/미존재/미지원). 조용한 저하 방지.
+    const repoMountError = repoMounted ? null
+      : (parsed && !token) ? "서버 GITHUB_TOKEN 미설정(레포 마운트 불가)"
+      : (parsed ? (mountError || "레포 마운트 실패") : null);
+
     await saveSession({ id: sessionId, title: title2, model, agentId, environmentId, status: "running", budgetUsd: budget, costUsd: 0 });
     return res.status(200).json({
       sessionId, agentId, environmentId, model, budgetUsd: budget, title: title2, omc: useOmc,
       repo: repoMounted ? (parsed.owner + "/" + parsed.name) : null, branch: repoMounted ? repoBranch : null,
-      repoMounted: !!repoMounted,
+      repoMounted: !!repoMounted, repoMountError,
     });
   } catch (e) {
     return res.status(e.status || 500).json({ error: "start_failed", message: String(e.message || e) });
