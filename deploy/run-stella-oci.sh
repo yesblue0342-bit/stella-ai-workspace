@@ -55,7 +55,7 @@ fi
 
 echo ""
 echo "🎉 빌드/실행 완료. NPM 에서 Proxy Host:"
-echo "   Domain          : stella.xn--hu5b23z.com"
+echo "   Domain          : gpt.xn--hu5b23z.com"
 echo "   Forward Host/IP : $NAME"
 echo "   Forward Port    : $PORT"
 echo "   (Websockets Support 켜기 — SSE 스트리밍용)"
