@@ -430,7 +430,9 @@ async function send(){
     chat.model = model;
     persistCurrent();
     setStatus('<span class="ok">완료 ✓</span>');
-    if(!window.shouldSaveSource||window.shouldSaveSource(answer)) saveResultToDrive(text, answer, attExt(att)); // 가드 통과 시 저장(확장자=첨부파일 기준, 없으면 서버가 코드펜스로 판별)
+    // Codex는 조언(채팅) 전용 — 답변을 Drive/0Program에 자동 파일로 덤프하지 않는다(쓰레기 커밋 방지).
+    // 실제 레포 편집·커밋·push 는 Stella Agent Code(/cc)가 담당(세션에 레포 마운트).
+    // (필요 시 코드블록 우측 '복사'로 직접 저장.)
   }catch(e){
     const msg = (e && e.name==='AbortError') ? '중단됨' : ('오류: '+(e&&e.message?e.message:e));
     thinking.innerHTML = '<span class="err">'+esc(msg)+'</span>';
