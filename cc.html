@@ -450,7 +450,8 @@ async function send(){
       body:JSON.stringify({ model, prompt:text, title:cur.title, budgetUsd, omc: $('omc').checked, vff: getCcVff(), attachments:att, repo: rp?rp.full:undefined, branch: rp?rp.branch:undefined })});
     const d=await r.json(); if(!r.ok||d.error) throw new Error(d.message||d.error||'start 실패');
     cur.sessionId=d.sessionId; cur.model=d.model; cur.budgetUsd=d.budgetUsd;
-    const repoTag = d.repoMounted ? (' · 📁 '+esc(d.repo)) : (rp?' · ⚠️레포 미마운트(빈 샌드박스)':'');
+    const repoTag = d.repoMounted ? (' · 📁 '+esc(d.repo))
+      : (d.repoMountError ? (' · ⚠️'+esc(d.repoMountError)) : (rp?' · ⚠️레포 미마운트(빈 샌드박스)':''));
     setStatus('세션 '+d.sessionId.slice(0,12)+'… 진행 중'+repoTag); poll();
   }catch(e){ setStatus('<span class="err">'+esc(e.message)+'</span>'); setUIBusy(false); cur=null; }
 }

@@ -73,24 +73,30 @@ export async function getOrCreateAgent(model, omc, vff, getMeta, setMeta) {
 }
 
 // resources: [{ type:"github_repository", url, mount_path, authorization_token }] (세션 레벨 레포 마운트)
-// managed-agents 베타 스키마(resources)가 거부되면(4xx) 리소스 없이 재시도해 기존 동작을 보존(회귀 방지).
-// 반환: { id, repoMounted } — 레포 마운트 성공 여부를 호출부(UI)에 전달.
+// managed-agents 베타 스키마(resources)가 거부되면(4xx) 리소스 없이 재시도해 세션 자체는 살린다(회귀 방지).
+// 단, 원인(권한/미존재/미지원)은 mountError 로 반환해 UI가 조용한 실패 대신 이유를 안내하게 한다.
+// 반환: { id, repoMounted, mountError }.
 export async function createSession(agentId, environmentId, title, resources) {
   const base = { agent: agentId, environment_id: environmentId, title: title || "Stella Agent Code 세션" };
   const hasRes = Array.isArray(resources) && resources.length > 0;
+  let mountError = null;
   if (hasRes) {
     try {
       const s = await maFetch("/v1/sessions", { method: "POST", body: { ...base, resources } });
-      return { id: s.id, repoMounted: true };
+      return { id: s.id, repoMounted: true, mountError: null };
     } catch (e) {
-      // 스키마/검증 계열(4xx)만 폴백 대상 — 그 외(인증/서버)는 그대로 던진다.
+      // 5xx/네트워크 등은 일시적 서버 오류일 수 있으니 그대로 던진다(세션 못 만듦).
       const st = Number(e && e.status) || 0;
       if (st < 400 || st >= 500) throw e;
+      // 4xx: 레포 없이라도 세션은 살리되, 사유를 남겨 조용한 저하를 방지.
+      mountError = (st === 401 || st === 403) ? "GitHub 토큰 권한 부족(repo 스코프 필요)"
+        : (st === 404) ? "레포를 찾을 수 없음(이름/접근권한 확인)"
+        : "레포 마운트 미지원/거부(HTTP " + st + ")";
       console.error("[cc/start] 세션 resources 마운트 실패(폴백, 레포 없이 진행):", (e && e.message) || e);
     }
   }
   const s = await maFetch("/v1/sessions", { method: "POST", body: base });
-  return { id: s.id, repoMounted: false };
+  return { id: s.id, repoMounted: false, mountError };
 }
 const SP = (id) => "/v1/sessions/" + encodeURIComponent(id);
 // 첨부(이미지) 지원: attachments = [{ media_type, data(base64) }] → image 콘텐츠 블록 변환.
