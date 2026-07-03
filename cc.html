@@ -465,6 +465,31 @@ $('saveGhBtn').addEventListener('click', () => saveToGithub(false));
 
 loadSessions();
 if('serviceWorker' in navigator){ navigator.serviceWorker.register('/sw.js').catch(function(){}); }
+
+// 0Program(GitHub) 소스 불러오기 — URL #ZAQMR0100 형태로 진입 시 자동 로드.
+// 기존 /api/cc/save-drive의 action:'load-github'(0Program 전용, 서버측 GITHUB_TOKEN 재사용) 그대로 사용.
+async function load0Program(programName){
+  const name = String(programName||'').trim();
+  if(!name) return;
+  setStatus('0Program 불러오는 중… '+esc(name));
+  try{
+    const r = await fetch('/api/cc/save-drive', { method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({ action:'load-github', programName:name, ext:'abap' }) });
+    const d = await r.json();
+    if(d.ok && d.exists){
+      const cur = $('prompt').value;
+      $('prompt').value = (cur ? cur+'\n\n' : '') + d.text;
+      $('prompt').dispatchEvent(new Event('input'));
+      setStatus('<span class="ok">0Program 로드 ✓ '+esc(d.path||name)+'</span>');
+    } else if(d.ok){
+      setStatus('<span class="err">0Program에 해당 파일 없음: '+esc(name)+'</span>');
+    } else {
+      setStatus('<span class="err">0Program 로드 실패: '+esc(d.message||d.reason||'')+'</span>');
+    }
+  }catch(e){ setStatus('<span class="err">0Program 로드 오류: '+esc(e.message)+'</span>'); }
+}
+window.addEventListener('hashchange', ()=>{ const n=decodeURIComponent(location.hash.slice(1)); if(n) load0Program(n); });
+if(location.hash) load0Program(decodeURIComponent(location.hash.slice(1)));
 </script>
 </body>
 </html>
