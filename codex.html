@@ -123,6 +123,7 @@ body:not(.dark) .app-ico{filter:grayscale(1) brightness(0)!important}
     <div class="msgs" id="msgs"><div class="empty" id="emptyHint"></div></div>
     <div class="barwrap">
       <div class="ctl">
+        <select id="repoSel" title="레포 맥락 (Hub와 동일 목록) — 선택 시 루트 구조를 인식"><option value="">레포: 불러오는 중…</option></select>
         <select id="model"></select>
         <button type="button" class="theme-toggle" id="themeToggle" title="다크/라이트 모드"></button>
         <span class="status" id="status"></span>
@@ -225,6 +226,49 @@ $('themeToggle').addEventListener('click', toggleTheme);
   chat.model = sel.value;
   sel.addEventListener('change', () => { chat.model = sel.value; try { localStorage.setItem(MODEL_KEY, sel.value); } catch(e){} });
 })();
+
+// ── 레포 선택기 (Hub와 동일 /api/github?action=repos). Codex는 코드실행 샌드박스가 없어 '레포 인지형 채팅'으로 동작:
+//    선택 시 루트 구조를 불러와 시스템 프롬프트에 주입 → 레포 맥락 위에서 답변. (파일 자동편집·커밋·push는 Agent Code(/cc)가 담당) ──
+const REPO_KEY='stella_codex_repo';
+let codexRepos=[], repoCtx=null; // repoCtx = { full, owner, name, branch, tree:[{name,type}] }
+function codexSystemWithRepo(){
+  if(!repoCtx) return CODEX_SYSTEM;
+  const files=(repoCtx.tree||[]).slice(0,80).map(t=>t.type==='dir'?(t.name+'/'):t.name).join(', ');
+  return CODEX_SYSTEM+'\n\n[작업 대상 GitHub 레포] '+repoCtx.full+' (브랜치 '+repoCtx.branch+'). 루트 구조: '+(files||'(빈 레포)')+
+    '\n특정 파일 내용이 필요하면 사용자에게 경로를 물어보거나 붙여넣은 코드를 기준으로 수정안을 제시하라. '+
+    '파일을 직접 편집·커밋·push 하는 무인 자동화가 필요하면 Stella Agent Code(/cc)를 쓰라고 안내하라.';
+}
+async function loadCodexRepos(){
+  const sel=$('repoSel'); if(!sel) return;
+  try{
+    const r=await fetch('/api/github?action=repos'); const d=await r.json();
+    if(!d||!d.ok||!Array.isArray(d.repos)) throw new Error((d&&d.message)||'repos 로드 실패');
+    codexRepos=d.repos;
+    let saved=null; try{ saved=localStorage.getItem(REPO_KEY);}catch(e){}
+    let def='';
+    if(saved && codexRepos.some(x=>(x.owner+'/'+x.name)===saved)) def=saved;
+    else { const z=codexRepos.find(x=>/^0program$/i.test(x.name)); if(z) def=z.owner+'/'+z.name; }
+    sel.innerHTML='<option value="">레포 없음</option>'+codexRepos.map(x=>{
+      const full=x.owner+'/'+x.name;
+      return '<option value="'+esc(full)+'"'+(full===def?' selected':'')+'>'+(x.private?'🔒 ':'')+esc(full)+'</option>';
+    }).join('');
+    sel.addEventListener('change',()=>{ try{localStorage.setItem(REPO_KEY,sel.value);}catch(e){} loadRepoContext(sel.value); });
+    if(def){ try{localStorage.setItem(REPO_KEY,def);}catch(e){} loadRepoContext(def); }
+  }catch(e){ sel.innerHTML='<option value="">레포 목록 실패</option>'; }
+}
+async function loadRepoContext(full){
+  if(!full){ repoCtx=null; return; }
+  const r=codexRepos.find(x=>(x.owner+'/'+x.name)===full); if(!r){ repoCtx=null; return; }
+  const branch=r.default_branch||'main';
+  try{
+    const u='/api/github?action=contents&owner='+encodeURIComponent(r.owner)+'&repo='+encodeURIComponent(r.name)+'&path=&ref='+encodeURIComponent(branch);
+    const d=await (await fetch(u)).json();
+    const items=(d&&d.items)||[];
+    repoCtx={ full, owner:r.owner, name:r.name, branch, tree:items };
+    setStatus('<span class="ok">레포 인식: '+esc(full)+' ('+items.length+'개 항목)</span>');
+  }catch(e){ repoCtx={ full, owner:r.owner, name:r.name, branch, tree:[] }; }
+}
+loadCodexRepos();
 
 function esc(s){ return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
 function setStatus(html){ $('status').innerHTML = html || ''; }
@@ -375,7 +419,7 @@ async function send(){
   try{
     const images = att.map(a=>a.dataUrl).filter(Boolean);
     const r = await fetch('/api/chat', { method:'POST', headers:{'Content-Type':'application/json'}, signal:_ctrl.signal,
-      body: JSON.stringify({ message:text, history:historyForApi, model, system:CODEX_SYSTEM, images, bare:true }) });
+      body: JSON.stringify({ message:text, history:historyForApi, model, system:codexSystemWithRepo(), images, bare:true }) });
     const d = await r.json().catch(()=>({ ok:false, error:'JSON 파싱 실패' }));
     if(!r.ok || d.ok===false){ throw new Error(d.error || d.message || ('HTTP '+r.status)); }
     const answer = d.text || d.answer || '응답 없음';

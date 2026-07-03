@@ -72,12 +72,25 @@ export async function getOrCreateAgent(model, omc, vff, getMeta, setMeta) {
   return agent.id;
 }
 
-export async function createSession(agentId, environmentId, title) {
-  const s = await maFetch("/v1/sessions", {
-    method: "POST",
-    body: { agent: agentId, environment_id: environmentId, title: title || "Stella Agent Code 세션" },
-  });
-  return s.id;
+// resources: [{ type:"github_repository", url, mount_path, authorization_token }] (세션 레벨 레포 마운트)
+// managed-agents 베타 스키마(resources)가 거부되면(4xx) 리소스 없이 재시도해 기존 동작을 보존(회귀 방지).
+// 반환: { id, repoMounted } — 레포 마운트 성공 여부를 호출부(UI)에 전달.
+export async function createSession(agentId, environmentId, title, resources) {
+  const base = { agent: agentId, environment_id: environmentId, title: title || "Stella Agent Code 세션" };
+  const hasRes = Array.isArray(resources) && resources.length > 0;
+  if (hasRes) {
+    try {
+      const s = await maFetch("/v1/sessions", { method: "POST", body: { ...base, resources } });
+      return { id: s.id, repoMounted: true };
+    } catch (e) {
+      // 스키마/검증 계열(4xx)만 폴백 대상 — 그 외(인증/서버)는 그대로 던진다.
+      const st = Number(e && e.status) || 0;
+      if (st < 400 || st >= 500) throw e;
+      console.error("[cc/start] 세션 resources 마운트 실패(폴백, 레포 없이 진행):", (e && e.message) || e);
+    }
+  }
+  const s = await maFetch("/v1/sessions", { method: "POST", body: base });
+  return { id: s.id, repoMounted: false };
 }
 const SP = (id) => "/v1/sessions/" + encodeURIComponent(id);
 // 첨부(이미지) 지원: attachments = [{ media_type, data(base64) }] → image 콘텐츠 블록 변환.

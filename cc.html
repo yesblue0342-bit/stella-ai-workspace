@@ -129,6 +129,7 @@ body.dark #omc,body.dark #ccVffToggle{accent-color:#000000}
     <div class="msgs" id="msgs"><div class="empty" id="emptyHint"></div></div>
     <div class="barwrap">
       <div class="ctl">
+        <select id="repoSel" title="에이전트가 작업할 GitHub 레포 (Hub와 동일 목록)"><option value="">레포: 불러오는 중…</option></select>
         <select id="model"></select>
         <span class="lbl">예산$</span>
         <input id="budget" type="number" min="0.5" max="50" step="0.5" value="20">
@@ -226,6 +227,35 @@ $('themeToggle').addEventListener('click', toggleTheme);
   sel.value = (saved && CLAUDE_MODELS.some(m=>m.id===saved)) ? saved : DEFAULT_MODEL;
   sel.addEventListener('change', () => { try { localStorage.setItem(MODEL_KEY, sel.value); } catch(e){} });
 })();
+
+// ── 레포 선택기 (Hub와 동일한 /api/github?action=repos) — 에이전트가 작업할 GitHub 레포 인식 ──
+// 선택한 레포는 start 시 세션에 github_repository 리소스로 마운트되어 에이전트가 clone/수정/push 한다.
+const REPO_KEY = 'stella_cc_repo';
+let ccRepos = [];
+function selectedRepo(){
+  const sel=$('repoSel'); if(!sel||!sel.value) return null;
+  const r=ccRepos.find(x=>(x.owner+'/'+x.name)===sel.value);
+  return r ? { full:r.owner+'/'+r.name, owner:r.owner, name:r.name, branch:r.default_branch||'main' } : null;
+}
+async function loadCcRepos(){
+  const sel=$('repoSel'); if(!sel) return;
+  try{
+    const r=await fetch('/api/github?action=repos'); const d=await r.json();
+    if(!d||!d.ok||!Array.isArray(d.repos)) throw new Error((d&&d.message)||'repos 로드 실패');
+    ccRepos=d.repos;
+    let saved=null; try{ saved=localStorage.getItem(REPO_KEY); }catch(e){}
+    let def='';
+    if(saved && ccRepos.some(x=>(x.owner+'/'+x.name)===saved)) def=saved;
+    else { const z=ccRepos.find(x=>/^0program$/i.test(x.name)); if(z) def=z.owner+'/'+z.name; else if(ccRepos[0]) def=ccRepos[0].owner+'/'+ccRepos[0].name; }
+    sel.innerHTML='<option value="">레포 없음(빈 샌드박스)</option>'+ccRepos.map(x=>{
+      const full=x.owner+'/'+x.name;
+      return '<option value="'+esc(full)+'"'+(full===def?' selected':'')+'>'+(x.private?'🔒 ':'')+esc(full)+'</option>';
+    }).join('');
+    if(def){ try{ localStorage.setItem(REPO_KEY, def); }catch(e){} }
+    sel.addEventListener('change',()=>{ try{ localStorage.setItem(REPO_KEY, sel.value); }catch(e){} });
+  }catch(e){ sel.innerHTML='<option value="">레포 목록 실패(빈 샌드박스로 진행)</option>'; }
+}
+loadCcRepos();
 
 // ── VFF 토글 (cc.html: Claude 전용이므로 항상 표시) ──
 function getCcVff(){try{const v=localStorage.getItem('stella_vff_enabled');return v===null||v==='true';}catch{return true;}}
@@ -415,11 +445,13 @@ async function send(){
   cur = { sessionId:null, model, budgetUsd, title:text.replace(/[\p{Cc}\p{Cf}]/gu,' ').replace(/\s+/g,' ').trim().slice(0,60), run:new AgentRun(), attempt:0, polling:true, stopped:false, prompt:text, program0Path:pending0ProgramPath };
   pending0ProgramPath = null; // 이번 세션에 이관 완료 — 다음 신규 세션에 잘못 붙지 않도록 소비
   try{
+    const rp=selectedRepo();
     const r=await fetch('/api/cc/start',{method:'POST',headers:{'Content-Type':'application/json'},
-      body:JSON.stringify({ model, prompt:text, title:cur.title, budgetUsd, omc: $('omc').checked, vff: getCcVff(), attachments:att })});
+      body:JSON.stringify({ model, prompt:text, title:cur.title, budgetUsd, omc: $('omc').checked, vff: getCcVff(), attachments:att, repo: rp?rp.full:undefined, branch: rp?rp.branch:undefined })});
     const d=await r.json(); if(!r.ok||d.error) throw new Error(d.message||d.error||'start 실패');
     cur.sessionId=d.sessionId; cur.model=d.model; cur.budgetUsd=d.budgetUsd;
-    setStatus('세션 '+d.sessionId.slice(0,12)+'… 진행 중'); poll();
+    const repoTag = d.repoMounted ? (' · 📁 '+esc(d.repo)) : (rp?' · ⚠️레포 미마운트(빈 샌드박스)':'');
+    setStatus('세션 '+d.sessionId.slice(0,12)+'… 진행 중'+repoTag); poll();
   }catch(e){ setStatus('<span class="err">'+esc(e.message)+'</span>'); setUIBusy(false); cur=null; }
 }
 
