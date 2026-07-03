@@ -4,7 +4,7 @@ import { listEvents, normalizeEvents } from "./_maclient.mjs";
 import { extractFilesFromEvents } from "../../lib/cc-files.mjs";
 import { saveAgentFilesToDrive, saveTextToDrive } from "../../lib/drive-files.mjs";
 import { getSessionRow, setSessionGithubUrl } from "../../lib/cc-db.mjs";
-import { saveToGitHubBootstrap, loadFromGitHub, toRepoPath, hasGhToken, deriveAbapName, resolveProgramName, resolveExt } from "../../lib/github-store.mjs";
+import { saveToGitHubBootstrap, loadFromGitHub, findProgramPath, toRepoPath, hasGhToken, deriveAbapName, resolveProgramName, resolveExt } from "../../lib/github-store.mjs";
 import { assertSafePath } from "../../lib/gh-proxy.mjs";
 
 const GH_OWNER = "yesblue0342-bit", GH_REPO = "0Program";
@@ -28,7 +28,11 @@ export default async function handler(req, res) {
       if (!hasGhToken()) return res.status(200).json({ ok: false, exists: false, reason: "no_token", message: "GitHub 저장소 미설정" });
       try {
         const ltext = String(req.body.text || "");
-        const path = toRepoPath(pgName(req.body, ltext), pgExt(req.body, ltext));
+        const name = pgName(req.body, ltext);
+        // 실제 프로젝트 폴더(예: 260701_QM004_.../_abap/ZAQMR0100.abap) 우선 탐색.
+        // 없으면 기존 src/<name>.abap 평면 스크래치 경로로 폴백(기존 동작 유지).
+        const foundPath = await findProgramPath({ owner: GH_OWNER, repo: GH_REPO, name }).catch(() => null);
+        const path = foundPath || toRepoPath(name, pgExt(req.body, ltext));
         const cur = await loadFromGitHub({ owner: GH_OWNER, repo: GH_REPO, path });
         return res.status(200).json({ ok: true, exists: cur.exists, text: cur.text, path });
       } catch (e) {
