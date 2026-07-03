@@ -5,6 +5,7 @@ import { extractFilesFromEvents } from "../../lib/cc-files.mjs";
 import { saveAgentFilesToDrive, saveTextToDrive } from "../../lib/drive-files.mjs";
 import { getSessionRow, setSessionGithubUrl } from "../../lib/cc-db.mjs";
 import { saveToGitHubBootstrap, loadFromGitHub, toRepoPath, hasGhToken, deriveAbapName, resolveProgramName, resolveExt } from "../../lib/github-store.mjs";
+import { assertSafePath } from "../../lib/gh-proxy.mjs";
 
 const GH_OWNER = "yesblue0342-bit", GH_REPO = "0Program";
 // 저장 확장자: 첨부/명시 확장자(이미지 제외) → 코드펜스 언어 → ABAP 키워드 → txt.
@@ -85,10 +86,37 @@ export default async function handler(req, res) {
     const result = await saveAgentFilesToDrive({ files, title, source: source || "claude-code" });
     if (result.folderLink) { try { await setSessionGithubUrl(session, result.folderLink); } catch {} }
 
+    // 0Program(GitHub) 원경로 동기화 — cc.html #ZAQMR0100 으로 불러와 편집한 세션이면,
+    // 세션이 실제로 쓴 파일 중 동일 파일명(대소문자 무시)을 찾아 원래 GitHub 경로로 되저장(비차단).
+    let github;
+    const programPath = req.body && req.body.programPath;
+    if (programPath) {
+      try {
+        const safePath = assertSafePath(programPath);
+        const wantBase = String(safePath.split("/").pop() || "").toLowerCase();
+        const match = files.find((f) => String(f.path.split("/").pop() || "").toLowerCase() === wantBase);
+        if (!match) {
+          github = { saved: false, reason: "no_match", message: `세션에서 ${wantBase} 쓰기를 찾지 못함`, path: safePath };
+        } else if (isNonProgram(match.content)) {
+          github = { saved: false, reason: "non_program", message: "거부/비프로그램 내용으로 저장 생략", path: safePath };
+        } else if (!hasGhToken()) {
+          github = { saved: false, reason: "no_token", message: "GitHub PAT(env) 미설정", path: safePath };
+        } else {
+          await saveToGitHubBootstrap({ owner: GH_OWNER, repo: GH_REPO, path: safePath, content: match.content,
+            message: `auto: ${wantBase} 수정 (${new Date().toISOString()})` });
+          github = { saved: true, path: safePath };
+        }
+      } catch (e) {
+        console.error("0Program 동기화 실패:", e && e.message);
+        github = { saved: false, reason: "error", message: String((e && e.message) || e).slice(0, 160) };
+      }
+    }
+
     return res.status(result.ok ? 200 : 500).json({
       ok: result.ok,
       storage: "google-drive",
       ...result,
+      github,
       message: result.ok ? `Google Drive(${result.folder})에 ${result.saved}개 저장됨` : "Drive 저장 실패",
     });
   } catch (e) {

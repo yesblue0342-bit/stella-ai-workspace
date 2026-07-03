@@ -366,9 +366,14 @@ async function saveToGithub(auto){
   if(!cur || !cur.sessionId){ if(!auto) setStatus('<span class="err">세션이 없습니다</span>'); return; }
   const btn=$('saveGhBtn'); const prev=btn.textContent; btn.disabled=true; btn.textContent='저장 중…';
   try{
-    const r=await fetch('/api/cc/save-drive',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({session:cur.sessionId})});
+    const body={session:cur.sessionId};
+    if(cur.program0Path) body.programPath=cur.program0Path; // 0Program #해시로 불러온 세션 — 매 턴 원경로로 되저장
+    const r=await fetch('/api/cc/save-drive',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
     const d=await r.json();
-    if(d.ok){ setStatus('<span class="ok">Drive 저장 ✓ '+(d.saved||0)+'개 파일</span>'+(d.folderLink?(' · <a href="'+esc(d.folderLink)+'" target="_blank" rel="noopener">폴더 열기</a>'):'')); }
+    if(d.ok){
+      const gh = d.github ? (d.github.saved ? ' · 0Program ✓' : ' · 0Program✗('+(d.github.reason||'')+')') : '';
+      setStatus('<span class="ok">Drive 저장 ✓ '+(d.saved||0)+'개 파일'+gh+'</span>'+(d.folderLink?(' · <a href="'+esc(d.folderLink)+'" target="_blank" rel="noopener">폴더 열기</a>'):''));
+    }
     else if(!auto){ setStatus('<span class="err">Drive 저장 실패: '+esc(d.message||d.error||'')+'</span>'); }
   }catch(e){ if(!auto) setStatus('<span class="err">Drive 저장 오류: '+esc(e.message)+'</span>'); }
   finally{ btn.disabled=false; btn.textContent=prev; }
@@ -407,7 +412,8 @@ async function send(){
     return;
   }
   // 신규 세션
-  cur = { sessionId:null, model, budgetUsd, title:text.replace(/[\p{Cc}\p{Cf}]/gu,' ').replace(/\s+/g,' ').trim().slice(0,60), run:new AgentRun(), attempt:0, polling:true, stopped:false, prompt:text };
+  cur = { sessionId:null, model, budgetUsd, title:text.replace(/[\p{Cc}\p{Cf}]/gu,' ').replace(/\s+/g,' ').trim().slice(0,60), run:new AgentRun(), attempt:0, polling:true, stopped:false, prompt:text, program0Path:pending0ProgramPath };
+  pending0ProgramPath = null; // 이번 세션에 이관 완료 — 다음 신규 세션에 잘못 붙지 않도록 소비
   try{
     const r=await fetch('/api/cc/start',{method:'POST',headers:{'Content-Type':'application/json'},
       body:JSON.stringify({ model, prompt:text, title:cur.title, budgetUsd, omc: $('omc').checked, vff: getCcVff(), attachments:att })});
@@ -468,17 +474,23 @@ if('serviceWorker' in navigator){ navigator.serviceWorker.register('/sw.js').cat
 
 // 0Program(GitHub) 소스 불러오기 — URL #ZAQMR0100 형태로 진입 시 자동 로드.
 // 기존 /api/cc/save-drive의 action:'load-github'(0Program 전용, 서버측 GITHUB_TOKEN 재사용) 그대로 사용.
+// 로드된 원경로는 pending0ProgramPath에 보관 → 다음 신규 세션에 이관되어 매 턴 자동으로 같은 경로에 되저장됨.
+let pending0ProgramPath = null;
 async function load0Program(programName){
   const name = String(programName||'').trim();
   if(!name) return;
+  pending0ProgramPath = null; // 이전 로드의 잔여 경로가 실패/다른 파일 로드에 잘못 이관되지 않도록 매번 초기화
   setStatus('0Program 불러오는 중… '+esc(name));
   try{
     const r = await fetch('/api/cc/save-drive', { method:'POST', headers:{'Content-Type':'application/json'},
       body: JSON.stringify({ action:'load-github', programName:name, ext:'abap' }) });
     const d = await r.json();
     if(d.ok && d.exists){
-      const cur = $('prompt').value;
-      $('prompt').value = (cur ? cur+'\n\n' : '') + d.text;
+      const fileBase = (d.path||'').split('/').pop() || (name+'.abap');
+      pending0ProgramPath = d.path || null;
+      const instruction = '[0Program 파일: '+fileBase+'] 아래 소스를 요청에 따라 수정한 뒤, 반드시 정확히 이 파일명으로 저장(작성)하세요: '+fileBase+'\n\n';
+      const promptVal = $('prompt').value;
+      $('prompt').value = (promptVal ? promptVal+'\n\n' : '') + instruction + d.text;
       $('prompt').dispatchEvent(new Event('input'));
       setStatus('<span class="ok">0Program 로드 ✓ '+esc(d.path||name)+'</span>');
     } else if(d.ok){
