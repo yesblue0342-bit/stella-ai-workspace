@@ -21,8 +21,10 @@ async function makeFakeRepo() {
 }
 
 test("safeRelPath: 정상 상대경로는 워크스페이스 내부로 resolve", () => {
-  const abs = safeRelPath("/tmp/ws", "src/a.js");
-  assert.equal(abs, "/tmp/ws/src/a.js");
+  // OS 네이티브 절대경로를 root 로 써야 Windows(백슬래시·드라이브레터)에서도 동일하게 검증된다.
+  const root = join(tmpdir(), "ws");
+  const abs = safeRelPath(root, "src/a.js");
+  assert.equal(abs, join(root, "src", "a.js"));
 });
 
 test("safeRelPath: '..' 경로 탈출 차단", () => {
@@ -37,8 +39,9 @@ test("safeRelPath: .git/ 및 .env 접근 차단", () => {
 
 test("safeRelPath: 절대경로 형태('/etc/passwd')도 선행 슬래시를 제거해 워크스페이스 내부로 안전하게 가둔다", () => {
   // resolve()에 순수 상대경로만 넘기므로 진짜 절대경로 오버라이드가 발생하지 않는다 — 탈출 아님.
-  const abs = safeRelPath("/tmp/ws", "/etc/passwd");
-  assert.equal(abs, "/tmp/ws/etc/passwd");
+  const root = join(tmpdir(), "ws");
+  const abs = safeRelPath(root, "/etc/passwd");
+  assert.equal(abs, join(root, "etc", "passwd"));
 });
 
 test("listDir: 루트 목록에 .git 미노출, 파일/디렉터리 정렬", async () => {

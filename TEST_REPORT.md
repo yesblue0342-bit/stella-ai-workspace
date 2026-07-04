@@ -1,6 +1,13 @@
-# TEST_REPORT — Stella GPT Autopilot (최신: Loop 5, 2026-07-02)
+# TEST_REPORT — Stella GPT Autopilot (최신: 2026-07-04)
 
-## 최신 상태
+## 최신 상태 (2026-07-04 — 크로스플랫폼 테스트 안정화)
+- 전체 회귀: **291/291 PASS** (fail 0, skip 0) — `npm test` (node --test)
+- 수정: `test/codex-workspace.test.js` 의 `safeRelPath` 2개 케이스가 POSIX 경로(`/tmp/ws`)를
+  하드코딩해 Windows(백슬래시·드라이브레터)에서 오탐 실패 → OS 네이티브 경로(`join(tmpdir(),...)`)로
+  교체해 Windows·Linux 양쪽에서 통과. 프로덕션 보안검사(`lib/codex-workspace.mjs`)는 무변경.
+- 서버측 JS 문법(node --check) 통과.
+
+## 이전 상태 (Loop 5, 2026-07-02)
 - 전체 회귀: **266/266 PASS** (fail 0, skip 0)
 - Loop 5 신규: loop5-fixes(7) + router extractText(2) + chat-stream truncation/cfg(2) + 기존 갱신
 - 서버측 JS 문법(node --check) 전 파일 통과, 모든 api 핸들러 import/HTML 인라인 파싱 정상
