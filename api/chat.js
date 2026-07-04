@@ -7,6 +7,8 @@ import { wantsTable, buildSystemPrompt as routeSystemPrompt, extractText } from 
 import { visionImageBlock, ensureVisionModel, parseDataUrl } from "../lib/vision-format.mjs";
 // 메모리는 사용자별 민감정보 → 인증 토큰이 있으면 그 uid 로 스코프(없으면 기존 동작 유지: 핵심 챗 비차단).
 import { getAuthUser } from "../lib/session.js";
+// Stella Codex 비용 표시 전용(bare+wantUsage) — 그 외 호출부는 미사용.
+import { estimateOpenAiCostUsd } from "../lib/openai-pricing.mjs";
 
 // OpenAI Responses API + web_search 호출 (실시간 질문). 응답 contract(text)는 호출부에서 유지.
 async function callResponses({ model, system, history, message, images = [], search = false }) {
@@ -577,6 +579,7 @@ export default async function handler(req, res) {
     const routed = !!body.route && !isClaudeModel;
     let answer;
     let provider;
+    let usageInfo = null; // Stella Codex(bare+wantUsage) 전용 — 다른 호출부는 항상 null(응답 필드 미추가)
     const _modelStart = Date.now();
     if (routed) {
       const wantTable = wantsTable(message);
@@ -634,7 +637,14 @@ export default async function handler(req, res) {
       answer = await callClaude({ model, system: _finalPrompt, history, message: aiMessage, images });
     } else {
       provider = "openai";
-      answer = await callOpenAI({ model, system: prompt, history, message: aiMessage, images, bare: !!body.bare });
+      const wantUsage = !!body.bare && !!body.wantUsage; // Stella Codex 비용 표시 전용 — 그 외 호출부는 기존 문자열 반환 그대로
+      const openaiResult = await callOpenAI({ model, system: prompt, history, message: aiMessage, images, bare: !!body.bare, returnUsage: wantUsage });
+      if (wantUsage && openaiResult && typeof openaiResult === "object") {
+        answer = openaiResult.text;
+        usageInfo = { usage: openaiResult.usage, model: openaiResult.model };
+      } else {
+        answer = openaiResult;
+      }
     }
     timings.modelMs = Date.now() - _modelStart;
     timings.totalMs = Date.now() - _t0;
@@ -681,7 +691,8 @@ export default async function handler(req, res) {
             ? `https://drive.google.com/drive/folders/${f.id}`
             : `https://drive.google.com/file/d/${f.id}/view`) : "")
         }))
-      } : null
+      } : null,
+      ...(usageInfo ? { usage: usageInfo.usage, costUsd: estimateOpenAiCostUsd(usageInfo.model, usageInfo.usage) } : {})
     });
   } catch (error) {
     // 어떤 예외에서도 JSON 반환(프런트 safeJson 호환). 타임아웃/중단은 504 + 안내, 그 외 500.
@@ -944,7 +955,7 @@ function resolveClaudeModel(model) {
   return "claude-sonnet-4-6";
 }
 
-async function callOpenAI({ model, system, history, message, images = [], bare = false }) {
+async function callOpenAI({ model, system, history, message, images = [], bare = false, returnUsage = false }) {
   const apiKey = process.env.OPENAI_API_KEY;
   if (!apiKey) throw new Error("OPENAI_API_KEY not configured");
   const imgs = (Array.isArray(images) ? images : []).filter(u => u && String(u).startsWith("data:"));
@@ -970,7 +981,10 @@ async function callOpenAI({ model, system, history, message, images = [], bare =
   });
   const data = await response.json();
   if (!response.ok) throw new Error(data.error?.message || "OpenAI API error");
-  return data.choices?.[0]?.message?.content || "응답 없음";
+  const text = data.choices?.[0]?.message?.content || "응답 없음";
+  // returnUsage=true(Stella Codex 비용 표시용)일 때만 객체 반환 — 다른 호출부는 기존 문자열 반환 그대로(회귀 없음).
+  if (returnUsage) return { text, usage: data.usage || null, model: selectedModel };
+  return text;
 }
 
 async function callClaude({ model, system, history, message, images = [] }) {

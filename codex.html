@@ -5,6 +5,9 @@
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <title>Stella Codex</title>
 <meta name="theme-color" content="#0d1117">
+<!-- 이 페이지가 다크/라이트를 자체 처리함을 브라우저에 알려, 모바일 브라우저의 강제 다크모드
+     재색칠(force-dark)이 .step/.status 등 요소별로 엉뚱한 색을 입히는 것을 방지 -->
+<meta name="color-scheme" content="dark light">
 <style>
 /* ── 테마 토큰 (Stella GPT와 동일한 body.dark 방식 + stella_theme 키 공유) ── */
 :root{
@@ -39,7 +42,11 @@ a{color:var(--accent)}
 .bubble{max-width:860px;width:100%;margin:0 auto;line-height:1.7}
 .bubble.user{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:10px 13px;white-space:pre-wrap}
 .step{background:var(--step-bg);border:1px solid var(--line);border-left:3px solid var(--accent);border-radius:8px;padding:7px 10px;font-size:.83rem;font-family:ui-monospace,Consolas,monospace;color:var(--ink);overflow-x:auto}
-.step .nm{color:var(--accent);font-weight:700}
+/* 도구명(write_file/git_commit_and_push 등)은 강조색 대신 본문과 같은 중립색(--ink) — 눈에 안 띄게 */
+.step .nm{color:var(--ink);font-weight:700}
+/* 도구 아이콘 이모지의 원색을 흑백으로 — 상단 앱 아이콘(.app-ico)과 동일한 방식 */
+.step .nm .mi{display:inline-block;filter:grayscale(1) brightness(0)}
+body.dark .step .nm .mi{filter:grayscale(1) brightness(0) invert(1)}
 .step .rs{color:var(--muted);white-space:pre-wrap;display:block;margin-top:4px;max-height:200px;overflow:auto}
 .answer{white-space:pre-wrap}
 .barwrap{border-top:1px solid var(--line);background:var(--top-bg);padding:10px 14px}
@@ -62,7 +69,8 @@ button.act{cursor:pointer;font-weight:800;padding:0 16px;height:42px;border:none
 #saveGhBtn{background:var(--card);color:var(--ink);border:1px solid var(--line);font-weight:700;font-size:.78rem;padding:5px 9px;border-radius:8px;cursor:pointer}
 .status{font-size:.78rem;color:var(--muted)}
 .status .err{color:var(--err)}
-.status .ok{color:var(--ok)}
+/* 완료(성공) 상태도 초록 강조 대신 중립색 — 다른 UI와 톤 통일(눈에 안 띄게) */
+.status .ok{color:var(--ink)}
 .empty{color:var(--muted);text-align:center;margin:auto;font-size:.9rem}
 .side{transition:transform .25s ease}
 .resizer{flex:0 0 auto;width:5px;cursor:col-resize;background:var(--line)}
@@ -116,6 +124,7 @@ body:not(.dark) .app-ico{filter:grayscale(1) brightness(0)!important}
 <div class="wrap">
   <aside class="side">
     <h2>대화 <button id="refreshBtn" title="새 대화" style="float:right;font-size:.7rem;padding:2px 6px;cursor:pointer">＋ 새 대화</button></h2>
+    <input type="search" id="sessSearch" placeholder="🔎 대화 검색…" style="width:100%;margin:0 0 8px;padding:6px 8px;font-size:.8rem">
     <div id="sessionList"><div class="lbl" style="padding:8px">대화 없음</div></div>
   </aside>
   <div class="resizer" id="resizer" title="사이드바 너비 조절"></div>
@@ -123,7 +132,7 @@ body:not(.dark) .app-ico{filter:grayscale(1) brightness(0)!important}
     <div class="msgs" id="msgs"><div class="empty" id="emptyHint"></div></div>
     <div class="barwrap">
       <div class="ctl">
-        <select id="repoSel" title="레포 맥락 (Hub와 동일 목록) — 선택 시 루트 구조를 인식"><option value="">레포: 불러오는 중…</option></select>
+        <select id="repoSel" title="레포 선택 시 무인 자동화 모드: 실제 clone 후 파일 수정·커밋·push까지 수행(Hub와 동일 목록)"><option value="">레포: 불러오는 중…</option></select>
         <select id="model"></select>
         <button type="button" class="theme-toggle" id="themeToggle" title="다크/라이트 모드"></button>
         <span class="status" id="status"></span>
@@ -227,17 +236,13 @@ $('themeToggle').addEventListener('click', toggleTheme);
   sel.addEventListener('change', () => { chat.model = sel.value; try { localStorage.setItem(MODEL_KEY, sel.value); } catch(e){} });
 })();
 
-// ── 레포 선택기 (Hub와 동일 /api/github?action=repos). Codex는 코드실행 샌드박스가 없어 '레포 인지형 채팅'으로 동작:
-//    선택 시 루트 구조를 불러와 시스템 프롬프트에 주입 → 레포 맥락 위에서 답변. (파일 자동편집·커밋·push는 Agent Code(/cc)가 담당) ──
+// ── 레포 선택기 (Hub와 동일 /api/github?action=repos). 레포 선택 시 무인 자동화 모드로 전환:
+//    /api/codex/agent 가 실제로 clone → OpenAI 함수호출로 파일 읽기/쓰기 → git commit+push 까지 수행한다.
+//    (OpenAI 쪽엔 Managed Agents 같은 호스팅 샌드박스가 없어, 서버(OCI)가 직접 git/파일 조작을 수행 —
+//     임의 bash 는 제공하지 않고 구조화된 도구로만 제한한다. lib/codex-agent.mjs·lib/codex-workspace.mjs 참고.)
+//    레포 미선택 시엔 기존 그대로 순수 채팅(/api/chat)으로 동작 — 회귀 없음.
 const REPO_KEY='stella_codex_repo';
-let codexRepos=[], repoCtx=null; // repoCtx = { full, owner, name, branch, tree:[{name,type}] }
-function codexSystemWithRepo(){
-  if(!repoCtx) return CODEX_SYSTEM;
-  const files=(repoCtx.tree||[]).slice(0,80).map(t=>t.type==='dir'?(t.name+'/'):t.name).join(', ');
-  return CODEX_SYSTEM+'\n\n[작업 대상 GitHub 레포] '+repoCtx.full+' (브랜치 '+repoCtx.branch+'). 루트 구조: '+(files||'(빈 레포)')+
-    '\n특정 파일 내용이 필요하면 사용자에게 경로를 물어보거나 붙여넣은 코드를 기준으로 수정안을 제시하라. '+
-    '파일을 직접 편집·커밋·push 하는 무인 자동화가 필요하면 Stella Agent Code(/cc)를 쓰라고 안내하라.';
-}
+let codexRepos=[], repoCtx=null; // repoCtx = { full, owner, name, branch }
 async function loadCodexRepos(){
   const sel=$('repoSel'); if(!sel) return;
   try{
@@ -250,28 +255,24 @@ async function loadCodexRepos(){
     else { const z=codexRepos.find(x=>/^0program$/i.test(x.name)); if(z) def=z.owner+'/'+z.name; }
     sel.innerHTML='<option value="">레포 없음</option>'+codexRepos.map(x=>{
       const full=x.owner+'/'+x.name;
-      return '<option value="'+esc(full)+'"'+(full===def?' selected':'')+'>'+(x.private?'🔒 ':'')+esc(full)+'</option>';
+      return '<option value="'+esc(full)+'"'+(full===def?' selected':'')+'>'+esc(full)+(x.private?' [비공개]':'')+'</option>';
     }).join('');
     sel.addEventListener('change',()=>{ try{localStorage.setItem(REPO_KEY,sel.value);}catch(e){} loadRepoContext(sel.value); });
     if(def){ try{localStorage.setItem(REPO_KEY,def);}catch(e){} loadRepoContext(def); }
   }catch(e){ sel.innerHTML='<option value="">레포 목록 실패</option>'; }
 }
-async function loadRepoContext(full){
-  if(!full){ repoCtx=null; return; }
+function loadRepoContext(full){
+  if(!full){ repoCtx=null; setStatus(''); return; }
   const r=codexRepos.find(x=>(x.owner+'/'+x.name)===full); if(!r){ repoCtx=null; return; }
-  const branch=r.default_branch||'main';
-  try{
-    const u='/api/github?action=contents&owner='+encodeURIComponent(r.owner)+'&repo='+encodeURIComponent(r.name)+'&path=&ref='+encodeURIComponent(branch);
-    const d=await (await fetch(u)).json();
-    const items=(d&&d.items)||[];
-    repoCtx={ full, owner:r.owner, name:r.name, branch, tree:items };
-    setStatus('<span class="ok">레포 인식: '+esc(full)+' ('+items.length+'개 항목)</span>');
-  }catch(e){ repoCtx={ full, owner:r.owner, name:r.name, branch, tree:[] }; }
+  repoCtx={ full, owner:r.owner, name:r.name, branch:r.default_branch||'main' };
+  setStatus('<span class="ok">🤖 무인 자동화 모드: '+esc(full)+' — 전송 시 clone·수정·commit·push</span>');
 }
 loadCodexRepos();
 
 function esc(s){ return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
 function setStatus(html){ $('status').innerHTML = html || ''; }
+// Stella Agent Code(cc)와 동일하게 사용 금액을 상태줄 우측에 표시(대략 추정치).
+function costTag(costUsd){ return (costUsd!=null) ? ' · $'+Number(costUsd).toFixed(3) : ''; }
 
 // C2: 작업 결과를 Google Drive(StellaGPT/0Program)에 {앱명}_{YYYYMMDD_HHMMSS}.txt로 자동 저장 + 토스트.
 function showToast(msg, ok){
@@ -375,6 +376,14 @@ function renderChatList(){
   if(!arr.length){ host.innerHTML='<div class="lbl" style="padding:8px">대화 없음</div>'; return; }
   host.innerHTML=arr.map(c=>`<div class="sitem" data-id="${esc(c.id)}"><div class="t">${esc(c.title||'대화')}</div><div class="m">${esc(c.model||'')}</div></div>`).join('');
   host.querySelectorAll('.sitem').forEach(el=>el.addEventListener('click',()=>selectChat(el.dataset.id)));
+  filterSessionList(); // 검색어가 입력된 채로 목록이 다시 그려져도 필터 유지
+}
+// 대화 검색 — 개발한 프로그램/대화를 제목·모델 텍스트로 빠르게 찾기(순수 클라이언트 필터)
+function filterSessionList(){
+  const q=($('sessSearch').value||'').trim().toLowerCase();
+  $('sessionList').querySelectorAll('.sitem').forEach(el=>{
+    el.style.display = (!q || (el.textContent||'').toLowerCase().includes(q)) ? '' : 'none';
+  });
 }
 function renderAllMessages(){
   const m=$('msgs'); m.innerHTML='';
@@ -396,8 +405,18 @@ function newChat(){
   renderAllMessages(); setStatus('');
 }
 
-// ── 전송: OpenAI(/api/chat, bare 모드) 호출 ──
+// ── 전송: 레포 선택 시 무인 자동화(/api/codex/agent: clone→수정→commit/push), 아니면 순수 채팅(/api/chat) ──
 let _ctrl=null;
+function toolIcon(n){ return n==='write_file'?'✏️':(n==='read_file'?'📄':(n==='delete_file'?'🗑️':(n==='git_commit_and_push'?'🚀':'📁'))); }
+function renderAgentSteps(host, steps){
+  let html='';
+  for(const t of (steps||[])){
+    const inp = t.input!=null ? esc(JSON.stringify(t.input)).slice(0,160) : '';
+    html += `<div class="step"><span class="nm"><span class="mi">${toolIcon(t.name)}</span> ${esc(t.name)}</span> ${inp}` +
+      (t.result!=null ? `<span class="rs">${esc(String(t.result)).slice(0,800)}</span>` : '') + `</div>`;
+  }
+  host.innerHTML = html;
+}
 async function send(){
   if(busy) return;
   const text = $('prompt').value.trim();
@@ -412,14 +431,42 @@ async function send(){
   addUserBubble(text, att.length);
   const historyForApi = chat.messages.map(m=>({ role:m.role, content:m.content }));
   chat.messages.push({ role:'user', content:text, attCount:att.length });
-  setUIBusy(true); setStatus('생각 중…');
-  const thinking = addAssistantBubble('…');
-
+  setUIBusy(true);
   _ctrl = new AbortController();
+
+  if(repoCtx){
+    // ── 무인 자동화 경로: 서버가 실제 clone → OpenAI 함수호출로 파일 읽기/쓰기 → git commit+push ──
+    // (이미지 첨부는 이 경로에서 미지원 — 텍스트 프롬프트만 전달)
+    setStatus('🤖 '+esc(repoCtx.full)+' 작업 중…');
+    const host=document.createElement('div'); host.className='bubble'; clearEmpty(); $('msgs').appendChild(host);
+    try{
+      const r = await fetch('/api/codex/agent', { method:'POST', headers:{'Content-Type':'application/json'}, signal:_ctrl.signal,
+        body: JSON.stringify({ prompt:text, owner:repoCtx.owner, repo:repoCtx.name, branch:repoCtx.branch, model }) });
+      const d = await r.json().catch(()=>({ ok:false, message:'JSON 파싱 실패' }));
+      if(!r.ok || d.ok===false) throw new Error(d.message || ('HTTP '+r.status));
+      if(d.steps && d.steps.length){ const stepsHost=document.createElement('div'); host.appendChild(stepsHost); renderAgentSteps(stepsHost, d.steps); }
+      const ans=document.createElement('div'); ans.className='answer'; ans.innerHTML=renderMd(d.text||'(응답 없음)'); host.appendChild(ans);
+      if(window.attachCodeCopy) window.attachCodeCopy(ans);
+      $('msgs').scrollTop = $('msgs').scrollHeight;
+      chat.messages.push({ role:'assistant', content:d.text||'' });
+      chat.model = model; persistCurrent();
+      setStatus((d.committed ? '<span class="ok">✅ '+esc(d.repo)+' 커밋+push 완료</span>' : '<span class="ok">완료 ✓ (변경사항 없음/미커밋)</span>')+costTag(d.costUsd));
+    }catch(e){
+      const msg = (e && e.name==='AbortError') ? '중단됨' : ('오류: '+(e&&e.message?e.message:e));
+      host.innerHTML = '<span class="err">'+esc(msg)+'</span>';
+      setStatus('<span class="err">'+esc(msg)+'</span>');
+      if(chat.messages.length && chat.messages[chat.messages.length-1].role==='user') chat.messages.pop();
+    }finally{ setUIBusy(false); _ctrl=null; }
+    return;
+  }
+
+  // ── 순수 채팅 경로(레포 미선택) — 기존 동작 그대로, 회귀 없음 ──
+  setStatus('생각 중…');
+  const thinking = addAssistantBubble('…');
   try{
     const images = att.map(a=>a.dataUrl).filter(Boolean);
     const r = await fetch('/api/chat', { method:'POST', headers:{'Content-Type':'application/json'}, signal:_ctrl.signal,
-      body: JSON.stringify({ message:text, history:historyForApi, model, system:codexSystemWithRepo(), images, bare:true }) });
+      body: JSON.stringify({ message:text, history:historyForApi, model, system:CODEX_SYSTEM, images, bare:true, wantUsage:true }) });
     const d = await r.json().catch(()=>({ ok:false, error:'JSON 파싱 실패' }));
     if(!r.ok || d.ok===false){ throw new Error(d.error || d.message || ('HTTP '+r.status)); }
     const answer = d.text || d.answer || '응답 없음';
@@ -429,10 +476,7 @@ async function send(){
     chat.messages.push({ role:'assistant', content:answer });
     chat.model = model;
     persistCurrent();
-    setStatus('<span class="ok">완료 ✓</span>');
-    // Codex는 조언(채팅) 전용 — 답변을 Drive/0Program에 자동 파일로 덤프하지 않는다(쓰레기 커밋 방지).
-    // 실제 레포 편집·커밋·push 는 Stella Agent Code(/cc)가 담당(세션에 레포 마운트).
-    // (필요 시 코드블록 우측 '복사'로 직접 저장.)
+    setStatus('<span class="ok">완료 ✓</span>'+costTag(d.costUsd));
   }catch(e){
     const msg = (e && e.name==='AbortError') ? '중단됨' : ('오류: '+(e&&e.message?e.message:e));
     thinking.innerHTML = '<span class="err">'+esc(msg)+'</span>';
@@ -460,6 +504,7 @@ $('attachBtn').addEventListener('click', ()=>$('attachInput').click());
 $('attachInput').addEventListener('change', e=>{ addFiles(e.target.files); e.target.value=''; });
 $('prompt').addEventListener('paste', e=>{ const items=(e.clipboardData&&e.clipboardData.items)||[]; const imgs=[]; for(const it of items){ if(it.kind==='file'){ const f=it.getAsFile(); if(f&&/^image\//.test(f.type)) imgs.push(f); } } if(imgs.length){ e.preventDefault(); addFiles(imgs); } });
 $('refreshBtn').addEventListener('click', newChat);
+$('sessSearch').addEventListener('input', filterSessionList);
 
 renderChatList();
 if('serviceWorker' in navigator){ navigator.serviceWorker.register('/sw.js').catch(function(){}); }

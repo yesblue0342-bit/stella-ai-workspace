@@ -6,6 +6,7 @@ import { CODEX_TOOLS, runCodexAgentLoop } from "../../lib/codex-agent.mjs";
 import {
   createWorkspace, destroyWorkspace, listDir, readFileRel, writeFileRel, deleteFileRel, commitAndPush,
 } from "../../lib/codex-workspace.mjs";
+import { estimateOpenAiCostUsd } from "../../lib/openai-pricing.mjs";
 
 const CODEX_AGENT_SYSTEM =
   "You are Stella Codex, an autonomous coding agent (OpenAI-backed) working inside a cloned GitHub repository. " +
@@ -32,7 +33,7 @@ async function callOpenAIOnce(messages, model) {
     });
     const data = await r.json();
     if (!r.ok) throw new Error(data.error?.message || ("OpenAI API error " + r.status));
-    return data.choices?.[0]?.message;
+    return { message: data.choices?.[0]?.message, usage: data.usage || null };
   } catch (e) {
     if (e.name === "AbortError") throw new Error("OpenAI 응답 시간 초과");
     throw e;
@@ -83,9 +84,10 @@ export default async function handler(req, res) {
       callOpenAI: (messages) => callOpenAIOnce(messages, mdl),
       runTool,
     });
+    const costUsd = estimateOpenAiCostUsd(mdl, result.usage);
     return res.status(200).json({
       ok: true, text: result.text, steps: result.steps, committed,
-      repo: owner + "/" + repo, branch: br,
+      repo: owner + "/" + repo, branch: br, usage: result.usage, costUsd,
     });
   } catch (e) {
     return res.status(e.status || 500).json({ ok: false, message: String((e && e.message) || e) });

@@ -5,6 +5,9 @@
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <title>Stella Agent Code</title>
 <meta name="theme-color" content="#0d1117">
+<!-- 이 페이지가 다크/라이트를 자체 처리함을 브라우저에 알려, 모바일 브라우저의 강제 다크모드
+     재색칠(force-dark)이 .step/.status 등 요소별로 엉뚱한 색을 입히는 것을 방지 -->
+<meta name="color-scheme" content="dark light">
 <style>
 /* ── 테마 토큰 (Stella GPT와 동일한 body.dark 방식 + stella_theme 키 공유) ── */
 :root{
@@ -41,7 +44,11 @@ body.dark .nav a.active{background:#000;border-color:#fff;color:#fff}
 .bubble{max-width:860px;width:100%;margin:0 auto;line-height:1.7}
 .bubble.user{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:10px 13px;white-space:pre-wrap}
 .step{background:var(--step-bg);border:1px solid var(--line);border-left:3px solid var(--accent);border-radius:8px;padding:7px 10px;font-size:.83rem;font-family:ui-monospace,Consolas,monospace;color:var(--ink);overflow-x:auto}
-.step .nm{color:var(--accent);font-weight:700}
+/* 도구명(bash/edit 등)은 강조색 대신 본문과 같은 중립색(--ink) — 눈에 안 띄게 */
+.step .nm{color:var(--ink);font-weight:700}
+/* 도구 아이콘(🔧✏️📄 등) 이모지의 원색을 흑백으로 — 상단 앱 아이콘(.app-ico)과 동일한 방식 */
+.step .nm .mi{display:inline-block;filter:grayscale(1) brightness(0)}
+body.dark .step .nm .mi{filter:grayscale(1) brightness(0) invert(1)}
 .step .rs{color:var(--muted);white-space:pre-wrap;display:block;margin-top:4px;max-height:200px;overflow:auto}
 .answer{white-space:pre-wrap}
 .barwrap{border-top:1px solid var(--line);background:var(--top-bg);padding:10px 14px}
@@ -64,7 +71,8 @@ button.act{cursor:pointer;font-weight:800;padding:0 16px;height:42px;border:none
 #saveGhBtn{background:var(--card);color:var(--ink);border:1px solid var(--line);font-weight:700;font-size:.78rem;padding:5px 9px;border-radius:8px;cursor:pointer}
 .status{font-size:.78rem;color:var(--muted)}
 .status .err{color:var(--err)}
-.status .ok{color:var(--ok)}
+/* 완료(성공) 상태도 초록 강조 대신 중립색 — 다른 UI와 톤 통일(눈에 안 띄게) */
+.status .ok{color:var(--ink)}
 .empty{color:var(--muted);text-align:center;margin:auto;font-size:.9rem}
 .side{transition:transform .25s ease}
 .resizer{flex:0 0 auto;width:5px;cursor:col-resize;background:var(--line)}
@@ -122,6 +130,7 @@ body.dark #omc,body.dark #ccVffToggle{accent-color:#000000}
 <div class="wrap">
   <aside class="side">
     <h2>세션 <button id="refreshBtn" style="float:right;font-size:.7rem;padding:2px 6px;cursor:pointer">↻</button></h2>
+    <input type="search" id="sessSearch" placeholder="🔎 세션 검색…" style="width:100%;margin:0 0 8px;padding:6px 8px;font-size:.8rem">
     <div id="sessionList"><div class="lbl" style="padding:8px">불러오는 중…</div></div>
   </aside>
   <div class="resizer" id="resizer" title="사이드바 너비 조절"></div>
@@ -249,7 +258,7 @@ async function loadCcRepos(){
     else { const z=ccRepos.find(x=>/^0program$/i.test(x.name)); if(z) def=z.owner+'/'+z.name; else if(ccRepos[0]) def=ccRepos[0].owner+'/'+ccRepos[0].name; }
     sel.innerHTML='<option value="">레포 없음(빈 샌드박스)</option>'+ccRepos.map(x=>{
       const full=x.owner+'/'+x.name;
-      return '<option value="'+esc(full)+'"'+(full===def?' selected':'')+'>'+(x.private?'🔒 ':'')+esc(full)+'</option>';
+      return '<option value="'+esc(full)+'"'+(full===def?' selected':'')+'>'+esc(full)+(x.private?' [비공개]':'')+'</option>';
     }).join('');
     if(def){ try{ localStorage.setItem(REPO_KEY, def); }catch(e){} }
     sel.addEventListener('change',()=>{ try{ localStorage.setItem(REPO_KEY, sel.value); }catch(e){} });
@@ -334,7 +343,7 @@ function renderRun(run){
   let html = '';
   for(const t of run.tools){
     const inp = t.input!=null ? esc(JSON.stringify(t.input)).slice(0,160) : '';
-    html += `<div class="step"><span class="nm">${toolIcon(t.name)} ${esc(t.name)}</span> ${inp}` +
+    html += `<div class="step"><span class="nm"><span class="mi">${toolIcon(t.name)}</span> ${esc(t.name)}</span> ${inp}` +
             (t.result!=null ? `<span class="rs">${esc(typeof t.result==='string'?t.result:JSON.stringify(t.result)).slice(0,800)}</span>`:'') + `</div>`;
   }
   host.innerHTML = html;
@@ -472,6 +481,7 @@ async function loadSessions(){
       <div class="t">${esc(x.title||'세션')}</div>
       <div class="m">${esc(x.model||'')} · ${esc(x.status||'')}${x.cost_usd?(' · $'+Number(x.cost_usd).toFixed(3)):''}</div></div>`).join('');
     host.querySelectorAll('.sitem').forEach(el=>el.addEventListener('click',()=>resume(el.dataset.id, el.dataset.model, el.dataset.title)));
+    filterSessionList(); // 검색어가 입력된 채로 새로고침돼도 필터 유지
   }catch(e){ $('sessionList').innerHTML='<div class="lbl" style="padding:8px">목록 로드 실패</div>'; }
 }
 
@@ -500,6 +510,14 @@ $('attachBtn').addEventListener('click', ()=>$('attachInput').click());
 $('attachInput').addEventListener('change', e=>{ addFiles(e.target.files); e.target.value=''; });
 $('prompt').addEventListener('paste', e=>{ const items=(e.clipboardData&&e.clipboardData.items)||[]; const imgs=[]; for(const it of items){ if(it.kind==='file'){ const f=it.getAsFile(); if(f&&/^image\//.test(f.type)) imgs.push(f); } } if(imgs.length){ e.preventDefault(); addFiles(imgs); } });
 $('refreshBtn').addEventListener('click', loadSessions);
+// 세션 검색 — 개발한 프로그램을 제목/모델/상태 텍스트로 빠르게 찾기(순수 클라이언트 필터)
+function filterSessionList(){
+  const q=($('sessSearch').value||'').trim().toLowerCase();
+  $('sessionList').querySelectorAll('.sitem').forEach(el=>{
+    el.style.display = (!q || (el.textContent||'').toLowerCase().includes(q)) ? '' : 'none';
+  });
+}
+$('sessSearch').addEventListener('input', filterSessionList);
 $('saveGhBtn').addEventListener('click', () => saveToGithub(false));
 
 loadSessions();
