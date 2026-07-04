@@ -28,7 +28,9 @@ a{color:var(--accent)}
 .hamb{font-size:1.05rem;line-height:1;border:1px solid var(--line);border-radius:8px;padding:5px 9px;background:var(--card);color:var(--ink);cursor:pointer;flex:0 0 auto}
 .nav{margin-left:auto;display:flex;gap:6px;flex-wrap:wrap;align-items:center}
 .nav a{font-size:.8rem;text-decoration:none;border:1px solid var(--line);border-radius:8px;padding:5px 9px;color:var(--muted)}
-.nav a.active{background:var(--accent);border-color:var(--accent);color:var(--on-accent)}
+/* 현재 앱 표시 흑백화(파란 배경 제거) — 앱 아이콘 컨벤션과 통일: 라이트=흰바탕+검정, 다크=검은바탕+흰색 */
+.nav a.active{background:#fff;border-color:#111;color:#111;font-weight:700}
+body.dark .nav a.active{background:#000;border-color:#fff;color:#fff}
 .theme-toggle{font-size:.95rem;line-height:1;border:1px solid var(--line);border-radius:8px;padding:5px 8px;background:var(--card);color:var(--ink);cursor:pointer}
 .wrap{flex:1;display:flex;min-height:0}
 .side{width:230px;flex:0 0 auto;border-right:1px solid var(--line);background:var(--side-bg);overflow:auto;padding:10px}
@@ -124,7 +126,7 @@ body:not(.dark) .app-ico{filter:grayscale(1) brightness(0)!important}
 <div class="wrap">
   <aside class="side">
     <h2>대화 <button id="refreshBtn" title="새 대화" style="float:right;font-size:.7rem;padding:2px 6px;cursor:pointer">＋ 새 대화</button></h2>
-    <input type="search" id="sessSearch" placeholder="🔎 대화 검색…" style="width:100%;margin:0 0 8px;padding:6px 8px;font-size:.8rem">
+    <input type="search" id="sessSearch" placeholder="대화 검색…" style="width:100%;margin:0 0 8px;padding:6px 8px;font-size:.8rem">
     <div id="sessionList"><div class="lbl" style="padding:8px">대화 없음</div></div>
   </aside>
   <div class="resizer" id="resizer" title="사이드바 너비 조절"></div>
