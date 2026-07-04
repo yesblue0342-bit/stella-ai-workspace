@@ -245,7 +245,7 @@ export default async function handler(req, res) {
       const r = await fetch(uploadUrl, { method: "PUT", redirect: "manual", headers: { "Content-Range": range } });
       if (r.status === 200 || r.status === 201) {
         let data = {};
-        try { data = await r.json(); } catch (_) {}
+        try { data = await r.json(); } catch (_) { /* ignore */ }
         return res.status(200).json({ ok: true, status: "complete", fileId: data.id || null, name: data.name || null, size: data.size || null });
       }
       if (r.status === 308) {

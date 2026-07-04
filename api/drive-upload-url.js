@@ -1,4 +1,4 @@
-import { getDrive, getDriveRootId, getDriveRootIdSafe, FOLDER_MIME } from "../lib/drive-utils.js";
+import { getDrive, getDriveRootIdSafe, FOLDER_MIME } from "../lib/drive-utils.js";
 
 // MemberChat/images 폴더 ID를 찾거나 생성
 async function ensureMediaFolder() {
@@ -6,7 +6,7 @@ async function ensureMediaFolder() {
   const rootId = await getDriveRootIdSafe();
 
   // MemberChat 폴더 찾기
-  let chatFolderId = rootId;
+  let chatFolderId;
   const chatQ = `mimeType='${FOLDER_MIME}' and name='MemberChat' and '${rootId}' in parents and trashed=false`;
   const chatRes = await drive.files.list({ q: chatQ, fields: "files(id,name)", pageSize: 1 });
   if (chatRes.data.files?.[0]) {

@@ -62,7 +62,7 @@ export default async function handler(req, res) {
     const r = await fetch(url, { headers });
     if (!r.ok) {
       let msg = `GitHub ${r.status}`;
-      try { const j = await r.json(); if (j && j.message) msg += ": " + j.message; } catch {}
+      try { const j = await r.json(); if (j && j.message) msg += ": " + j.message; } catch { /* ignore */ }
       if (r.status === 403 && /rate limit/i.test(msg)) msg = "GitHub API 요청 한도 초과. 잠시 후 다시 시도하세요.";
       if (r.status === 404) msg = "파일을 찾을 수 없습니다(경로/브랜치 확인).";
       return jsonErr(res, r.status, msg);

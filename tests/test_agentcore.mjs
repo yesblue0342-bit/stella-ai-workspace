@@ -1,5 +1,5 @@
 // tests/test_agentcore.mjs — Stella Agent Code 핵심 로직 단위 테스트 (의존성 0)
-import { CLAUDE_MODELS, DEFAULT_MODEL, isValidModel, resolveModel, AgentRun, nextDelayMs, buildTranscript, buildAgentSystem, OMC_REPO } from "../lib/agentcore.mjs";
+import { DEFAULT_MODEL, isValidModel, resolveModel, AgentRun, nextDelayMs, buildTranscript, buildAgentSystem, OMC_REPO } from "../lib/agentcore.mjs";
 
 let pass = 0, fail = 0;
 function A(name, ok, extra) { ok ? pass++ : fail++; console.log(`${ok ? "PASS" : "FAIL"}  ${name}` + (ok || !extra ? "" : `  (${extra})`)); }

@@ -196,9 +196,9 @@ function detectGitHubIntent(message) {
   // 파일 읽기/수정 — 대상이 '레포 코드 파일'(.html/.js/.json 등)일 때만.
   //   SAP/업무 파일(.abap/.pdf/.xlsx/.txt 등)이나 파일명이 없으면 일반 질문 → AI가 답한다.
   const isRepoFile = (p) => /\.(html?|m?jsx?|tsx?|json|css|md|ya?ml|sh|py|env|toml)$/i.test(String(p));
-  const readMatch = raw.match(/(?:읽어|불러|확인해|조회해|보여줘)[^\n]*?([a-zA-Z0-9_\-\/]+\.[a-zA-Z]{2,6})/);
+  const readMatch = raw.match(/(?:읽어|불러|확인해|조회해|보여줘)[^\n]*?([a-zA-Z0-9_\-/]+\.[a-zA-Z]{2,6})/);
   if (readMatch && isRepoFile(readMatch[1])) return { type: "read", path: readMatch[1] };
-  const updateMatch = raw.match(/(?:수정|고쳐|변경|커밋|배포)[^\n]*?([a-zA-Z0-9_\-\/]+\.[a-zA-Z]{2,6})/);
+  const updateMatch = raw.match(/(?:수정|고쳐|변경|커밋|배포)[^\n]*?([a-zA-Z0-9_\-/]+\.[a-zA-Z]{2,6})/);
   if (updateMatch && isRepoFile(updateMatch[1])) return { type: "update_intent", path: updateMatch[1] };
 
   // GitHub 상태 확인 — 'github' 명시가 있을 때만.
@@ -217,15 +217,6 @@ function selfBase() {
 
 async function callGitHubRead(path) {
   const r = await fetch(`${selfBase()}/api/github-read?path=${encodeURIComponent(path)}`);
-  return r.json();
-}
-
-async function callGitHubUpdate(path, content, commitMsg) {
-  const r = await fetch(`${selfBase()}/api/github-update`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ path, content, message: commitMsg })
-  });
   return r.json();
 }
 
@@ -251,25 +242,12 @@ const KR_CITIES = {
   "의정부":{lat:37.7382,lng:127.0337},"연수구":{lat:37.4108,lng:126.6780},
 };
 
-function wmoToKr(code) {
-  const map = {
-    0:"맑음",1:"대체로 맑음",2:"부분적으로 흐림",3:"흐림",
-    45:"안개",48:"안개(서리)",
-    51:"가벼운 이슬비",53:"이슬비",55:"짙은 이슬비",
-    61:"가벼운 비",63:"비",65:"폭우",
-    71:"가벼운 눈",73:"눈",75:"폭설",77:"싸라기눈",
-    80:"소나기(약)",81:"소나기",82:"폭우 소나기",
-    95:"뇌우",96:"우박 뇌우",99:"폭우 뇌우"
-  };
-  return map[code] || "정보없음";
-}
-
 // 날씨 자연어 요약 생성
 function buildWeatherSummary(w) {
   const parts = [];
   // 기온 표현
   const t = Number(w.temp);
-  let tempPhrase = "";
+  let tempPhrase;
   if (t >= 30) tempPhrase = "매우 더운 날씨";
   else if (t >= 25) tempPhrase = "더운 편";
   else if (t >= 20) tempPhrase = "따뜻한 날씨";
@@ -338,7 +316,7 @@ async function handleWeather(message) {
           lng = place.location.longitude;
           resolvedName = place.displayName?.text || locationName;
         }
-      } catch {}
+      } catch { /* ignore */ }
     }
   }
 
@@ -518,7 +496,7 @@ export default async function handler(req, res) {
     // 웹/날씨 검색 (조건부)
     let searchContext = { used: false };
     if (needsSearch || needsWeather) {
-      try { searchContext = await prepareSearchContext(message); } catch(e) {}
+      try { searchContext = await prepareSearchContext(message); } catch(e) { /* ignore */ }
     }
 
     // Drive 파일 읽기 (경로 지시어 있을 때만)
@@ -597,19 +575,19 @@ export default async function handler(req, res) {
         let full = "";
         try {
           full = await streamResponses({ model: "gpt-4o", system: routeSys, history, message: aiMessage, images, search: useSearch,
-            onDelta: (d) => { try { res.write(`data: ${JSON.stringify({ delta: d })}\n\n`); } catch (e) {} } });
-          try { res.write(`data: ${JSON.stringify({ done: true })}\n\n`); } catch (e) {}
+            onDelta: (d) => { try { res.write(`data: ${JSON.stringify({ delta: d })}\n\n`); } catch (e) { /* ignore */ } } });
+          try { res.write(`data: ${JSON.stringify({ done: true })}\n\n`); } catch (e) { /* ignore */ }
         } catch (e) {
           const msg = String((e && e.message) || e || "stream error").replace(/sk-[A-Za-z0-9_-]{12,}/g, "***").slice(0, 200);
-          try { res.write(`data: ${JSON.stringify({ error: msg })}\n\n`); } catch (e2) {}
+          try { res.write(`data: ${JSON.stringify({ error: msg })}\n\n`); } catch (e2) { /* ignore */ }
         }
-        try { res.end(); } catch (e) {}
+        try { res.end(); } catch (e) { /* ignore */ }
         // 메모리 업데이트(스트리밍 종료 후, 비동기)
         setImmediate(async () => {
           try {
             const ni = await extractMemoryFromConversation({ model, history, message: aiMessage, answer: full, isClaudeModel: false });
             if (ni && Object.values(ni).some((a) => Array.isArray(a) && a.length > 0)) await updateMemory(userId, ni, false);
-          } catch (e) {}
+          } catch (e) { /* ignore */ }
         });
         return;
       }
@@ -648,7 +626,7 @@ export default async function handler(req, res) {
     }
     timings.modelMs = Date.now() - _modelStart;
     timings.totalMs = Date.now() - _t0;
-    try { console.log("[chat timings]", provider, model, JSON.stringify(timings)); } catch(e) {}
+    try { console.log("[chat timings]", provider, model, JSON.stringify(timings)); } catch(e) { /* ignore */ }
 
     // ⑤ 메모리 업데이트 (비동기 - 응답 지연 없음)
     setImmediate(async () => {
@@ -668,7 +646,7 @@ export default async function handler(req, res) {
                 if (t && String(t).trim()) await saveMemoryAzure(userId, { memory_text: String(t).trim(), category: cat, source: "ai_inferred" });
               }
             }
-          } catch (e2) {}
+          } catch (e2) { /* ignore */ }
         }
       } catch(e) { console.warn("[Memory] 업데이트 실패:", e.message); }
     });
@@ -764,7 +742,7 @@ async function loadMemory(userId, fullScan = false) {
       base.context = Array.isArray(data.context) ? data.context : [];
       base.updatedAt = data.updatedAt || null;
     }
-  } catch(e) {}
+  } catch(e) { /* ignore */ }
 
   // 2) 폴더 내 추가 파일들 스캔 (fullScan=true 일 때만 - 속도 최적화)
   // 기본은 {userId}_memory.json 하나만 읽고, 필요할 때만 폴더 전체 스캔
@@ -794,9 +772,9 @@ async function loadMemory(userId, fullScan = false) {
         // 형식 4: 단순 문자열 배열
         if (Array.isArray(d) && d.every(x => typeof x === "string")) base.facts = [...base.facts, ...d];
         console.log(`[Memory] 추가 파일 로드: ${fname}`);
-      } catch(e2) {}
+      } catch(e2) { /* ignore */ }
     }
-  } catch(e) {}
+  } catch(e) { /* ignore */ }
 
   // 중복 제거 + MAX 적용
   const dedup = arr => [...new Set(arr.filter(Boolean))].slice(-MAX_MEMORY_ITEMS);
@@ -868,8 +846,7 @@ ${recentConv}`;
 // 메모리 업데이트 (중복 제거 + 최대 개수 유지)
 async function updateMemory(userId, newItems, isClaudeModel) {
   const memory = await loadMemory(userId);
-  const now = new Date().toISOString();
-  
+
   const addUnique = (arr, newArr, maxN) => {
     if (!Array.isArray(newArr) || !newArr.length) return arr;
     const existing = new Set(arr.map(x => String(x).toLowerCase().trim()));
@@ -1026,7 +1003,7 @@ async function callClaude({ model, system, history, message, images = [] }) {
   }
   return text;
   } catch(e) {
-    if (e.name === "AbortError") throw new Error("응답 시간이 너무 깁니다. 질문을 더 짧게 해주세요.");
+    if (e.name === "AbortError") throw new Error("응답 시간이 너무 깁니다. 질문을 더 짧게 해주세요.", { cause: e });
     throw e;
   } finally {
     clearTimeout(timeoutId);

@@ -46,7 +46,7 @@ export async function getPlaceContext(message = "") {
     try {
       const fallback = domestic ? await searchGooglePlaces(query) : await searchKakaoPlaces(query);
       results = dedupe([...results, ...fallback]);
-    } catch {}
+    } catch { /* ignore */ }
   }
 
   return {
@@ -215,5 +215,5 @@ async function safeJson(response) {
 
 // 서버리스 핸들러 형식 호환용 기본 export(이 파일은 내부 헬퍼 모듈 — 직접 호출 대상 아님).
 export default function handler(_req, res) {
-  try { res.status(404).json({ ok: false, error: "internal helper module" }); } catch (e) {}
+  try { res.status(404).json({ ok: false, error: "internal helper module" }); } catch (e) { /* ignore */ }
 }

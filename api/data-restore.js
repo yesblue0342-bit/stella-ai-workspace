@@ -1,5 +1,5 @@
 import { getPool, sql } from "../lib/db.js";
-import { saveJsonToDrive, readJsonFromDrive, listJsonFromDrive, ensurePath, listDriveDirectory } from "../lib/drive-utils.js";
+import { readJsonFromDrive, listJsonFromDrive, ensurePath, listDriveDirectory } from "../lib/drive-utils.js";
 export default async function handler(req, res) {
   const userId = String(req.query.userId || '').trim();
   const action = String(req.query.action || 'scan').trim();
@@ -51,11 +51,11 @@ export default async function handler(req, res) {
                 if (r?.data && !r.data.deleted) {
                   driveNotes.push({ path: `${root}/${cat.name}`, id: r.data.id || r.data.postId || f.name, title: r.data.title, body: (r.data.body || r.data.content || '').slice(0, 100) });
                 }
-              } catch(e) {}
+              } catch(e) { /* ignore */ }
             }
-          } catch(e) {}
+          } catch(e) { /* ignore */ }
         }
-      } catch(e) {}
+      } catch(e) { /* ignore */ }
     }
     // users/{userId}/notes
     try {
@@ -64,9 +64,9 @@ export default async function handler(req, res) {
         try {
           const r = await readJsonFromDrive({ folderPath: ['users', userId, 'notes'], fileName: f.name.replace(/\.json$/, '') });
           if (r?.data && !r.data.deleted) driveNotes.push({ path: `users/${userId}/notes`, id: r.data.id, title: r.data.title, body: (r.data.body || '').slice(0, 100) });
-        } catch(e) {}
+        } catch(e) { /* ignore */ }
       }
-    } catch(e) {}
+    } catch(e) { /* ignore */ }
 
     report.driveNotes = driveNotes;
     report.driveNotesCount = driveNotes.length;

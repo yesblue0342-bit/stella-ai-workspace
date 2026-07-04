@@ -4,7 +4,7 @@ import { listEvents, normalizeEvents } from "./_maclient.mjs";
 import { extractFilesFromEvents } from "../../lib/cc-files.mjs";
 import { saveAgentFilesToDrive, saveTextToDrive } from "../../lib/drive-files.mjs";
 import { getSessionRow, setSessionGithubUrl } from "../../lib/cc-db.mjs";
-import { saveToGitHubBootstrap, loadFromGitHub, findProgramPath, toRepoPath, hasGhToken, deriveAbapName, resolveProgramName, resolveExt } from "../../lib/github-store.mjs";
+import { saveToGitHubBootstrap, loadFromGitHub, findProgramPath, toRepoPath, hasGhToken, resolveProgramName, resolveExt } from "../../lib/github-store.mjs";
 import { assertSafePath } from "../../lib/gh-proxy.mjs";
 
 const GH_OWNER = "yesblue0342-bit", GH_REPO = "0Program";
@@ -88,7 +88,7 @@ export default async function handler(req, res) {
     }
 
     const result = await saveAgentFilesToDrive({ files, title, source: source || "claude-code" });
-    if (result.folderLink) { try { await setSessionGithubUrl(session, result.folderLink); } catch {} }
+    if (result.folderLink) { try { await setSessionGithubUrl(session, result.folderLink); } catch { /* ignore */ } }
 
     // 0Program(GitHub) 원경로 동기화 — cc.html #ZAQMR0100 으로 불러와 편집한 세션이면,
     // 세션이 실제로 쓴 파일 중 동일 파일명(대소문자 무시)을 찾아 원래 GitHub 경로로 되저장(비차단).

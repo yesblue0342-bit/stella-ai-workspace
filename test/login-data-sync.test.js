@@ -86,7 +86,7 @@ async function boot(scenario) {
     const se = fs.readFileSync(path.join(ROOT, "lib/sync-engine.js"), "utf8");
     const s0 = dom.window.document.createElement("script"); s0.textContent = se;
     dom.window.document.body.appendChild(s0);
-  } catch {}
+  } catch { /* ignore */ }
   const s = dom.window.document.createElement("script");
   s.textContent = appScript + "\n" + driver;
   dom.window.document.body.appendChild(s);

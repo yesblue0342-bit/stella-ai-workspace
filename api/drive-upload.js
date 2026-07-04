@@ -2,7 +2,7 @@
 // 이미지/파일을 서버에서 Drive에 업로드하고 공개 URL 반환
 // base64 또는 multipart/form-data 지원
 
-import { getDrive, getDriveRootId, getDriveRootIdSafe, FOLDER_MIME } from "../lib/drive-utils.js";
+import { getDrive, getDriveRootIdSafe, FOLDER_MIME } from "../lib/drive-utils.js";
 import { kstDateString, familyPhotoPath } from "../lib/kst-date.js";
 
 // PART E: 첨부 사본을 "내 드라이브 / 0가족 / 1_사진 / stella talk / [KST날짜]" 에 보관.
@@ -45,7 +45,7 @@ async function ensureImagesFolder(drive, rootId) {
   const esc = (v) => String(v || "").replace(/'/g, "\\'");
 
   // MemberChat 폴더
-  let chatId = rootId;
+  let chatId;
   const r1 = await drive.files.list({
     q: `mimeType='${FOLDER_MIME}' and name='MemberChat' and '${esc(rootId)}' in parents and trashed=false`,
     fields: "files(id)", pageSize: 1

@@ -19,7 +19,7 @@ export default async function handler(req, res) {
       try {
         const data = await readJsonById(f.id);
         if (data && !data.deleted) result.found.push({ path: `users/${userId}/notes`, id: data.id, title: data.title });
-      } catch(e) {}
+      } catch(e) { /* ignore */ }
     }
   } catch(e) { result.paths.push({ path: `users/${userId}/notes`, error: e.message }); }
 
@@ -34,10 +34,10 @@ export default async function handler(req, res) {
             try {
               const data = await readJsonById(f.id);
               if (data && !data.deleted) result.found.push({ path: `${root}/${userId}/${cat}`, id: data.id||data.postId, title: data.title });
-            } catch(e) {}
+            } catch(e) { /* ignore */ }
           }
         }
-      } catch(e) {}
+      } catch(e) { /* ignore */ }
     }
     // Board/노트/ (userId 없는 구조)
     try {
@@ -50,10 +50,10 @@ export default async function handler(req, res) {
             if (data && !data.deleted && (data.userId === userId || !data.userId)) {
               result.found.push({ path: `${root}/노트`, id: data.id||data.postId, title: data.title });
             }
-          } catch(e) {}
+          } catch(e) { /* ignore */ }
         }
       }
-    } catch(e) {}
+    } catch(e) { /* ignore */ }
   }
 
   return res.status(200).json({ ok: true, ...result, totalFound: result.found.length });

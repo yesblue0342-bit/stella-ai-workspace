@@ -52,7 +52,7 @@ async function readUser(idKey, emailKey){
     try{
       const f = await readJsonFromDrive({ folderPath:["auth","users"], fileName: key });
       if(f?.data) return f.data;
-    }catch{}
+    }catch{ /* ignore */ }
   }
   return null;
 }
@@ -100,7 +100,7 @@ async function indexToAzure(user){
           WHERE LOWER(ISNULL(user_id,''))=LOWER(@uid) OR (LEN(@email)>0 AND LOWER(ISNULL(email,''))=LOWER(@email));
         ELSE
           INSERT INTO dbo.users(user_id,email,password_hash,name,birth,status) VALUES(@uid,@email,@phash,@name,@birth,@status);`);
-  }catch{}
+  }catch{ /* ignore */ }
 }
 
 // Azure 폴백 조회 — Drive를 못 읽을 때(토큰 만료 등) 로그인 복구용. password_hash 포함 레코드 반환.
@@ -136,7 +136,7 @@ export async function updateAzureStatus(userId, email, status){
       .input("email", sql.NVarChar(255), email||"")
       .input("status", sql.NVarChar(16), status)
       .query(`UPDATE dbo.users SET status=@status, updated_at=SYSUTCDATETIME() WHERE LOWER(ISNULL(user_id,''))=LOWER(@uid) OR (LEN(@email)>0 AND LOWER(ISNULL(email,''))=LOWER(@email))`);
-  }catch{}
+  }catch{ /* ignore */ }
 }
 
 export default async function handler(req, res){

@@ -1,5 +1,5 @@
 // tests/test_download.mjs — api/download.js 핸들러 검증 (fetch 모킹, node로 실행)
-import { Readable, Writable } from "node:stream";
+import { Writable } from "node:stream";
 
 process.env.__TEST_TOKEN__ = "test-token"; // getAccessToken 분기 (실인증 안 탐)
 const { default: handler, buildContentDisposition } = await import("../api/download.js");

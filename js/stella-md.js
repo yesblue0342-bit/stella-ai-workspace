@@ -7,11 +7,11 @@
     if (typeof window.stellaCopyText === "function") { window.stellaCopyText(text, btnEl); return; }
     var done = function (ok) {
       if (btnEl) { var o = btnEl.textContent; btnEl.textContent = ok ? "복사됨" : "실패"; setTimeout(function () { btnEl.textContent = o; }, 1200); }
-      try { if (window.stellaShowToast) window.stellaShowToast(ok ? "복사됨" : "복사 실패"); } catch (e) {}
+      try { if (window.stellaShowToast) window.stellaShowToast(ok ? "복사됨" : "복사 실패"); } catch (e) { /* ignore */ }
     };
     try {
       if (navigator.clipboard && navigator.clipboard.writeText) { navigator.clipboard.writeText(String(text || "")).then(function () { done(true); }, function () { done(false); }); return; }
-    } catch (e) {}
+    } catch (e) { /* ignore */ }
     try { var ta = document.createElement("textarea"); ta.value = String(text || ""); ta.style.position = "fixed"; ta.style.left = "-9999px"; document.body.appendChild(ta); ta.select(); document.execCommand("copy"); ta.remove(); done(true); } catch (e) { done(false); }
   }
   function mkBtn(label, onClick) {
@@ -30,17 +30,17 @@
   // 코너 아이콘 버튼(📋/📥)
   function mkIcon(glyph, title, onClick) {
     var b = document.createElement("button"); b.type = "button"; b.className = "stella-tbtn"; b.textContent = glyph; b.title = title;
-    b.onclick = function (ev) { try { ev.preventDefault(); ev.stopPropagation(); } catch (e) {} onClick(b); }; return b;
+    b.onclick = function (ev) { try { ev.preventDefault(); ev.stopPropagation(); } catch (e) { /* ignore */ } onClick(b); }; return b;
   }
   function downloadBlob(name, blob) {
-    try { var url = URL.createObjectURL(blob); var a = document.createElement("a"); a.href = url; a.download = name; document.body.appendChild(a); a.click(); setTimeout(function () { try { a.remove(); URL.revokeObjectURL(url); } catch (e) {} }, 1500); } catch (e) {}
+    try { var url = URL.createObjectURL(blob); var a = document.createElement("a"); a.href = url; a.download = name; document.body.appendChild(a); a.click(); setTimeout(function () { try { a.remove(); URL.revokeObjectURL(url); } catch (e) { /* ignore */ } }, 1500); } catch (e) { /* ignore */ }
   }
   function tsvToCsv(tsv) { return "﻿" + tsv.split("\n").map(function (r) { return r.split("\t").map(function (c) { return '"' + String(c == null ? "" : c).replace(/"/g, '""') + '"'; }).join(","); }).join("\n"); }
   // 표 DOM → 진짜 .xlsx(SheetJS 있으면) 또는 CSV 폴백 다운로드
   function downloadTableXlsx(tbl, btnEl) {
-    var stamp = "";
+    var stamp;
     try { stamp = new Date().toISOString().replace(/[:.]/g, "-").slice(0, 19); } catch (e) { stamp = "table"; }
-    var okMark = function () { if (btnEl) { var o = btnEl.textContent; btnEl.textContent = "✓"; setTimeout(function () { btnEl.textContent = o; }, 1200); } try { if (window.stellaShowToast) window.stellaShowToast("Excel 다운로드"); } catch (e) {} };
+    var okMark = function () { if (btnEl) { var o = btnEl.textContent; btnEl.textContent = "✓"; setTimeout(function () { btnEl.textContent = o; }, 1200); } try { if (window.stellaShowToast) window.stellaShowToast("Excel 다운로드"); } catch (e) { /* ignore */ } };
     try {
       if (window.XLSX && window.XLSX.utils && window.XLSX.utils.table_to_sheet) {
         var ws = window.XLSX.utils.table_to_sheet(tbl);
@@ -50,7 +50,7 @@
         return okMark();
       }
     } catch (e) { /* CSV 폴백 */ }
-    try { downloadBlob("stella-table-" + stamp + ".csv", new Blob([tsvToCsv(tableToTSV(tbl))], { type: "text/csv;charset=utf-8" })); okMark(); } catch (e2) {}
+    try { downloadBlob("stella-table-" + stamp + ".csv", new Blob([tsvToCsv(tableToTSV(tbl))], { type: "text/csv;charset=utf-8" })); okMark(); } catch (e2) { /* ignore */ }
   }
   function ensureTableStyle() {
     if (typeof document === "undefined" || document.getElementById("stella-table-style")) return;
@@ -137,7 +137,7 @@
       if (el && window.marked && window.DOMPurify) {
         var html = window.marked.parse(s, { breaks: true, gfm: true });
         el.innerHTML = window.DOMPurify.sanitize(html, { ADD_ATTR: ["target", "rel"] });
-        try { addCopyButtons(el); } catch (e) {}
+        try { addCopyButtons(el); } catch (e) { /* ignore */ }
         return true;
       }
     } catch (e) { /* 폴백으로 위임 */ }

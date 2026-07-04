@@ -249,7 +249,7 @@ export default async function handler(req, res) {
             lastMessageAt: lastAt,
             lastMessageFrom: lastMsg ? String(lastMsg.userId || lastMsg.sender || "") : ""
           });
-        } catch (e) {}
+        } catch (e) { /* ignore */ }
       }
       rooms.sort((a, b) => new Date(b.updatedAt || 0) - new Date(a.updatedAt || 0));
       return res.status(200).json({ ok: true, rooms });

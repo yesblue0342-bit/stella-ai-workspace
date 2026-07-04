@@ -15,8 +15,8 @@
   // onChange(pending): 진행 중 인코딩 수가 바뀔 때 호출(전송버튼 비활성/상태표시용).
   function makeAttachEncoder(onChange) {
     var pending = 0, waiters = [];
-    function changed() { if (typeof onChange === "function") { try { onChange(pending); } catch (e) {} } }
-    function settle() { if (pending === 0) { var w = waiters; waiters = []; w.forEach(function (fn) { try { fn(); } catch (e) {} }); } }
+    function changed() { if (typeof onChange === "function") { try { onChange(pending); } catch (e) { /* ignore */ } } }
+    function settle() { if (pending === 0) { var w = waiters; waiters = []; w.forEach(function (fn) { try { fn(); } catch (e) { /* ignore */ } }); } }
     return {
       pendingCount: function () { return pending; },
       // file → Promise<dataUrl>. 성공/실패 모두 진행 카운트 감소.

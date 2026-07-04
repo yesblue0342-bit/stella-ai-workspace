@@ -1,7 +1,7 @@
 // GitHub 커밋 헬퍼 테스트 (PART B). 실행: npm test
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { ymdKST, sanitizeSeg, outputPath, commitMessage, ghPutFile } from "../lib/gh-commit.mjs";
+import { ymdKST, outputPath, commitMessage, ghPutFile } from "../lib/gh-commit.mjs";
 
 test("ymdKST: KST 자정 경계", () => {
   assert.equal(ymdKST(new Date("2026-06-17T15:00:00Z")), "20260618");

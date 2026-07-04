@@ -57,7 +57,7 @@ export default async function handler(req, res) {
       await pipeline(Readable.fromWeb(fileRes.body), res);
     } catch (streamErr) {
       console.error('[download] 전송 중 스트림 오류:', String(streamErr?.message || streamErr));
-      try { res.destroy(); } catch {}
+      try { res.destroy(); } catch { /* ignore */ }
     }
   } catch (e) {
     if (!res.headersSent) res.status(500).json({ error: 'download_exception', message: String(e?.message || e) });

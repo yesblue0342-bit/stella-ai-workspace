@@ -44,7 +44,7 @@ export function getVffEnabled() {
 }
 
 export function setVffEnabled(val) {
-  try { localStorage.setItem(VFF_STORAGE_KEY, String(!!val)); } catch {}
+  try { localStorage.setItem(VFF_STORAGE_KEY, String(!!val)); } catch { /* ignore */ }
 }
 
 export function normalizeClaudeModel(modelId) {

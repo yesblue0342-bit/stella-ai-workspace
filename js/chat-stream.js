@@ -26,7 +26,7 @@
         if (now - last > 120) { last = now; paint(full); }
         else { clearTimeout(pending); pending = setTimeout(function () { last = Date.now(); paint(full); }, 120); }
       },
-      remove: function () { try { clearTimeout(pending); row.remove(); } catch (e) {} },
+      remove: function () { try { clearTimeout(pending); row.remove(); } catch (e) { /* ignore */ } },
     };
   }
 

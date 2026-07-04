@@ -28,7 +28,7 @@ export default async function handler(req, res) {
     try {
       const parsed = JSON.parse(data.choices[0].message.content);
       candidates = (parsed.candidates || []).filter(c => c && c.save && c.memory_text);
-    } catch {}
+    } catch { /* ignore */ }
     return res.status(200).json({ ok:true, candidates });
   } catch (e) {
     return res.status(200).json({ ok:true, candidates:[], warn:String(e && e.message || e) });

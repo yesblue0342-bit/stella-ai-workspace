@@ -10,7 +10,7 @@
         navigator.clipboard.writeText(String(text || "")).then(function () { done(true); }, function () { done(fallback(text)); });
         return;
       }
-    } catch (e) {}
+    } catch (e) { /* ignore */ }
     done(fallback(text));
   }
   function fallback(text) {

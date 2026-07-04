@@ -5,7 +5,7 @@
 import { warmup } from "../lib/db.js";
 export default async function handler(req, res) {
   const startedAt = Date.now();
-  let warmed = false;
+  let warmed;
   try {
     warmed = await warmup();
   } catch (_) {

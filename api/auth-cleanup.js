@@ -40,7 +40,7 @@ export default async function handler(req, res) {
     }
 
     const deleted = [];
-    for (const [name, folders] of Object.entries(byName)) {
+    for (const folders of Object.values(byName)) {
       if (folders.length <= 1) continue;
       // 오래된 순 정렬, 첫 번째 유지 나머지 삭제
       folders.sort((a, b) => new Date(a.createdTime) - new Date(b.createdTime));

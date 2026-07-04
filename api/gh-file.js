@@ -55,7 +55,7 @@ export default async function handler(req, res) {
     const url = `https://api.github.com/repos/${encodeURIComponent(owner)}/${encodeURIComponent(name)}/contents/${path.split("/").map(encodeURIComponent).join("/")}?ref=${encodeURIComponent(ref)}`;
     const r = await fetch(url, { headers, signal });
     if (!r.ok) {
-      let msg = `GitHub ${r.status}`; try { const j = await r.json(); if (j && j.message) msg += ": " + j.message; } catch {}
+      let msg = `GitHub ${r.status}`; try { const j = await r.json(); if (j && j.message) msg += ": " + j.message; } catch { /* ignore */ }
       if (r.status === 404) msg = "파일을 찾을 수 없습니다(경로/브랜치 확인).";
       return jsonErr(res, r.status, msg);
     }
@@ -71,7 +71,7 @@ export default async function handler(req, res) {
     // → 소켓을 끊어 브라우저가 '네트워크 오류'로 명확히 실패 처리하게 한다.
     if (res.headersSent) {
       console.error('[gh-file] 스트리밍 중 오류:', String(e?.message || e));
-      try { res.destroy(); } catch {}
+      try { res.destroy(); } catch { /* ignore */ }
       return;
     }
     return jsonErr(res, e.status || 500, "파일 프록시 실패: " + String(e.message || e));

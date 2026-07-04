@@ -46,7 +46,7 @@ export default async function handler(req, res) {
     }
 
     const folderUrl = outputFolderUrl(repo, branch, ymd, title);
-    if (committed.length) { try { await setSessionGithubUrl(session, folderUrl); } catch {} }
+    if (committed.length) { try { await setSessionGithubUrl(session, folderUrl); } catch { /* ignore */ } }
 
     return res.status(committed.length ? 200 : 500).json({
       ok: committed.length > 0, committed: committed.length, total: files.length,

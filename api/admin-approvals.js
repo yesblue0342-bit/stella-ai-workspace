@@ -92,7 +92,7 @@ async function setStatus({ targetId, targetKey, status, adminId }){
   try{
     const { updateAzureStatus } = await import("./auth.js");
     updateAzureStatus(updated.user_id || updated.id || key, updated.email || "", status).catch(()=>{});
-  }catch(_){}
+  }catch(_){ /* ignore */ }
 
   // 이메일 alias 파일도 동기화 (이메일로 로그인해도 승인 상태 반영)
   const emailKey = updated.email ? safeKey(updated.email) : "";

@@ -22,7 +22,7 @@ export default async function handler(req, res) {
       cost = MA.estimateCostUsd(row ? row.model : "claude-sonnet-4-6", s.usage || {});
       if (budget && cost >= budget) {
         overBudget = true;
-        try { await MA.interruptSession(session); } catch {}
+        try { await MA.interruptSession(session); } catch { /* ignore */ }
         fresh.push({ seq: cursor + 1, kind: "status", status: "error", error: `예산 한도 초과(약 $${cost.toFixed(3)} / $${Number(budget).toFixed(2)}) — 세션을 중단했습니다.` });
       }
       if (row) {

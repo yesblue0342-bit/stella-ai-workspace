@@ -73,7 +73,7 @@ export default async function handler(req, res) {
           lng = place.location.longitude;
           resolvedName = place.displayName?.text || location;
         }
-      } catch {}
+      } catch { /* ignore */ }
     }
   }
 

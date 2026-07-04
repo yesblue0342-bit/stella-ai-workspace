@@ -55,7 +55,7 @@ self.addEventListener('fetch', e => {
 
 self.addEventListener('push', e => {
   let data = { title: 'Stella Talk', body: '새 메시지가 있습니다.' };
-  try { if (e.data) data = e.data.json(); } catch(err) {}
+  try { if (e.data) data = e.data.json(); } catch(err) { /* ignore */ }
   const title = data.title ? ('Stella Talk · ' + data.title) : 'Stella Talk';
   e.waitUntil(
     self.registration.showNotification(title, {
@@ -80,7 +80,7 @@ self.addEventListener('notificationclick', e => {
       for (var i = 0; i < list.length; i++) {
         var c = list[i];
         if (c.url.includes('/talk') && 'focus' in c) {
-          if (roomId) { try { c.postMessage({ type: 'OPEN_ROOM', roomId: roomId }); } catch (err) {} }   // STAGE 6: 딥링크
+          if (roomId) { try { c.postMessage({ type: 'OPEN_ROOM', roomId: roomId }); } catch (err) { /* ignore */ } }   // STAGE 6: 딥링크
           return c.focus();
         }
       }
@@ -95,7 +95,7 @@ self.addEventListener('periodicsync', e => {
   if (e.tag === 'talk-sync') {
     e.waitUntil(
       clients.matchAll({ type: 'window', includeUncontrolled: true }).then(function (list) {
-        list.forEach(function (c) { try { c.postMessage({ type: 'PERIODIC_SYNC' }); } catch (err) {} });
+        list.forEach(function (c) { try { c.postMessage({ type: 'PERIODIC_SYNC' }); } catch (err) { /* ignore */ } });
       })
     );
   }

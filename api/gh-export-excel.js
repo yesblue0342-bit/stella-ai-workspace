@@ -95,7 +95,7 @@ export default async function handler(req, res) {
     const url = `https://api.github.com/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}/contents/${path.split("/").map(encodeURIComponent).join("/")}?ref=${encodeURIComponent(ref)}`;
     const r = await fetch(url, { headers });
     if (!r.ok) {
-      let msg = `GitHub ${r.status}`; try { const j = await r.json(); if (j && j.message) msg += ": " + j.message; } catch {}
+      let msg = `GitHub ${r.status}`; try { const j = await r.json(); if (j && j.message) msg += ": " + j.message; } catch { /* ignore */ }
       return jsonErr(res, r.status, msg);
     }
     let buf = Buffer.from(await r.arrayBuffer());

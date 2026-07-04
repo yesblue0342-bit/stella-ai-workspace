@@ -18,7 +18,7 @@ async function readNotesFromRoot(rootName, userId, noteMap) {
         await collectNotes(fp, noteMap);
       }
     }
-  } catch(e) {}
+  } catch(e) { /* ignore */ }
 
   try {
     // 구조2: {root}/{category}/*.json  (userId 폴더 없이 카테고리 바로)
@@ -33,7 +33,7 @@ async function readNotesFromRoot(rootName, userId, noteMap) {
         await collectNotes([rootName, cat], noteMap, userId);
       }
     }
-  } catch(e) {}
+  } catch(e) { /* ignore */ }
 }
 
 // folderPath 하위의 노트 JSON들을 noteMap에 수집 (userId 필터 옵션)
@@ -156,7 +156,7 @@ export default async function handler(req, res) {
               if (e2?.data) await saveJsonToDrive({ folderPath: fp, fileName: id, data: { ...e2.data, deleted: true, deletedAt: new Date().toISOString() } });
             }
           }
-        } catch(e) {}
+        } catch(e) { /* ignore */ }
         // {root}/{category}/
         try {
           const rootFolder = await ensurePath([root]).catch(() => null);
@@ -168,7 +168,7 @@ export default async function handler(req, res) {
               if (e3?.data) await saveJsonToDrive({ folderPath: [root, cat], fileName: id, data: { ...e3.data, deleted: true, deletedAt: new Date().toISOString() } });
             }
           }
-        } catch(e) {}
+        } catch(e) { /* ignore */ }
       }
 
       return res.status(200).json({ ok: true, message: "삭제됨" });

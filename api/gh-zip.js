@@ -67,7 +67,7 @@ export default async function handler(req, res) {
       zip(files, { level: 6 }, (err, data) => (err ? reject(err) : resolve(data)));
     });
 
-    const safe = rootName.replace(/[^\w.\-]/g, "_");
+    const safe = rootName.replace(/[^\w.-]/g, "_");
     res.setHeader("Content-Type", "application/zip");
     res.setHeader("Content-Disposition", `attachment; filename="${safe}.zip"; filename*=UTF-8''` + encodeURIComponent(rootName) + ".zip");
     res.setHeader("Content-Length", zipped.length);

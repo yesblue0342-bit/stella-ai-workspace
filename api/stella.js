@@ -1,4 +1,4 @@
-import { saveJsonToDrive, listJsonFromDrive, readJsonFromDrive, searchDrive, listDriveDirectory, ensurePath, getDrive, getDriveRootId, FOLDER_MIME } from "../lib/drive-utils.js";
+import { saveJsonToDrive, listJsonFromDrive, readJsonFromDrive, searchDrive, listDriveDirectory, ensurePath } from "../lib/drive-utils.js";
 import { getPlaceContext, getWeatherContext } from "../lib/place-weather-utils.js";
 import { getPool, sql } from "../lib/db.js";
 
@@ -181,9 +181,9 @@ async function handleBoardList(req, res) {
               if (r?.data && !r.data.deleted) {
                 allPosts.push({ ...r.data, _category: cat });
               }
-            } catch(e) {}
+            } catch(e) { /* ignore */ }
           }
-        } catch(e) {}
+        } catch(e) { /* ignore */ }
       }
     } catch(e) {
       // fallback: 기본 카테고리들 시도
@@ -194,9 +194,9 @@ async function handleBoardList(req, res) {
             try {
               const r = await readJsonFromDrive({ folderPath: ["boards", userId, cat], fileName: f.name.replace(/\.json$/, "") });
               if (r?.data && !r.data.deleted) allPosts.push({ ...r.data, _category: cat });
-            } catch(e2) {}
+            } catch(e2) { /* ignore */ }
           }
-        } catch(e2) {}
+        } catch(e2) { /* ignore */ }
       }
     }
   } else {
@@ -206,7 +206,7 @@ async function handleBoardList(req, res) {
       try {
         const r = await readJsonFromDrive({ folderPath: ["boards", userId, categoryParam], fileName: f.name.replace(/\.json$/, "") });
         if (r?.data && !r.data.deleted) allPosts.push({ ...r.data, _category: categoryParam });
-      } catch(e) {}
+      } catch(e) { /* ignore */ }
     }
   }
 

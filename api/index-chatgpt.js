@@ -1,6 +1,6 @@
 import { getPool, sql } from "../lib/db.js";
 import {
-  getDriveRootId, getDriveRootIdSafe,
+  getDriveRootIdSafe,
   getDrive,
   findFolderByName,
   extractDriveFileText,
@@ -30,7 +30,7 @@ CREATE TABLE dbo.chatgpt_index(
 // StellaGPT 루트(=getDriveRootId)에서 folder 경로(chatgpt/chats)를 따라 폴더 id 해석
 async function resolveChatsFolderId(folderParam) {
   const parts = String(folderParam || "chatgpt/chats")
-    .split(/[\/>]/).map((s) => s.trim()).filter(Boolean);
+    .split(/[/>]/).map((s) => s.trim()).filter(Boolean);
   let parentId = await getDriveRootIdSafe();
   for (const p of parts) {
     const f = await findFolderByName(p, parentId);

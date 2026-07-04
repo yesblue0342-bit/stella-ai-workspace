@@ -35,7 +35,7 @@ async function callOpenAIOnce(messages, model) {
     if (!r.ok) throw new Error(data.error?.message || ("OpenAI API error " + r.status));
     return { message: data.choices?.[0]?.message, usage: data.usage || null };
   } catch (e) {
-    if (e.name === "AbortError") throw new Error("OpenAI 응답 시간 초과");
+    if (e.name === "AbortError") throw new Error("OpenAI 응답 시간 초과", { cause: e });
     throw e;
   } finally {
     clearTimeout(timer);

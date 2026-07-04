@@ -12,7 +12,6 @@ import { createRequire } from "node:module";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const require = createRequire(import.meta.url);
-const require_ = require; // eslint 회피용 별칭 불필요, 그대로 사용
 
 let JSDOM = null;
 try { JSDOM = require("jsdom").JSDOM; } catch (e) { /* jsdom 미설치 → skip */ }

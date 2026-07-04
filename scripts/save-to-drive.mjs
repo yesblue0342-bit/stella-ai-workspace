@@ -37,7 +37,7 @@ try {
       body: JSON.stringify({ app, title, ext, content }),
     });
     const d = await res.json();
-    if (!res.ok || !d.ok) throw new Error(d.error || ("HTTP " + res.status));
+    if (!res.ok || !d.ok) throw new Error(d.error || ("HTTP " + res.status), { cause: e1 });
     console.log(JSON.stringify({ ok: true, via: "server-api", name: d.name, fileId: d.fileId, folder: d.folder }));
   } catch (e2) {
     console.error(JSON.stringify({

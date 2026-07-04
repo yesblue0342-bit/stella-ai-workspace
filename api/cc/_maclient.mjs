@@ -44,20 +44,20 @@ let _envId = null;
 
 export async function getOrCreateEnvironment(getMeta, setMeta) {
   if (_envId) return _envId;
-  try { const m = getMeta && (await getMeta("cc_env_id")); if (m) { _envId = m; return _envId; } } catch {}
+  try { const m = getMeta && (await getMeta("cc_env_id")); if (m) { _envId = m; return _envId; } } catch { /* ignore */ }
   const env = await maFetch("/v1/environments", {
     method: "POST",
     body: { name: "stella-cc-env", config: { type: "cloud", networking: { type: "unrestricted" } } },
   });
   _envId = env.id;
-  try { setMeta && (await setMeta("cc_env_id", _envId)); } catch {}
+  try { setMeta && (await setMeta("cc_env_id", _envId)); } catch { /* ignore */ }
   return _envId;
 }
 export async function getOrCreateAgent(model, omc, vff, getMeta, setMeta) {
   const cacheKey = model + (omc ? "+omc" : "") + (vff ? "+vff" : "");
   if (_agentCache.has(cacheKey)) return _agentCache.get(cacheKey);
   const metaKey = "cc_agent_" + cacheKey;
-  try { const m = getMeta && (await getMeta(metaKey)); if (m) { _agentCache.set(cacheKey, m); return m; } } catch {}
+  try { const m = getMeta && (await getMeta(metaKey)); if (m) { _agentCache.set(cacheKey, m); return m; } } catch { /* ignore */ }
   const agent = await maFetch("/v1/agents", {
     method: "POST",
     body: {
@@ -68,7 +68,7 @@ export async function getOrCreateAgent(model, omc, vff, getMeta, setMeta) {
     },
   });
   _agentCache.set(cacheKey, agent.id);
-  try { setMeta && (await setMeta(metaKey, agent.id)); } catch {}
+  try { setMeta && (await setMeta(metaKey, agent.id)); } catch { /* ignore */ }
   return agent.id;
 }
 
