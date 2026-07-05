@@ -7,6 +7,10 @@ import {
   createWorkspace, destroyWorkspace, listDir, readFileRel, writeFileRel, deleteFileRel, commitAndPush, scrubSecret,
 } from "../../lib/codex-workspace.mjs";
 import { estimateOpenAiCostUsd } from "../../lib/openai-pricing.mjs";
+// Drive 참고자료 인식(cc의 api/cc/start.js와 동일) — 프롬프트에 Drive 링크/#폴더경로가 있으면
+// 서버가 파일 내용을 읽어 프롬프트에 포함시킨다(에이전트 샌드박스는 Drive 직접 접근 불가).
+import { buildDriveContextForChat } from "../../lib/drive-utils.js";
+import { detectDriveIntent } from "../chat.js";
 
 const CODEX_AGENT_SYSTEM =
   "You are Stella Codex, an autonomous coding agent (OpenAI-backed) working inside a cloned GitHub repository. " +
@@ -52,6 +56,15 @@ export default async function handler(req, res) {
   const mdl = String(model || "gpt-4.1-mini");
   const br = String(branch || "main").trim() || "main";
 
+  // Drive 링크/#폴더경로가 프롬프트에 있으면 파일 내용을 읽어 덧붙인다(실패해도 작업은 계속).
+  let driveNote = "";
+  if (detectDriveIntent(prompt)) {
+    try {
+      const dc = await buildDriveContextForChat({ message: prompt });
+      if (dc && dc.prompt) driveNote = dc.prompt;
+    } catch (e) { console.error("[codex/agent] Drive 컨텍스트 로드 실패(무시하고 진행):", e && e.message); }
+  }
+
   let ws = null;
   try {
     ws = await createWorkspace({ owner, repo, branch: br, token });
@@ -82,7 +95,7 @@ export default async function handler(req, res) {
   try {
     const result = await runCodexAgentLoop({
       system: CODEX_AGENT_SYSTEM,
-      prompt,
+      prompt: String(prompt) + driveNote,
       callOpenAI: (messages) => callOpenAIOnce(messages, mdl),
       runTool,
     });
