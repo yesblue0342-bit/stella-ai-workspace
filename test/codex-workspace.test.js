@@ -5,7 +5,7 @@ import assert from "node:assert/strict";
 import { mkdtemp, rm, mkdir, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { safeRelPath, listDir, readFileRel, writeFileRel, deleteFileRel } from "../lib/codex-workspace.mjs";
+import { safeRelPath, listDir, readFileRel, writeFileRel, deleteFileRel, scrubSecret, git } from "../lib/codex-workspace.mjs";
 
 async function makeFakeRepo() {
   const base = await mkdtemp(join(tmpdir(), "codex-ws-test-"));
@@ -86,4 +86,43 @@ test("readFileRel: 존재하지 않는 파일은 404 status", async () => {
   try {
     await assert.rejects(readFileRel(ws, "nope.txt"), (e) => e.status === 404);
   } finally { await rm(ws.base, { recursive: true, force: true }); }
+});
+
+// ── 보안 회귀 테스트: git 인증 헤더(토큰의 base64)가 에러 메시지로 절대 노출되지 않아야 한다 ──
+// (실사고 재현: /codex 레포 clone 실패 시 "AUTHORIZATION: basic <base64 토큰>"이 사용자 화면에 그대로 노출됐던 사고)
+test("scrubSecret: AUTHORIZATION 헤더(base64 토큰)를 마스킹한다", () => {
+  const token = "ghp_SUPERSECRETTOKEN1234567890abcdef";
+  const b64 = Buffer.from("x-access-token:" + token).toString("base64");
+  const raw = `Command failed: git -c http.extraheader=AUTHORIZATION: basic ${b64} clone --depth 1 https://github.com/o/r.git /tmp/x`;
+  const scrubbed = scrubSecret(raw);
+  assert.ok(!scrubbed.includes(b64), "토큰의 base64 인코딩이 남아있으면 안 됨");
+  assert.ok(!scrubbed.includes(token), "토큰 원문이 남아있으면 안 됨");
+  assert.match(scrubbed, /AUTHORIZATION: basic \*\*\*/);
+});
+
+test("scrubSecret: null/undefined/빈 문자열은 안전하게 빈 문자열로", () => {
+  assert.equal(scrubSecret(null), "");
+  assert.equal(scrubSecret(undefined), "");
+  assert.equal(scrubSecret(""), "");
+});
+
+test("git(): 실패해도 토큰(및 base64 인코딩)이 에러 메시지에 절대 포함되지 않는다 — 네트워크 없이 즉시 실패하는 잘못된 옵션으로 재현", async () => {
+  const token = "ghp_SUPERSECRETTOKEN1234567890abcdef";
+  const b64 = Buffer.from("x-access-token:" + token).toString("base64");
+  // "--this-option-does-not-exist"는 git이 네트워크를 타기 전에 즉시 인자 파싱 오류로 실패한다
+  // (오프라인·결정적 재현 — 그래도 -c http.extraheader=...는 실제 invoke된 argv에 포함됨).
+  await assert.rejects(
+    git(process.cwd(), token, ["--this-option-does-not-exist"]),
+    (e) => {
+      assert.ok(!e.message.includes(token), "토큰 원문 노출 금지: " + e.message);
+      assert.ok(!e.message.includes(b64), "토큰 base64 노출 금지: " + e.message);
+      assert.ok(!/AUTHORIZATION:\s*basic\s+[A-Za-z0-9+/=]{10,}/i.test(e.message), "인증 헤더 값 자체가 노출되면 안 됨: " + e.message);
+      return true;
+    }
+  );
+});
+
+test("git(): 토큰 없이 호출해도 정상 동작(옵트인 인증 — 회귀 없음)", async () => {
+  const out = await git(process.cwd(), null, ["--version"]);
+  assert.match(out, /git version/);
 });

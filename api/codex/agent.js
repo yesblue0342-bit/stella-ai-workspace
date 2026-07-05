@@ -4,7 +4,7 @@
 // git/파일 조작을 수행한다 — 그래서 임의 bash 는 제공하지 않는다(다른 Stella 앱과 같은 프로덕션 컨테이너 보호).
 import { CODEX_TOOLS, runCodexAgentLoop } from "../../lib/codex-agent.mjs";
 import {
-  createWorkspace, destroyWorkspace, listDir, readFileRel, writeFileRel, deleteFileRel, commitAndPush,
+  createWorkspace, destroyWorkspace, listDir, readFileRel, writeFileRel, deleteFileRel, commitAndPush, scrubSecret,
 } from "../../lib/codex-workspace.mjs";
 import { estimateOpenAiCostUsd } from "../../lib/openai-pricing.mjs";
 
@@ -56,10 +56,12 @@ export default async function handler(req, res) {
   try {
     ws = await createWorkspace({ owner, repo, branch: br, token });
   } catch (e) {
-    const raw = String((e && e.message) || e);
+    // 방어적 재마스킹(2중 안전장치) — lib/codex-workspace.mjs의 git()이 이미 마스킹된 에러를 던지지만,
+    // 이 경계를 넘어가는 마지막 지점에서도 토큰/인증 헤더가 응답에 노출되지 않도록 한 번 더 스크럽한다.
+    const raw = scrubSecret(String((e && e.message) || e));
     const msg = !token
-      ? "레포 clone 실패 — 서버 GITHUB_TOKEN 미설정(비공개 레포는 토큰 필요): " + raw.slice(0, 200)
-      : "레포 clone 실패: " + raw.slice(0, 200);
+      ? "레포 clone 실패 — 서버 GITHUB_TOKEN 미설정(비공개 레포는 토큰 필요): " + raw.slice(0, 300)
+      : "레포 clone 실패: " + raw.slice(0, 300);
     return res.status(502).json({ ok: false, message: msg });
   }
 
