@@ -2,6 +2,10 @@
 import { isValidModel, DEFAULT_MODEL, buildRepoPreamble } from "../../lib/agentcore.mjs";
 import * as MA from "./_maclient.mjs";
 import { getMeta, setMeta, saveSession } from "../../lib/cc-db.mjs";
+// Drive 참고자료 인식: Managed Agents 원격 샌드박스는 사용자의 로컬 PC/Drive에 직접 접근할 수 없으므로,
+// 프롬프트에 Drive 링크·#폴더경로가 있으면 서버(Stella GPT와 동일 로직)가 대신 읽어 프롬프트에 포함시킨다.
+import { buildDriveContextForChat } from "../../lib/drive-utils.js";
+import { detectDriveIntent } from "../chat.js";
 
 const REPO_MOUNT_PATH = "/workspace/repo";
 function ghToken() {
@@ -49,7 +53,14 @@ export default async function handler(req, res) {
     const preamble = repoMounted
       ? buildRepoPreamble({ owner: parsed.owner, repo: parsed.name, branch: repoBranch, mountPath: REPO_MOUNT_PATH })
       : "";
-    await MA.sendUserMessage(sessionId, preamble + String(prompt), attachments);
+    let driveNote = "";
+    if (detectDriveIntent(prompt)) {
+      try {
+        const dc = await buildDriveContextForChat({ message: prompt });
+        if (dc && dc.prompt) driveNote = dc.prompt;
+      } catch (e) { console.error("[cc/start] Drive 컨텍스트 로드 실패(무시하고 진행):", e && e.message); }
+    }
+    await MA.sendUserMessage(sessionId, preamble + String(prompt) + driveNote, attachments);
 
     // 레포를 원했는데 못 붙은 경우, 이유를 명확히 반환(토큰 미설정/권한/미존재/미지원). 조용한 저하 방지.
     const repoMountError = repoMounted ? null

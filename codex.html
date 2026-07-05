@@ -156,7 +156,6 @@ body:not(.dark) .app-ico{filter:grayscale(1) brightness(0)!important}
 <script type="module">
 const $ = (id) => document.getElementById(id);
 const MODEL_KEY = 'stella_codex_model';
-const CHATS_KEY = 'stella_codex_chats';
 const DEFAULT_MODEL = 'gpt-4.1-mini';
 // Stella Codex = OpenAI(ChatGPT) 전용 코딩 어시스턴트. 모델 목록은 OpenAI 계열만, 기본 gpt-4.1-mini.
 const OPENAI_MODELS = [
@@ -359,24 +358,23 @@ function setUIBusy(b){
   $('model').disabled = b;
 }
 
-// ── 대화 저장/목록 (localStorage) ──
-function loadChatStore(){ try{ return JSON.parse(localStorage.getItem(CHATS_KEY)||'[]'); }catch(e){ return []; } }
-function saveChatStore(arr){ try{ localStorage.setItem(CHATS_KEY, JSON.stringify(arr.slice(0,40))); }catch(e){} }
-function persistCurrent(){
+// ── 대화 저장/목록 (서버 DB, cc의 /api/cc/sessions와 동일 패턴 — 기기·브라우저 상관없이 동일 이력) ──
+async function persistCurrent(){
   if(!chat.messages.length) return;
-  const arr=loadChatStore();
   if(!chat.id) chat.id='c'+Date.now();
   if(!chat.title || chat.title==='새 대화'){ const first=chat.messages.find(m=>m.role==='user'); chat.title=(first?first.content:'대화').replace(/\s+/g,' ').trim().slice(0,40)||'대화'; }
-  const idx=arr.findIndex(c=>c.id===chat.id);
-  const rec={ id:chat.id, title:chat.title, model:chat.model, messages:chat.messages, ts:Date.now() };
-  if(idx>=0) arr[idx]=rec; else arr.unshift(rec);
-  arr.sort((a,b)=>(b.ts||0)-(a.ts||0));
-  saveChatStore(arr); renderChatList();
+  try{
+    await fetch('/api/codex/chat',{method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({ id:chat.id, title:chat.title, model:chat.model, messages:chat.messages })});
+  }catch(e){ /* graceful: 서버 저장 실패해도 현재 화면의 대화는 계속 사용 가능 */ }
+  renderChatList();
 }
-function renderChatList(){
-  const host=$('sessionList'); const arr=loadChatStore();
-  if(!arr.length){ host.innerHTML='<div class="lbl" style="padding:8px">대화 없음</div>'; return; }
-  host.innerHTML=arr.map(c=>`<div class="sitem" data-id="${esc(c.id)}"><div class="t">${esc(c.title||'대화')}</div><div class="m">${esc(c.model||'')}</div></div>`).join('');
+async function renderChatList(){
+  const host=$('sessionList');
+  let items=[];
+  try{ const r=await fetch('/api/codex/chats'); const d=await r.json(); items=(d&&d.items)||[]; }catch(e){}
+  if(!items.length){ host.innerHTML='<div class="lbl" style="padding:8px">대화 없음</div>'; return; }
+  host.innerHTML=items.map(c=>`<div class="sitem" data-id="${esc(c.id)}"><div class="t">${esc(c.title||'대화')}</div><div class="m">${esc(c.model||'')}</div></div>`).join('');
   host.querySelectorAll('.sitem').forEach(el=>el.addEventListener('click',()=>selectChat(el.dataset.id)));
   filterSessionList(); // 검색어가 입력된 채로 목록이 다시 그려져도 필터 유지
 }
@@ -395,8 +393,10 @@ function renderAllMessages(){
     else addAssistantBubble(msg.content);
   }
 }
-function selectChat(id){
-  const arr=loadChatStore(); const c=arr.find(x=>x.id===id); if(!c) return;
+async function selectChat(id){
+  let c=null;
+  try{ const r=await fetch('/api/codex/chat?id='+encodeURIComponent(id)); const d=await r.json(); if(d&&d.ok&&d.chat) c=d.chat; }catch(e){}
+  if(!c){ setStatus('<span class="err">대화를 불러오지 못했습니다</span>'); return; }
   chat={ id:c.id, title:c.title, model:c.model||DEFAULT_MODEL, messages:(c.messages||[]).slice() };
   const sel=$('model'); if(OPENAI_MODELS.some(m=>m.id===chat.model)) sel.value=chat.model;
   renderAllMessages(); setStatus('');
