@@ -7,6 +7,10 @@ import {
   createWorkspace, destroyWorkspace, listDir, readFileRel, writeFileRel, deleteFileRel, commitAndPush, scrubSecret,
 } from "../../lib/codex-workspace.mjs";
 import { estimateOpenAiCostUsd } from "../../lib/openai-pricing.mjs";
+// OpenAI Rate Limit(429/TPM) 방어: 재시도(backoff+jitter) + mini 다운그레이드 폴백.
+import {
+  withRateLimitRetry, isRateLimitError, downgradeModel, isDowngradable, friendlyRateLimitMessage,
+} from "../../lib/openai-tpm.mjs";
 // Drive 참고자료 인식(cc의 api/cc/start.js와 동일) — 프롬프트에 Drive 링크/#폴더경로가 있으면
 // 서버가 파일 내용을 읽어 프롬프트에 포함시킨다(에이전트 샌드박스는 Drive 직접 접근 불가).
 import { buildDriveContextForChat } from "../../lib/drive-utils.js";
@@ -27,22 +31,39 @@ function ghToken() {
 async function callOpenAIOnce(messages, model) {
   const apiKey = process.env.OPENAI_API_KEY;
   if (!apiKey) { const e = new Error("OPENAI_API_KEY not configured"); e.status = 500; throw e; }
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), 60000);
+  const sleep = (ms) => new Promise((res) => setTimeout(res, Math.max(0, ms)));
+  const fetchOnce = async (mdl) => {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 60000);
+    try {
+      const r = await fetch("https://api.openai.com/v1/chat/completions", {
+        method: "POST", signal: controller.signal,
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${apiKey}` },
+        body: JSON.stringify({ model: mdl, temperature: 0.1, messages, tools: CODEX_TOOLS, tool_choice: "auto" }),
+      });
+      const data = await r.json().catch(() => ({}));
+      if (!r.ok) {
+        const e = new Error(data?.error?.message || ("OpenAI API error " + r.status));
+        e.status = r.status; e.headers = r.headers; // Retry-After 파싱용
+        throw e;
+      }
+      return { message: data.choices?.[0]?.message, usage: data.usage || null };
+    } catch (e) {
+      if (e.name === "AbortError") throw new Error("OpenAI 응답 시간 초과");
+      throw e;
+    } finally {
+      clearTimeout(timer);
+    }
+  };
   try {
-    const r = await fetch("https://api.openai.com/v1/chat/completions", {
-      method: "POST", signal: controller.signal,
-      headers: { "Content-Type": "application/json", Authorization: `Bearer ${apiKey}` },
-      body: JSON.stringify({ model, temperature: 0.1, messages, tools: CODEX_TOOLS, tool_choice: "auto" }),
-    });
-    const data = await r.json();
-    if (!r.ok) throw new Error(data.error?.message || ("OpenAI API error " + r.status));
-    return { message: data.choices?.[0]?.message, usage: data.usage || null };
+    // 429/TPM → backoff+jitter 재시도. 2회 이상 반복되면 TPM 한도가 넉넉한 mini로 다운그레이드(자가 치유).
+    return await withRateLimitRetry(
+      (attempt) => fetchOnce((attempt >= 2 && isDowngradable(model)) ? downgradeModel(model) : model),
+      { maxRetries: 6, capMs: 60000, baseMs: 1000, sleep }
+    );
   } catch (e) {
-    if (e.name === "AbortError") throw new Error("OpenAI 응답 시간 초과");
+    if (isRateLimitError(e)) throw new Error(friendlyRateLimitMessage(e)); // raw 429 미노출
     throw e;
-  } finally {
-    clearTimeout(timer);
   }
 }
 

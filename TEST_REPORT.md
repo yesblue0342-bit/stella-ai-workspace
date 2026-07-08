@@ -1,3 +1,59 @@
+# TEST_REPORT — Stella Codex OpenAI Rate Limit(429/TPM) 대응 (2026-07-08)
+
+## 개요
+Stella Codex/ABAP의 대용량 ABAP 소스 분석 시 발생하던 OpenAI 429(TPM 초과)를 코드 레벨에서
+방어. 기존 GPT/Claude 라우팅은 그대로 두고 방어 로직만 얹음(회귀 없음).
+
+## 변경 파일
+| 파일 | 내용 |
+|---|---|
+| `lib/openai-tpm.mjs` (신규) | 429 판별, Retry-After/backoff 계산, 재시도 래퍼, 토큰 사전추정, 롤링 TPM 예산 트래커(`TpmBudget`), `safeMaxTokens`, `shouldChunk`, 모델 다운그레이드, 친화 에러 메시지 |
+| `lib/abap-chunk.mjs` (신규) | ABAP 구조 경계(FORM/METHOD/CLASS/…) 분할(`chunkAbapSource`, 전체 라인 커버리지 보장), ABAP 판별(`looksLikeAbap`), 이슈 추출/중복제거/종합(`mergeAbapAnalyses`) |
+| `api/chat.js` | `callOpenAI`에 재시도+롤링예산+선제대기+mini폴백+max_tokens(예산 빡빡할 때만) 적용. 비-라우팅 OpenAI 경로에 대용량 ABAP 청킹 분기(게이트: 안전마진 초과 & ABAP 코드성 & Drive Q&A 아님). raw 429 미노출. |
+| `api/codex/agent.js` | `callOpenAIOnce`에 429 backoff 재시도 + 2회 반복 시 mini 다운그레이드 + 친화 에러 |
+| `test/openai-tpm.test.js` (신규) | 유틸 단위 테스트 14케이스 |
+| `test/abap-chunk.test.js` (신규) | 청킹/종합 단위 테스트 9케이스(라인 커버리지 검증 포함) |
+| `test/openai-429-scenario.test.js` (신규) | 과제 스샷 429 재현 end-to-end 4시나리오 |
+
+## 설계 요지 (과제 작업 1–8 대응)
+1. **호출 지점**: ABAP 분석 = `abap.html`/`codex.html` → `/api/chat` → `callOpenAI`. Codex 레포 자동화 = `/api/codex/agent` → `callOpenAIOnce`. gpt-4.1/mini 라우팅은 `resolveOpenAIModel`.
+2. **429 재시도**: `Retry-After` 헤더 → 메시지의 `try again in Xs` 파싱 → `2^attempt+jitter`. 최대 6회, 상한 60초. 실패요청도 한도 카운트되므로 반드시 대기 후 재시도(tight loop 금지).
+3. **토큰 사전추정 + max_tokens**: `estimateMessagesTokens`(char/4, 한글 보정)로 입력 추정. 예산 여유가 8192 미만일 때만 `max_tokens`를 조여 TPM(입력+출력) 초과 회피(여유 충분 시 미지정 → 기존 긴 출력 보존). 잘리면 이어쓰기 안내.
+4. **청킹**: 안전마진(TPM 60%) 초과 & ABAP 코드로 판별될 때만 `FORM/METHOD/CLASS…` 경계로 분할, 청크별 분석 후 `mergeAbapAnalyses`로 종합(중복 이슈 제거). 라인 커버리지 100% 보장.
+5. **롤링 TPM 예산**: `TpmBudget`가 최근 60초 소비 토큰을 타임스탬프 큐로 추적, 초과 예상 시 오래된 토큰이 빠질 때까지 선제 대기(429 발생 전 회피). 프로세스 전역(조직 TPM과 정합).
+6. **모델 폴백**: 429 2회 반복/초대형 입력 시 gpt-4.1→gpt-4.1-mini 자동 하향. 기존 라우팅 위에 폴백만 추가.
+7. **프롬프트 캐싱**: system 프롬프트를 항상 messages[0]에 고정 유지 → OpenAI 자동 prompt caching 히트율↑.
+8. **UX**: raw 429 노출 금지(친화 한국어 메시지로 치환). 청킹 시 답변에 "N개 청크로 나누어 분석" 헤더 표시.
+
+## 테스트 시나리오 & 결과
+| 시나리오 | 검증 | 결과 |
+|---|---|---|
+| 정상(소형) | 예산 여유 시 max_tokens 미지정·기존 경로 동작 | 회귀 없음(전체 스위트 동일) |
+| 429 단발 | 스샷 메시지 `try again in 4.232s` → 4232ms 대기 후 재시도 성공 | PASS (scenario A) |
+| 429 반복 | 2회 반복 → gpt-4.1→gpt-4.1-mini 폴백 후 성공 | PASS (scenario B) |
+| 롤링 윈도우 | Used 15658 + Requested 16458 > 30000 → 선제 대기(59s) | PASS (scenario C) |
+| 최종 실패 | 재시도 소진 시 rate-limit 에러 유지(호출부가 친화 메시지 치환) | PASS (scenario D) |
+| 대용량 청킹 | 다중 FORM 소스 분할 시 `join===원본`(누락 0), 경계 없는 블록도 hardMax 분할 | PASS (abap-chunk) |
+| 종합/중복제거 | 청크 경계 중복 이슈는 종합에서 1회만 | PASS (abap-chunk) |
+| ABAP 게이트 | 일반 문서(대용량)는 청킹 안 함(회귀 방지) | PASS (looksLikeAbap) |
+
+## 자동 회귀 (`npm test`, 이 샌드박스)
+- 신규 테스트 **27/27 PASS** (openai-tpm 14 + abap-chunk 9 + scenario 4).
+- 전체: 259 tests / **218 pass** / 25 fail / 16 skip.
+  - ※ 25 fail는 **이 샌드박스에 npm 의존성(googleapis·mssql 등) 미설치**로 인한 import 실패(기존과 동일).
+    변경 전(baseline) 동일하게 25 fail — **내 변경으로 늘어난 실패 0건**(baseline 191 pass → 218 pass, fail 25 불변).
+  - 배포/CI 환경(의존성 설치됨)에서는 기존 291 그린 + 신규 27 = 통과 예상.
+- 서버측 문법 `node --check`: `lib/openai-tpm.mjs`, `lib/abap-chunk.mjs`, `api/chat.js`, `api/codex/agent.js` 전부 OK.
+
+## 수용 기준 대응
+- [x] 30k 초과 ABAP 소스 → 청킹으로 누락 없이 분석(라인 커버리지 테스트로 보장).
+- [x] 429 발생 시 자동 재시도 후 성공, 사용자 개입 불필요(scenario A/C).
+- [x] 청킹 결과 이슈 누락 없음 + 중복 제거(abap-chunk 테스트).
+- [x] gpt-4.1 실패 시 mini 폴백(scenario B, codex agent 동일).
+- [x] 기존 GPT/Claude 라우팅·기타 기능 회귀 없음(전체 스위트 실패 증가 0).
+
+---
+
 # TEST_REPORT — Stella GPT Autopilot (최신: 2026-07-04)
 
 ## 최신 상태 (2026-07-04 — 크로스플랫폼 테스트 안정화)

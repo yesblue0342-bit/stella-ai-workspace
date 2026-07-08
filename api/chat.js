@@ -9,6 +9,22 @@ import { visionImageBlock, ensureVisionModel, parseDataUrl } from "../lib/vision
 import { getAuthUser } from "../lib/session.js";
 // Stella Codex 비용 표시 전용(bare+wantUsage) — 그 외 호출부는 미사용.
 import { estimateOpenAiCostUsd } from "../lib/openai-pricing.mjs";
+// OpenAI Rate Limit(429/TPM) 방어: 재시도·롤링 예산·토큰추정·모델 다운그레이드(순수 유틸).
+import {
+  estimateTokens, estimateMessagesTokens, isRateLimitError, withRateLimitRetry,
+  TpmBudget, safeMaxTokens, shouldChunk, downgradeModel, isDowngradable,
+  friendlyRateLimitMessage,
+} from "../lib/openai-tpm.mjs";
+// 대용량 ABAP 소스 청킹/종합(전체 라인 커버리지 + 중복 제거).
+import { chunkAbapSource, mergeAbapAnalyses, looksLikeAbap } from "../lib/abap-chunk.mjs";
+
+// ───────── OpenAI TPM 설정 (조직 한도; 티어 상승 시 env로 상향) ─────────
+// Tier 1 gpt-4.1 TPM = 30,000. 배포 환경변수로 재정의 가능(코드 방어는 티어와 무관하게 유지).
+const OPENAI_TPM_LIMIT = Math.max(4000, Number(process.env.OPENAI_TPM_LIMIT) || 30000);
+const OPENAI_MAX_RETRIES = Math.max(1, Number(process.env.OPENAI_MAX_RETRIES) || 6);
+// gpt-4.1은 mini보다 TPM 한도가 낮다 → 롤링 예산은 gpt-4.1 기준으로 잡는다(가장 빡빡한 경계).
+const tpmBudget = new TpmBudget({ limit: OPENAI_TPM_LIMIT, windowMs: 60000, safety: 0.85 });
+const sleep = (ms) => new Promise((r) => setTimeout(r, Math.max(0, ms)));
 
 // OpenAI Responses API + web_search 호출 (실시간 질문). 응답 contract(text)는 호출부에서 유지.
 async function callResponses({ model, system, history, message, images = [], search = false }) {
@@ -638,12 +654,25 @@ export default async function handler(req, res) {
     } else {
       provider = "openai";
       const wantUsage = !!body.bare && !!body.wantUsage; // Stella Codex 비용 표시 전용 — 그 외 호출부는 기존 문자열 반환 그대로
-      const openaiResult = await callOpenAI({ model, system: prompt, history, message: aiMessage, images, bare: !!body.bare, returnUsage: wantUsage });
-      if (wantUsage && openaiResult && typeof openaiResult === "object") {
-        answer = openaiResult.text;
-        usageInfo = { usage: openaiResult.usage, model: openaiResult.model };
+      // ── 대용량 ABAP 청킹 게이트: (1) 입력이 안전마진(TPM 60%) 초과 & (2) ABAP 코드성 텍스트 & (3) Drive 문서 Q&A 아님.
+      //     일반 문서 Q&A를 조각내면 답이 깨지므로 게이트를 좁게 잡는다(회귀 방지).
+      const estIn = estimateTokens(prompt) + estimateTokens(aiMessage)
+        + (Array.isArray(history) ? history.reduce((a, m) => a + estimateTokens(m && m.content), 0) : 0);
+      const useChunking = !needsDrive && shouldChunk(estIn, { limit: OPENAI_TPM_LIMIT }) && looksLikeAbap(aiMessage);
+      if (useChunking) {
+        const chunked = await analyzeAbapInChunks({ model, system: prompt, question: message, payload: aiMessage, images });
+        answer = chunked.text;
+        provider = "openai-chunked";
+        timings.abapChunks = chunked.chunks;
+        if (wantUsage) usageInfo = { usage: chunked.usage, model: chunked.model || model };
       } else {
-        answer = openaiResult;
+        const openaiResult = await callOpenAI({ model, system: prompt, history, message: aiMessage, images, bare: !!body.bare, returnUsage: wantUsage });
+        if (wantUsage && openaiResult && typeof openaiResult === "object") {
+          answer = openaiResult.text;
+          usageInfo = { usage: openaiResult.usage, model: openaiResult.model };
+        } else {
+          answer = openaiResult;
+        }
       }
     }
     timings.modelMs = Date.now() - _modelStart;
@@ -955,7 +984,7 @@ function resolveClaudeModel(model) {
   return "claude-sonnet-4-6";
 }
 
-async function callOpenAI({ model, system, history, message, images = [], bare = false, returnUsage = false }) {
+async function callOpenAI({ model, system, history, message, images = [], bare = false, returnUsage = false, onRetry = null }) {
   const apiKey = process.env.OPENAI_API_KEY;
   if (!apiKey) throw new Error("OPENAI_API_KEY not configured");
   const imgs = (Array.isArray(images) ? images : []).filter(u => u && String(u).startsWith("data:"));
@@ -963,28 +992,112 @@ async function callOpenAI({ model, system, history, message, images = [], bare =
   const selectedModel = ensureVisionModel(resolveOpenAIModel(model), imgs.length > 0, "openai");
   // bare=true(예: Stella Codex 코딩 어시스턴트)는 "[표+요약]" 강제 형식 프리픽스를 생략
   const pfx = bare ? "" : "[표+요약 형식으로 답변] ";
-  const response = await fetch("https://api.openai.com/v1/chat/completions", {
-    method: "POST",
-    headers: { "Content-Type": "application/json", Authorization: `Bearer ${apiKey}` },
-    body: JSON.stringify({
-      model: selectedModel,
-      temperature: 0.1,
-      messages: [
-        { role: "system", content: system },
-        ...history.slice(-12).map(m => ({ role: m.role === "assistant" ? "assistant" : "user", content: String(m.content || "") })),
-        { role: "user", content: imgs.length > 0
-          ? [{ type:"text", text:pfx+String(message||"") },
-             ...imgs.map(u=>{ const { base64, mediaType } = parseDataUrl(u); const b = visionImageBlock({ api:"chat", base64, mediaType }); b.image_url.detail = "auto"; return b; })]
-          : pfx+String(message||"") }
-      ]
-    })
-  });
-  const data = await response.json();
-  if (!response.ok) throw new Error(data.error?.message || "OpenAI API error");
-  const text = data.choices?.[0]?.message?.content || "응답 없음";
+  // ★ 정적 system 프롬프트를 항상 messages[0]에 고정 → OpenAI 자동 prompt caching 히트율 ↑(반복 토큰 절감).
+  const messages = [
+    { role: "system", content: system },
+    ...history.slice(-12).map(m => ({ role: m.role === "assistant" ? "assistant" : "user", content: String(m.content || "") })),
+    { role: "user", content: imgs.length > 0
+      ? [{ type:"text", text:pfx+String(message||"") },
+         ...imgs.map(u=>{ const { base64, mediaType } = parseDataUrl(u); const b = visionImageBlock({ api:"chat", base64, mediaType }); b.image_url.detail = "auto"; return b; })]
+      : pfx+String(message||"") }
+  ];
+
+  // 입력 토큰 사전 추정. TPM은 입력+출력 합산 과금이므로, 예산이 빡빡할 때만 max_tokens(출력)를 조인다.
+  // 예산에 여유가 충분하면 max_tokens를 붙이지 않아 기존 동작(긴 출력 완결)을 그대로 보존한다(회귀 방지).
+  const estIn = estimateMessagesTokens(messages);
+  const budgetRoom = tpmBudget.cap() - estIn;             // 안전예산에서 입력 뺀 출력 여유
+  const CONSTRAIN_BELOW = 8192;                            // 여유가 이 미만일 때만 출력 상한 적용
+  const maxTokens = budgetRoom < CONSTRAIN_BELOW
+    ? safeMaxTokens(estIn, { limit: OPENAI_TPM_LIMIT, safety: 0.85, desired: 4096, floor: 512 })
+    : null;                                                // null = max_tokens 미지정(기존 동작)
+  const outBudget = maxTokens || 4096;                     // 롤링 예산 예측용 출력 근사
+  // 입력만으로 gpt-4.1 예산에 근접하면 처음부터 mini로 시작(mini는 TPM 한도가 훨씬 넉넉).
+  const startTooBig = shouldChunk(estIn, { limit: OPENAI_TPM_LIMIT }) && isDowngradable(selectedModel);
+
+  let usedModel = selectedModel;
+  const doCall = async (attempt) => {
+    // 429가 2회 이상 반복되거나, 애초에 입력이 큰 경우 → mini로 다운그레이드(내용 보존, 자가 치유).
+    usedModel = ((attempt >= 2 || startTooBig) && isDowngradable(selectedModel))
+      ? downgradeModel(selectedModel) : selectedModel;
+    // 롤링 TPM 예산: 최근 60초 누적이 한도에 가까우면 오래된 토큰이 빠질 때까지 선제 대기(429 발생 전 회피).
+    const waitMs = Math.min(30000, tpmBudget.waitMsFor(estIn + outBudget));
+    if (waitMs > 0) await sleep(waitMs);
+
+    const reqBody = { model: usedModel, temperature: 0.1, messages };
+    if (maxTokens != null) reqBody.max_tokens = maxTokens;
+    const response = await fetch("https://api.openai.com/v1/chat/completions", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Authorization: `Bearer ${apiKey}` },
+      body: JSON.stringify(reqBody)
+    });
+    const data = await response.json().catch(() => ({}));
+    if (!response.ok) {
+      const e = new Error(data?.error?.message || `OpenAI API error ${response.status}`);
+      e.status = response.status;
+      e.headers = response.headers; // Retry-After 파싱용
+      throw e;
+    }
+    // 실제 소비 토큰을 롤링 예산에 기록(다음 요청 throttle 정확도 ↑). usage 없으면 추정치로.
+    tpmBudget.record((data.usage && data.usage.total_tokens) || (estIn + outBudget));
+    let text = data.choices?.[0]?.message?.content || "응답 없음";
+    // max_tokens로 잘린 경우(예산이 빡빡해 출력 상한을 건 상황)엔 완결처럼 반환하지 않고 이어쓰기 안내.
+    if (maxTokens != null && data.choices?.[0]?.finish_reason === "length") {
+      text += "\n\n⚠️ 답변이 길이 제한으로 잘렸습니다. \"이어서 계속\"이라고 입력하면 이어서 작성합니다.";
+    }
+    return { text, usage: data.usage || null, model: usedModel };
+  };
+
+  let result;
+  try {
+    result = await withRateLimitRetry(doCall, {
+      maxRetries: OPENAI_MAX_RETRIES, capMs: 60000, baseMs: 1000, sleep,
+      onRetry: (info) => { try { onRetry && onRetry(info); } catch (_) {} },
+    });
+  } catch (e) {
+    // raw 429는 사용자에게 노출하지 않는다 — 친화 메시지로 치환(핸들러 catch가 그대로 전달).
+    if (isRateLimitError(e)) throw new Error(friendlyRateLimitMessage(e));
+    throw e;
+  }
   // returnUsage=true(Stella Codex 비용 표시용)일 때만 객체 반환 — 다른 호출부는 기존 문자열 반환 그대로(회귀 없음).
-  if (returnUsage) return { text, usage: data.usage || null, model: selectedModel };
-  return text;
+  if (returnUsage) return { text: result.text, usage: result.usage, model: result.model };
+  return result.text;
+}
+
+// 대용량 ABAP 소스를 청크로 나누어 각 청크를 분석하고 결과를 종합한다(전체 라인 커버리지 + 429 방어).
+// question: 사용자 질문(짧음), payload: 분석 대상 전체 텍스트(질문+소스 결합). 각 청크 호출은
+// callOpenAI 내부의 재시도·롤링예산·mini 폴백을 그대로 활용한다. images는 첫 청크에만 붙인다.
+async function analyzeAbapInChunks({ model, system, question, payload, images = [], onProgress = null }) {
+  // 청크 입력 목표: 안전예산의 ~40%. 토큰→문자 근사(×3, 보수적) → 출력 여유 확보 + 롤링 윈도우 안전.
+  const maxChars = Math.max(6000, Math.round(OPENAI_TPM_LIMIT * 0.40 * 3));
+  const chunks = chunkAbapSource(payload, { maxChars });
+  if (chunks.length <= 1) {
+    const r = await callOpenAI({ model, system, history: [], message: payload, images, bare: true, returnUsage: true });
+    return { text: r.text, chunks: 1, usage: r.usage, model: r.model };
+  }
+  const results = [];
+  const usage = { prompt_tokens: 0, completion_tokens: 0, total_tokens: 0 };
+  let usedModel = model;
+  for (const ch of chunks) {
+    if (onProgress) { try { onProgress(ch.index + 1, chunks.length); } catch (_) {} }
+    const chunkMsg =
+      `[사용자 질문]\n${question || "이 ABAP 소스의 오류/경고/개선점을 분석하세요."}\n\n` +
+      `[분석 대상 — 청크 ${ch.index + 1}/${chunks.length}, 라인 ${ch.startLine}–${ch.endLine}]\n` +
+      "아래는 대용량 ABAP 소스의 일부입니다. 이 청크에 해당하는 부분만 분석해 " +
+      "오류·경고·성능/개선점을 항목별(- 불릿)로 제시하세요. 다른 청크는 별도로 분석됩니다.\n\n" +
+      "```abap\n" + ch.text + "\n```";
+    const r = await callOpenAI({
+      model, system, history: [], message: chunkMsg,
+      images: ch.index === 0 ? images : [], bare: true, returnUsage: true,
+    });
+    usedModel = r.model || usedModel;
+    results.push({ index: ch.index, total: chunks.length, startLine: ch.startLine, endLine: ch.endLine, text: r.text });
+    if (r.usage) {
+      usage.prompt_tokens += r.usage.prompt_tokens || 0;
+      usage.completion_tokens += r.usage.completion_tokens || 0;
+      usage.total_tokens += r.usage.total_tokens || 0;
+    }
+  }
+  return { text: mergeAbapAnalyses(results), chunks: chunks.length, usage, model: usedModel };
 }
 
 async function callClaude({ model, system, history, message, images = [] }) {
