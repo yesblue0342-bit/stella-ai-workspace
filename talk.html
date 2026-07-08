@@ -265,7 +265,7 @@ body.theme-dark .theme-btn.active{background:#1e3a5f}
           <textarea class="chat-input" id="chatInput" placeholder="메시지 입력" rows="1"
             onkeydown="if(event.key==='Enter'&&!event.shiftKey&&!event.isComposing&&event.keyCode!==229){event.preventDefault();sendMsg()}"
             oninput="this.style.height='auto';this.style.height=Math.min(this.scrollHeight,120)+'px';notifyTyping()"></textarea>
-          <button class="send-btn" onclick="sendMsg()">↑</button>
+          <button class="send-btn" id="sendBtn" onclick="sendMsg()">↑</button>
         </div>
       </div>
     </div>
@@ -605,12 +605,21 @@ function renderFriends(){
   var box=document.getElementById('friendsList'); if(!box) return;
   var list=StellaFriends.visibleFriends(loadFriends());
   if(!list.length){ box.innerHTML='<div style="color:var(--text2);font-size:.82rem;padding:8px 2px">아직 친구가 없습니다. 위에서 아이디로 검색해 추가하세요.</div>'; return; }
-  box.innerHTML=list.map(function(f){
-    var av=f.avatar?('<img src="'+esc(f.avatar)+'" style="width:34px;height:34px;border-radius:50%;object-fit:cover">'):('<div style="width:34px;height:34px;border-radius:50%;background:var(--bg3);display:flex;align-items:center;justify-content:center">👤</div>');
-    return '<div style="display:flex;align-items:center;gap:10px;padding:6px 4px">'+av+
-      '<div style="flex:1;min-width:0"><div style="font-weight:600;font-size:.9rem">'+esc(f.name)+'</div><div style="font-size:.74rem;color:var(--text2)">'+esc(f.id)+'</div></div>'+
-      '<button class="hbtn" onclick="removeFriendUI(\''+esc(f.id)+'\')">삭제</button></div>';
-  }).join('');
+  box.innerHTML='';
+  list.forEach(function(f){
+    var row=document.createElement('div'); row.style.cssText='display:flex;align-items:center;gap:10px;padding:6px 4px';
+    var av;
+    if(f.avatar){ av=document.createElement('img'); av.src=f.avatar; av.style.cssText='width:34px;height:34px;border-radius:50%;object-fit:cover'; }
+    else { av=document.createElement('div'); av.style.cssText='width:34px;height:34px;border-radius:50%;background:var(--bg3);display:flex;align-items:center;justify-content:center'; av.textContent='👤'; }
+    var info=document.createElement('div'); info.style.cssText='flex:1;min-width:0';
+    var nm=document.createElement('div'); nm.style.cssText='font-weight:600;font-size:.9rem'; nm.textContent=f.name||'';
+    var fid=document.createElement('div'); fid.style.cssText='font-size:.74rem;color:var(--text2)'; fid.textContent=f.id||'';
+    info.appendChild(nm); info.appendChild(fid);
+    var del=document.createElement('button'); del.className='hbtn'; del.textContent='삭제';
+    del.onclick=function(){ removeFriendUI(f.id); };
+    row.appendChild(av); row.appendChild(info); row.appendChild(del);
+    box.appendChild(row);
+  });
 }
 async function friendSearch(q){
   var drop=document.getElementById('friendSearchDrop'); if(!drop) return;
@@ -624,12 +633,20 @@ async function friendSearch(q){
     users=users.filter(function(u){ return String(u.id)!==String(myId); });
     if(!users.length){ drop.style.display='block'; drop.innerHTML='<div style="padding:8px 10px;color:var(--text2);font-size:.82rem">검색 결과 없음</div>'; return; }
     drop.style.display='block';
-    drop.innerHTML=users.slice(0,8).map(function(u){
+    drop.innerHTML='';
+    users.slice(0,8).forEach(function(u){
       var added=StellaFriends.isFriend(loadFriends(),u.id);
-      return '<div style="display:flex;align-items:center;gap:8px;padding:8px 10px;cursor:pointer" onclick="addFriendById(\''+esc(u.id)+'\',\''+esc(u.name||u.id)+'\',\''+esc(u.email||'')+'\')">'+
-        '<div style="flex:1;min-width:0"><b style="font-size:.86rem">'+esc(u.name||u.id)+'</b> <span style="font-size:.74rem;color:var(--text2)">'+esc(u.id)+'</span></div>'+
-        '<span style="font-size:.78rem;color:'+(added?'var(--text2)':'var(--accent)')+'">'+(added?'추가됨':'＋ 추가')+'</span></div>';
-    }).join('');
+      var row=document.createElement('div'); row.style.cssText='display:flex;align-items:center;gap:8px;padding:8px 10px;cursor:pointer';
+      var info=document.createElement('div'); info.style.cssText='flex:1;min-width:0';
+      var b=document.createElement('b'); b.style.fontSize='.86rem'; b.textContent=u.name||u.id||'';
+      var sp=document.createElement('span'); sp.style.cssText='font-size:.74rem;color:var(--text2)'; sp.textContent=' '+(u.id||'');
+      info.appendChild(b); info.appendChild(sp);
+      var tag=document.createElement('span'); tag.style.cssText='font-size:.78rem;color:'+(added?'var(--text2)':'var(--accent)');
+      tag.textContent=added?'추가됨':'＋ 추가';
+      row.appendChild(info); row.appendChild(tag);
+      row.onclick=function(){ addFriendById(u.id, u.name||u.id, u.email||''); };
+      drop.appendChild(row);
+    });
   }catch(e){ drop.style.display='none'; }
 }
 function addFriendById(id,name,email){
@@ -683,13 +700,20 @@ function getMyName(){ try{ const s=getSession(); return s?.user?.name||s?.user?.
 function getMyEmail(){ try{ const s=getSession(); return s?.user?.email||''; }catch(e){ return ''; } }
 function isLoggedIn(){ return !!getMyId(); }
 
+// 방의 "마지막 활동 시각" — 로컬 메시지와 서버 목록 정보 중 최신값 (정렬/시각 표시 공용)
+function roomLastAt(r){
+  const last=(r.messages||[]).filter(function(m){return m.type!=='system';}).slice(-1)[0];
+  return Math.max(last?(last.at||0):0, r._srvLastAt||0, 0);
+}
 function renderRooms(){
   updateAppBadge();
   const el=document.getElementById('roomList');
   if(!_rooms.length){el.innerHTML='<div class="empty">💬 채팅방이 없습니다.<br>＋ 채팅 버튼으로 새 방을 만드세요</div>';return;}
-  // 나와의 채팅 맨 위 고정
+  // 나와의 채팅 맨 위 고정 + 나머지는 카톡처럼 "최근 대화순" 정렬 (기존: 생성 역순 고정이라 대화해도 순서 안 바뀜)
   const myChat=_rooms.find(function(r){return r.isMyChat;});
-  const others=_rooms.filter(function(r){return !r.isMyChat;}).slice().reverse();
+  const others=_rooms.filter(function(r){return !r.isMyChat;}).slice().sort(function(a,b){
+    return (roomLastAt(b)||b.createdAt||0)-(roomLastAt(a)||a.createdAt||0);
+  });
   const sorted=myChat?[myChat,...others]:others;
   const myId=getMyId();
   el.innerHTML=sorted.map(function(r){
@@ -705,16 +729,21 @@ function renderRooms(){
       unread=(r.messages||[]).filter(function(m){
         return m.from!==myId && (m.at||0)>lastRead && m.type!=='system';
       }).length;
+      // 이 기기에서 아직 안 연 방(로컬 메시지 없음)은 서버가 계산한 안읽음 수 사용
+      if(!(r.messages&&r.messages.length) && typeof r._srvUnread==='number') unread=r._srvUnread;
     }
+    // 미리보기/시각: 로컬 메시지가 없으면 서버 목록 정보로 표시 (기존: 항상 "대화가 없습니다")
+    const preview=last?String(last.text||last.fileName||'').slice(0,40):(r._srvLast?String(r._srvLast).slice(0,40):'대화가 없습니다');
+    const timeAt=last?(last.at||0):(r._srvLastAt||0);
     const badge=unread>0?'<div class="unread-badge">'+(unread>99?'99+':unread)+'</div>':'';
     return '<div class="room-item'+(isActive?' active':'')+'" onclick="openRoom(\''+r.id+'\')">'+
       '<div class="room-avatar">'+avatar+'</div>'+
       '<div class="room-info">'+
         '<div class="room-name">'+esc(r.name)+'</div>'+
-        '<div class="room-last">'+(last?esc(String(last.text||last.fileName||'').slice(0,40)):'대화가 없습니다')+'</div>'+
+        '<div class="room-last">'+esc(preview)+'</div>'+
       '</div>'+
       '<div class="room-meta">'+
-        '<div class="room-time">'+(last?fmtTime(last.at):'')+'</div>'+
+        '<div class="room-time">'+(timeAt?fmtTime(timeAt):'')+'</div>'+
         badge+
       '</div>'+
       '</div>';
@@ -754,7 +783,7 @@ function searchUsers(q, dropId, mode){
     if(!drop) return;
     const users = await fetchAllUsers();
     const kw = q.trim().toLowerCase();
-    const myId = localStorage.getItem('stella_my_id') || '';
+    const myId = getMyId() || '';
     // 이미 추가된 멤버 제외
     const already = mode==='new' ? _members : (_cur ? (_cur.members||[]) : []);
     const filtered = users.filter(function(u){
@@ -766,14 +795,24 @@ function searchUsers(q, dropId, mode){
       return uid.includes(kw) || uname.includes(kw);
     });
     if(!filtered.length){ drop.style.display='none'; return; }
-    drop.innerHTML = filtered.slice(0,8).map(function(u){
+    // ★버그픽스: 기존엔 onmousedown 문자열 속성에 JSON.stringify(쌍따옴표)가 들어가 속성이 잘려
+    //   드롭다운 클릭이 전혀 동작하지 않았다(멤버 추가 불가) → DOM+클로저로 재작성.
+    drop.innerHTML='';
+    filtered.slice(0,8).forEach(function(u){
       const online = isOnline(u.id);
-      const initial = (u.name||u.id||'?')[0].toUpperCase();
-      return '<div class="user-item" onmousedown="event.preventDefault();selectUser('+JSON.stringify(u.id)+','+JSON.stringify(u.name)+',\''+dropId+'\',\''+mode+'\')">'+
-        '<div class="user-avatar">'+initial+'<span class="'+(online?'online':'offline')+'-dot" title="'+(online?'온라인':'오프라인')+'"></span></div>'+
-        '<div class="user-info"><div class="user-name">'+esc(u.name)+'</div><div class="user-id">@'+esc(u.id)+(online?' 🟢':' ⚫')+'</div></div>'+
-        '</div>';
-    }).join('');
+      const item=document.createElement('div'); item.className='user-item';
+      const avatar=document.createElement('div'); avatar.className='user-avatar';
+      avatar.textContent=(String(u.name||u.id||'?')[0]||'?').toUpperCase();
+      const dot=document.createElement('span'); dot.className=(online?'online':'offline')+'-dot'; dot.title=online?'온라인':'오프라인';
+      avatar.appendChild(dot);
+      const info=document.createElement('div'); info.className='user-info';
+      const nm=document.createElement('div'); nm.className='user-name'; nm.textContent=u.name||u.id||'';
+      const uid2=document.createElement('div'); uid2.className='user-id'; uid2.textContent='@'+(u.id||'')+(online?' 🟢':' ⚫');
+      info.appendChild(nm); info.appendChild(uid2);
+      item.appendChild(avatar); item.appendChild(info);
+      item.addEventListener('mousedown',function(ev){ ev.preventDefault(); selectUser(u.id,u.name,dropId,mode); });
+      drop.appendChild(item);
+    });
     drop.style.display='block';
   }, 250);
 }
@@ -783,14 +822,12 @@ function selectUser(id, name, dropId, mode){
     document.getElementById('memberInput').value='';
     if(!id||_members.includes(id)) return;
     _members.push(id);
-    renderMemberChips('memberChips',_members,function(i){_members.splice(i,1);renderMemberChips('memberChips',_members,arguments.callee);});
+    renderMemberChips('memberChips',_members,removeNewMember);
   } else {
     document.getElementById('inviteInput').value='';
     if(!id||_inviteMembers.includes(id)||(_cur&&(_cur.members||[]).includes(id))) return;
     _inviteMembers.push(id);
-    document.getElementById('inviteChips').innerHTML=_inviteMembers.map(function(m,i){
-      return '<span class="member-chip">'+esc(m)+'<button onclick="_inviteMembers.splice('+i+',1);this.parentNode.remove()">✕</button></span>';
-    }).join('');
+    renderInviteChips();
   }
 }
 
@@ -806,12 +843,33 @@ function addMember(){
   if(!v||_members.includes(v))return;
   _members.push(v);
   document.getElementById('memberInput').value='';
-  renderMemberChips('memberChips',_members,function(i){_members.splice(i,1);renderMemberChips('memberChips',_members,arguments.callee);});
+  renderMemberChips('memberChips',_members,removeNewMember);
 }
+// ★버그픽스: 함수를 문자열로 직렬화해 onclick 속성에 박던 방식(따옴표/스코프 깨짐) → DOM+클로저
 function renderMemberChips(containerId,list,onRemove){
-  document.getElementById(containerId).innerHTML=list.map(function(m,i){
-    return '<span class="member-chip">'+esc(m)+'<button onclick="('+onRemove.toString()+')('+i+')">✕</button></span>';
-  }).join('');
+  var box=document.getElementById(containerId); if(!box) return;
+  box.innerHTML='';
+  list.forEach(function(m,i){
+    var chip=document.createElement('span'); chip.className='member-chip';
+    chip.appendChild(document.createTextNode(m));
+    var btn=document.createElement('button'); btn.type='button'; btn.textContent='✕';
+    btn.onclick=function(){ if(onRemove) onRemove(i); };
+    chip.appendChild(btn);
+    box.appendChild(chip);
+  });
+}
+function removeNewMember(i){ _members.splice(i,1); renderMemberChips('memberChips',_members,removeNewMember); }
+function renderInviteChips(){
+  var box=document.getElementById('inviteChips'); if(!box) return;
+  box.innerHTML='';
+  _inviteMembers.forEach(function(m,i){
+    var chip=document.createElement('span'); chip.className='member-chip';
+    chip.appendChild(document.createTextNode(m));
+    var btn=document.createElement('button'); btn.type='button'; btn.textContent='✕';
+    btn.onclick=function(){ _inviteMembers.splice(i,1); renderInviteChips(); };
+    chip.appendChild(btn);
+    box.appendChild(chip);
+  });
 }
 function createRoom(){
   const name=document.getElementById('newRoomName').value.trim();
@@ -912,9 +970,7 @@ function addInviteMember(){
   if(!v||_inviteMembers.includes(v)||(_cur.members||[]).includes(v))return;
   _inviteMembers.push(v);
   document.getElementById('inviteInput').value='';
-  document.getElementById('inviteChips').innerHTML=_inviteMembers.map(function(m,i){
-    return '<span class="member-chip">'+esc(m)+'<button onclick="_inviteMembers.splice('+i+',1);addInviteMember.caller||document.getElementById(\'inviteChips\').querySelectorAll(\'.member-chip\')['+i+'].remove()">✕</button></span>';
-  }).join('');
+  renderInviteChips();
 }
 function confirmInvite(){
   if(!_cur)return;
@@ -968,6 +1024,7 @@ function deleteRoom(){
   }
   _rooms=_rooms.filter(r=>r.id!==leaveId);saveRooms();
   closeModal('roomSettingsModal');
+  stopLongPoll();
   _cur=null;
   document.getElementById('chatRoom').style.display='none';
   document.getElementById('noRoom').style.display='flex';
@@ -1023,25 +1080,74 @@ function openRoom(id){
   reportRead(id);
   clearTalkNotifications(); // C4: 방 읽음 → 해당 알림 닫기
   startPolling();
+  startLongPoll();   // 실시간 채널(실패 시 폴링이 안전망)
 }
 // ── 폴링 / 실시간 수신 (STAGE 1: 증분 동기화 + 적응형 폴링) ──
 // _lastSyncAt[roomId] = 마지막으로 받은 serverTime(ms). 다음 폴링은 since=이 값으로 새 메시지만 요청.
 var _lastSyncAt = {};
 var _lastActivityAt = 0;                 // 최근 송수신 시각 → 활성 판정
 function markActivity(){ _lastActivityAt = Date.now(); }
-// 활성(최근 15초 내 송수신) 1초 / 유휴 3초 / 백그라운드 5초
+// 활성(최근 15초 내 송수신) 1초 / 유휴 2초 / 백그라운드 4초.
+// 롱폴 채널이 건강하면 메시지는 롱폴이 즉시 가져오므로, 이 폴링은 읽음/타이핑/반응 메타 갱신용 → 2.5초.
 function pollDelay(){
   if(document.hidden || document.visibilityState==='hidden') return 4000;
+  if(_lpHealthy) return 2500;
   if(Date.now() - _lastActivityAt < 15000) return 1000;
-  return 2000;   // 유휴 폴링 3s→2s (수신 체감 속도 개선)
+  return 2000;
 }
 function isNearBottom(){
   try{ var el=document.getElementById('chatMessages'); if(!el) return true;
     return (el.scrollHeight - el.scrollTop - el.clientHeight) < 140; }catch(e){ return true; }
 }
-// SSE/롱폴링 우선 시도 지점(전환 포인트): api/chat-room-sse.js 가 준비되어 USE_LONGPOLL=true 면
-// 롱폴링을 쓰고, 실패하면 아래 적응형 폴링으로 폴백. 기본은 안정성 위해 적응형 폴링.
-var USE_LONGPOLL = false;
+// ── 롱폴링 실시간 채널 (서버 이벤트 기반 — 새 메시지 즉시 수신, 대기 중 서버 Drive 호출 0) ──
+// 응답이 오면 syncRoomFromServer()로 표준 병합 경로를 태운다(병합/알림/읽음 로직 재사용).
+// 연속 실패 시 _lpHealthy=false → 적응형 폴링(1~2초)이 그대로 안전망이 된다.
+var _lpAbort=null, _lpHealthy=false, _lpFailCount=0;
+function startLongPoll(){
+  stopLongPoll();
+  if(!_cur||_cur.isMyChat) return;
+  var roomId=_cur.id;
+  var ctrl=(window.AbortController)?new AbortController():null;
+  _lpAbort=ctrl;
+  var myId=getMyId();
+  (function loop(){
+    if(!_cur||_cur.id!==roomId||_lpAbort!==ctrl) return;
+    var since=_lastSyncAt[roomId]||0;
+    if(!since){ setTimeout(loop,500); return; }   // 첫 full 동기화로 서버 기준 since 확보 후 시작(클럭 오차 회피)
+    fetch('/api/chat-room-sse?roomId='+encodeURIComponent(roomId)+(myId?('&userId='+encodeURIComponent(myId)):'')+'&since='+since,
+      {cache:'no-store', signal:ctrl?ctrl.signal:undefined})
+      .then(function(r){ if(!r.ok) throw new Error('status '+r.status); return r.json(); })
+      .then(function(d){
+        if(_lpAbort!==ctrl) return;
+        _lpFailCount=0; _lpHealthy=true;
+        if(d&&d.ok&&d.messages&&d.messages.length){
+          markActivity();
+          // ★핫루프 방지: sync 완료를 기다린 뒤 재대기한다. sync 가 커서(_lastSyncAt)를 전진시키지
+          //   못하면(get 실패/403/d.ok=false) sse 응답의 lastMessageAt 으로 강제 전진 → 같은 fresh 를
+          //   즉시 다시 받아 초당 수십 회 두들기는 무한 루프를 끊는다.
+          var prev=since;
+          Promise.resolve(syncRoomFromServer(false)).catch(function(){}).then(function(){
+            if(_lpAbort!==ctrl) return;
+            if((_lastSyncAt[roomId]||0)<=prev){
+              _lastSyncAt[roomId]=Math.max(prev, Number(d.lastMessageAt)||Number(d.serverTime)||prev);
+            }
+            loop();
+          });
+        } else {
+          loop();   // 타임아웃/빈 응답: sse 가 서버에서 ~25초 대기했으므로 즉시 재대기해도 폭주 없음
+        }
+      })
+      .catch(function(){
+        if(_lpAbort!==ctrl) return;
+        _lpFailCount++; _lpHealthy=false;
+        if(_lpFailCount<=8) setTimeout(loop, Math.min(2000*_lpFailCount, 15000));  // 백오프 후 재시도, 그 사이 폴링이 커버
+      });
+  })();
+}
+function stopLongPoll(){
+  if(_lpAbort){ try{ _lpAbort.abort(); }catch(e){} _lpAbort=null; }
+  _lpHealthy=false; _lpFailCount=0;
+}
 // 자기 스케줄링 폴링: 매 틱마다 pollDelay()로 다음 간격을 재계산(상태 변화 즉시 반영).
 function startPolling(){
   stopPolling();
@@ -1119,7 +1225,7 @@ async function syncRoomFromServer(scrollAfter, opts){
   if(!_cur||_cur.isMyChat)return;
   opts=opts||{};
   const roomId=_cur.id;
-  const idx=_rooms.findIndex(x=>x.id===roomId);
+  let idx=_rooms.findIndex(x=>x.id===roomId);
   if(idx<0)return;
   const since=(!opts.full && _lastSyncAt[roomId]) ? _lastSyncAt[roomId] : 0;
   const _myId=getMyId();
@@ -1130,6 +1236,12 @@ async function syncRoomFromServer(scrollAfter, opts){
   try{
     const r=await fetch(url,{cache:'no-store'});
     const d=await r.json();
+    // ★방 전환 스톰프 방지: await 사이 사용자가 다른 방으로 이동/방이 제거됐으면 이 응답을 버린다.
+    //   (안 그러면 _cur가 옛 방으로 되돌아가 잘못된 메시지를 렌더하고, 안 보는 방을 읽음 처리해
+    //    상대 화면의 "1"을 지운다 — 이번에 고친 백그라운드 읽음 버그가 방 전환 레이스로 재발.)
+    if(!_cur||_cur.id!==roomId)return;
+    idx=_rooms.findIndex(x=>x.id===roomId);   // await 후 재해석(_rooms 변형 대비)
+    if(idx<0)return;
     if(!d.ok)return;
     // 다음 폴링은 이 serverTime 이후 메시지만 받음 (lastMessageAt 폴백)
     if(d.serverTime) _lastSyncAt[roomId]=d.serverTime;
@@ -1149,10 +1261,10 @@ async function syncRoomFromServer(scrollAfter, opts){
       if(d.room&&d.room.members) _rooms[idx].members=d.room.members;
       mergeReadsMonotonic(_rooms[idx], d.reads);   // FIX-LOCK [1] 단조 병합(되돌림 금지)
       showTypingIndicator(d.typing);
-      _rooms[idx].lastReadAt=Date.now();
+      // ★읽음표시 정확화: 탭이 실제로 보일 때만 읽음 처리 (백그라운드 폴링이 상대의 "1"을 지우던 버그)
+      if(document.visibilityState==='visible'){ _rooms[idx].lastReadAt=Date.now(); reportRead(roomId); }
       _cur=_rooms[idx];
       saveRooms();
-      reportRead(_cur.id);
       renderRooms();
       return;
     }
@@ -1177,10 +1289,10 @@ async function syncRoomFromServer(scrollAfter, opts){
     if(d.room&&d.room.members) _rooms[idx].members=d.room.members;
     mergeReadsMonotonic(_rooms[idx], d.reads); // FIX-LOCK [1] 단조 병합(되돌림 금지)
     showTypingIndicator(d.typing);
-    _rooms[idx].lastReadAt=Date.now();
+    // ★읽음표시 정확화: 탭이 실제로 보일 때만 읽음 처리 (백그라운드 폴링이 상대의 "1"을 지우던 버그)
+    if(document.visibilityState==='visible'){ _rooms[idx].lastReadAt=Date.now(); reportRead(roomId); }
     _cur=_rooms[idx];
     saveRooms();
-    reportRead(_cur.id);
     renderMessages();renderRooms();
     if(newCount>0){
       const last=merged[merged.length-1];
@@ -1261,7 +1373,7 @@ function showRoomToast(roomId, title, body){
 
 function notify(title, body, roomId){
   // STAGE 6: 방별 태그 + 같은 방 연속 시 "메시지 N개" 합치기 + 방 딥링크. (소리는 호출부에서 mute 판정)
-  if(Notification.permission !== 'granted') return;
+  if(!window.Notification || Notification.permission !== 'granted') return;
   var count = roomId ? bumpNotif(roomId) : 1;
   var shownBody = count>1 ? ('메시지 '+count+'개') : body;
   var tag = 'stella-talk-'+(roomId||'msg');
@@ -1283,8 +1395,9 @@ function clearTalkNotifications(){
     if(navigator.serviceWorker && navigator.serviceWorker.ready){
       navigator.serviceWorker.ready.then(function(reg){
         if(reg && reg.getNotifications){
-          reg.getNotifications({tag:'stella-talk-msg'}).then(function(list){
-            (list||[]).forEach(function(n){ try{ n.close(); }catch(e){} });
+          // 태그가 방별('stella-talk-<roomId>')이므로 전체 조회 후 접두사로 닫는다 (기존: 고정 태그만 조회 → 안 닫힘)
+          reg.getNotifications().then(function(list){
+            (list||[]).forEach(function(n){ try{ if(String(n.tag||'').indexOf('stella-talk')===0) n.close(); }catch(e){} });
           }).catch(function(){});
         }
       }).catch(function(){});
@@ -1590,6 +1703,8 @@ function updateAppBadge(){
     let total = 0;
     (_rooms||[]).forEach(function(r){
       if(r.isMyChat) return;
+      // 이 기기에서 안 연 방(로컬 메시지 없음)은 서버 계산 안읽음 수 사용
+      if(!(r.messages&&r.messages.length) && typeof r._srvUnread==='number'){ total+=r._srvUnread; return; }
       const lastRead = r.lastReadAt || 0;
       (r.messages||[]).forEach(function(m){
         if(m.from !== myId && (m.at||0) > lastRead && !m.deleted) total++;
@@ -1635,6 +1750,7 @@ function updateFaviconBadge(count){
 }
 function closeMobileRoom(){
   stopPolling();
+  stopLongPoll();
   document.getElementById('sidebar').classList.remove('hidden-mobile');
   document.getElementById('chatRoom').style.display='none';
   document.getElementById('noRoom').style.display='flex';
@@ -1858,7 +1974,7 @@ function renderMessages(){
   const chatInp=document.getElementById('chatInput');
   const sendBtnEl=document.getElementById('sendBtn');
   if(chatInp){ chatInp.disabled=notLoggedIn; chatInp.placeholder=notLoggedIn?'로그인 후 메시지를 입력할 수 있습니다':'메시지 입력'; }
-  if(sendBtnEl&&notLoggedIn){ sendBtnEl.disabled=true; }
+  if(sendBtnEl){ sendBtnEl.disabled=notLoggedIn; }   // 로그인 후 재활성화도 처리
 
   // 방이 없으면 메시지 노드만 정리(배경 레이어는 유지)
   if(!_cur){
@@ -2564,7 +2680,9 @@ function _talkDelegatedAction(e){
 document.addEventListener('click', _talkDelegatedAction);
 
 // ── 유틸 ──
-function esc(s){return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');}
+// 따옴표까지 이스케이프 — esc() 결과가 HTML 속성 안에 들어가는 곳(onclick 문자열 등)에서
+// 사용자 이름/ID의 따옴표로 속성이 잘리거나 핸들러가 깨지는 것을 방지.
+function esc(s){return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');}
 function fmtTime(ts){if(!ts)return'';return new Date(ts).toLocaleTimeString('ko-KR',{hour:'2-digit',minute:'2-digit'});}
 function fmtSize(b){if(!b)return'';const n=Number(b);if(n<1024)return n+'B';if(n<1048576)return(n/1024).toFixed(1)+'KB';return(n/1048576).toFixed(1)+'MB';}
 
@@ -2848,11 +2966,19 @@ async function syncRoomListFromServer(){
         && String(sr.lastMessageFrom)!==String(getMyName()) && String(sr.lastMessageFrom)!==String(getMyEmail());
       const lastAt = Number(sr.lastMessageAt||0);
       const seenAt = Number(_notifyLastAt[sr.roomId]||0);
+      const srvUnread=Number(sr.unread||0);
       if(!exists){
-        _rooms.push({id:sr.roomId,name:sr.title||'채팅방',members:sr.members||[],messages:[],createdAt:Date.now(),_srvCount:sr.messageCount||0});
+        _rooms.push({id:sr.roomId,name:sr.title||'채팅방',members:sr.members||[],messages:[],createdAt:Date.now(),
+          _srvCount:sr.messageCount||0,_srvLast:sr.lastMessage||'',_srvLastAt:lastAt,_srvUnread:srvUnread});
         changed=true;
       } else {
+        // 서버 목록 정보(미리보기/시각/안읽음)를 갱신 — 이 기기에서 안 연 방도 카톡처럼 최신 상태 표시
+        if(exists._srvLast!==(sr.lastMessage||'')||exists._srvLastAt!==lastAt||exists._srvUnread!==srvUnread) changed=true;
         exists._srvCount = sr.messageCount || 0;
+        exists._srvLast = sr.lastMessage || '';
+        exists._srvLastAt = lastAt;
+        exists._srvUnread = srvUnread;
+        if(sr.members&&sr.members.length) exists.members=sr.members;
       }
       // since 기반 새 메시지 판정: 서버 마지막 메시지가 내가 마지막으로 본 것보다 최신 + 상대 발신 + 현재 보고 있는 방 아님
       const viewing = _cur && _cur.id===sr.roomId && document.visibilityState==='visible';
