@@ -1,72 +1,51 @@
-# TEST_REPORT — Stella Talk 메신저 품질 전면 개선 (2026-07-08)
+# TEST_REPORT — Stella GPT "새 노트" 클릭 무반응 버그 수정 (2026-07-10)
 
-## 개요
-스텔라톡(talk.html + /api/chat-room)의 만성 품질 이슈(지연·유실·미동작 UI·부정확한 읽음표시)의
-**뿌리 원인**을 제거. 핵심은 "모든 채팅 요청이 매번 Google Drive를 왕복"하던 구조를
-서버 인메모리 캐시 + 방별 직렬화 큐로 바꾼 것.
+## 진단
 
-## 뿌리 원인 진단
-| # | 원인 | 증상 |
-|---|---|---|
-| 1 | 폴링 1회(get)=Drive API ~4콜, 방 목록 1회=방 수×4콜을 클라마다 2~3초 주기 반복 | 응답 수 초 지연, Drive 429 쿼터 고갈 → 전송/조회 실패 |
-| 2 | send/react/delete가 잠금 없는 read-modify-write | 동시 전송 시 상대 메시지 통째 유실 |
-| 3 | 사용자 검색 드롭다운의 onmousedown 속성에 JSON.stringify(쌍따옴표) 삽입 → 속성 잘림 | 검색 결과 클릭이 아예 동작 안 함(멤버 초대 불가) |
-| 4 | 타이핑 표시가 입력 2초마다 Drive 쓰기 | 쿼터 소모 + 지연 |
-| 5 | 백그라운드 탭 폴링이 읽음 처리 | 상대 화면의 "1"이 실제로 안 읽었는데 사라짐 |
-| 6 | 방 목록이 로컬 캐시만 표시 | 다른 기기/새 기기에서 미리보기 "대화가 없습니다", 안읽음 뱃지 0, 대화해도 순서 안 바뀜 |
-| 7 | 롱폴 엔드포인트는 있으나 미사용(USE_LONGPOLL=false) + 서버 롱폴이 1.2초마다 Drive 재읽기 | 실시간성 없음 |
+`index.html`의 `renderAll()`이 옛 "게시판(post)" 기능의 `renderPostSelect()` / `renderPosts()`를
+여전히 호출하고 있었다. 두 함수는 `#postCategorySelect`, `#postList` DOM 요소를 참조하는데,
+이 요소들은 이미 이전 리팩터링(게시판 → 노트 패널 전환)에서 마크업에서 제거된 상태였다.
+`renderPosts()`에는 null 가드가 없어 `$('#postList').innerHTML=...`에서 매번
+`TypeError: Cannot set properties of null`을 던졌다.
 
-## 변경 파일
-| 파일 | 내용 |
-|---|---|
-| `lib/chat-store.js` (신규) | 인메모리 캐시 + 방별 직렬화 쓰기 큐 + Drive write-through(파일ID 캐시로 쓰기=API 1콜) + EventEmitter. typing 메모리 전용, reads 8초 write-behind, 60초 인덱스 재검증(외부 변경 감지) |
-| `api/chat-room.js` | chat-store 기반 재작성. clientId 멱등(재시도 중복 저장 금지), list에 per-user unread, since 증분 응답에서 room.messages 제거(페이로드 절감). 403/503 계약 유지 |
-| `api/chat-room-sse.js` | Drive 폴링 루프 → 이벤트 기반 롱폴(대기 중 Drive 0콜, 새 메시지 즉시 반환) |
-| `api/push-subscribe.js` (신규) + `lib/push-send.js` (신규) | Web Push 구독/발송. VAPID 키 미설정 시 완전 no-op. send 성공 시 방 멤버(발신자 제외)에 푸시 |
-| `api/user-search.js` | 검색마다 사용자 수×Drive read → 60초 인메모리 캐시 |
-| `talk.html` | ①드롭다운 클릭 버그 수정(DOM+클로저) ②esc() 따옴표 이스케이프 ③사이드바 최근 대화순 정렬+서버 lastMessage/시각/unread 표시 ④백그라운드 탭 읽음 처리 금지 ⑤롱폴 연결(실패 시 기존 적응형 폴링 폴백) ⑥sendBtn id 부여 ⑦알림 닫기 태그 수정 ⑧멤버 칩/친구 목록 DOM 재작성 |
-| `package.json` | web-push 의존성 추가 |
-| `test/chat-store.test.js` (신규) | 동시 전송 20건 직렬화 유실 0 / 캐시 히트 Drive 0콜 / 쓰기 실패 롤백 / typing Drive 0콜 / 롱폴 즉시 wake / unread 계산 — 6케이스 |
-| `test/chat-room-api.test.js` (신규) | send→get→read→list 왕복, clientId 멱등, 비멤버 403, since 증분, leave 멱등 — 통합 1케이스 |
+`renderAll()`은 로그인 시 `showApp()` 안에서 호출되는데, 그 예외가 잡히지 않고 그대로
+전파되면서 **`renderAll()` 직후에 실행돼야 할 `restoreAllData()`(Drive에서 노트/채팅/프로젝트
+복원)가 로그인마다 조용히 스킵**되고 있었다. 실제 서버 정적 파일을 대상으로 jsdom
+풀부트 재현 스크립트를 돌려 확인함:
+
+```
+initAuth() ERROR -> TypeError: Cannot set properties of null (setting 'innerHTML')
+    at renderPosts (...) at renderAll (...) at showApp (...) at initAuth (...)
+```
+
+"새 노트" 버튼(`openNoteNew()`) 자체는 이 예외와 별개로 인라인 `onclick`이라 클릭 시 열리긴
+하지만, 로그인 시점에 Drive 복원이 죽어있어 노트 목록이 비거나 오래된 로컬 캐시만 보이고,
+매 렌더마다 `renderChips()/renderManage()`와 사용자명 갱신까지 함께 스킵되는 광범위한
+회귀였다.
+
+## 원인 (근거: git log)
+- 노트 UI 자체의 최근 커밋(`98b7bb4` 노트 고정 폴더 통일)은 `api/note.js`/`lib/drive-utils.js`
+  백엔드만 건드렸고 index.html은 빌드 버전 문자열 1줄만 바뀜 — 이번 버그와 무관.
+- `renderPosts()`/`renderPostSelect()`는 과거 "게시글(post)" 카테고리 게시판 UI의 잔재로,
+  해당 HTML(`#postList`, `#postCategorySelect`)이 삭제된 뒤에도 `renderAll()` 호출부만 남아있던
+  죽은 코드였다.
+
+## 수정
+- `index.html`: `renderAll()`에서 `renderPostSelect();renderPosts();` 호출 제거.
+- `index.html`: 호출부가 없어진 `renderPostSelect()`/`renderPosts()` 함수 정의 자체도 제거(죽은 코드 정리).
 
 ## 검증
-- `node --check` 전체 통과, talk.html 인라인 JS `new Function` 파싱 0오류
-- jsdom 초기화 + 스모크(칩 렌더/롱폴 함수 존재) 통과
-- `npm test` **346/346 통과** (기존 336 + 신규 10, 기존 소스 계약 테스트 포함)
-- **멀티에이전트 적대적 리뷰**(동시성/실시간/UI호환/백엔드계약 4관점 병렬 + 발견별 독립 검증) 확정 6건 전부 수정:
-  | 심각도 | 발견 | 수정 |
-  |---|---|---|
-  | critical | loadRoom 잠금 밖 캐시 write-back이 잠금 안 쓰기를 덮어써 메시지 유실 | read 완료 후 캐시 재확인 + 방별 in-flight load promise 공유(동시 미스 1콜) |
-  | critical | send의 createdAt이 잠금 밖에서 찍혀 커서(since)가 큐 대기 메시지를 영구 건너뜀 | createdAt/id 를 방 잠금 '안'에서 스탬프(가시화≈createdAt 보장) |
-  | major | 롱폴이 sync 완료 전 재무장 + 커서 미전진 시 핫루프(멤버 제외 후 403+sse 200) | sync await 후 재대기 + sse lastMessageAt 로 커서 강제 전진 |
-  | major | syncRoomFromServer가 await 후 방 전환 미확인 → 옛 방 스톰프 + 안 보는 방 읽음 처리 | await 후 `_cur.id!==roomId` 가드 + idx 재해석 |
-  | major | chat-room-sse 멤버십 검증 부재(임의 roomId 실시간 열람) | get 과 동일한 isMember 403 게이트 추가 |
-  | major | loadMeta가 일시 Drive 오류를 reads={}로 영구 캐시 → flush가 타 사용자 읽음기록 파괴 | '파일없음'과 '읽기오류' 분리, 오류 시 ephemeral(미캐시)+flush 차단 |
-
-## 성능 효과 (서버 Drive API 호출 기준)
-| 경로 | 이전 | 이후 |
-|---|---|---|
-| 메시지 폴링(get) | ~4콜/회 × 1-2초 | **0콜** (캐시) |
-| 방 목록(list) | 방 수×4콜/회 × 3초 | **0콜** (60초마다 1콜 재검증) |
-| 타이핑 알림 | ~4콜/입력 2초 | **0콜** (메모리) |
-| 읽음 처리 | ~4콜/회 | 0콜 즉시 + 8초 배치 1콜 |
-| 메시지 전송 | ~4콜 | **1콜** (파일ID 캐시 update) |
-| 실시간 수신 | 폴링 1~4초 | 롱폴 즉시(이벤트), 폴백 폴링 |
-
-## 백그라운드 푸시 활성화 방법 (선택)
-앱이 꺼져 있어도 알림을 받으려면 OCI `.env`에 VAPID 키 추가 후 재배포:
-```
-npx web-push generate-vapid-keys
-# .env 에 추가
-VAPID_PUBLIC_KEY=...
-VAPID_PRIVATE_KEY=...
-VAPID_SUBJECT=mailto:yesblue0342@gmail.com
-```
-키가 없으면 기존 폴링 알림만 동작(무해). ⚠️ 푸시 구독 API(`/api/push-subscribe`)는 앱 전반과 동일하게
-userId 를 신뢰한다(별도 세션 토큰 검증 없음 — 기존 chat-room API 와 같은 보안 모델). 키 활성화 시
-알림 본문 노출 범위를 고려할 것.
+- `node -e "new Function(...)"` — 인라인 스크립트 4블록 모두 구문 오류 없음.
+- jsdom 풀부트 재현: 실제 정적 파일 서버로 index.html 로드 → 세션 시딩 →
+  `initAuth()` 호출 → 수정 전 TypeError 발생 확인 → 수정 후 예외 없이 완주 +
+  `[Restore] 전체 복원 완료` 로그로 `restoreAllData()` 정상 실행 재확인.
+- `openBoardBtn` 클릭 → 노트 패널 열림, `+ 새 노트` 버튼 클릭 → 편집기 표시 전환
+  (`noteEditorView` display:flex, 제목에 오늘 날짜 자동 입력) 확인.
+- 신규 회귀 테스트 `test/note-new-button.test.js` 2건 추가:
+  1) index.html에 `#postList` 등 죽은 참조가 재발하지 않는지 정적 검사
+  2) jsdom으로 로그인 → `renderAll()` 무예외 완주 → "새 노트" 클릭 → 편집기 오픈까지 통합 검증
+- `npm test` **348/348 통과** (기존 346 + 신규 2).
 
 ## 한계 (정직)
-- 실제 송수신·푸시는 배포 환경(Drive 자격증명, 실브라우저)에서 최종 확인 필요. 샌드박스는
-  가짜 Drive I/O 주입 통합 테스트 + 정적/jsdom 검증까지 수행.
-- 서버 재시작 시: 미플러시 읽음표시(최대 8초치)와 typing 상태만 유실(메시지는 write-through로 보존).
+- 실제 Drive 자격증명/실브라우저 환경에서의 최종 시각적 확인은 배포 후 확인 필요.
+  샌드박스에서는 jsdom + 정적 파일 서버로 재현·검증.
