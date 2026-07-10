@@ -53,21 +53,32 @@ self.addEventListener('fetch', e => {
   );
 });
 
+// 클라이언트가 알려주는 휘발성 상태(카톡식 팝업 판단용) — SW 재시작 시 초기화(그 땐 팝업 표시로 폴백)
+let _talkCurrentRoom = '';   // 현재 사용자가 보고 있는 방 (보이는·포커스 창 기준)
+let _talkMutes = {};         // 방별 알림 끔 { roomId: 1 }
+
 self.addEventListener('push', e => {
   let data = { title: 'Stella Talk', body: '새 메시지가 있습니다.' };
   try { if (e.data) data = e.data.json(); } catch(err) {}
   const title = data.title ? ('Stella Talk · ' + data.title) : 'Stella Talk';
-  e.waitUntil(
-    self.registration.showNotification(title, {
+  e.waitUntil((async () => {
+    const list = await clients.matchAll({ type: 'window', includeUncontrolled: true });
+    // 열린 창에 즉시 전달 → 인앱 사운드(설정한 음성)/토스트/즉시 동기화 (폴링보다 빠름)
+    list.forEach(c => { try { c.postMessage({ type: 'PUSH_MESSAGE', roomId: data.roomId || '', title: data.title || '', body: data.body || '' }); } catch (err) {} });
+    // 카톡 동일: 그 방을 화면에 띄워 보고 있으면 시스템 팝업 생략. 방별 뮤트도 존중.
+    const viewing = list.some(c => (c.visibilityState === 'visible') && _talkCurrentRoom && data.roomId && _talkCurrentRoom === data.roomId);
+    if (viewing) return;
+    if (data.roomId && _talkMutes[data.roomId]) return;
+    await self.registration.showNotification(title, {
       body: data.body || '새 메시지',
       icon: '/icons/talk-192.png',
       badge: '/icons/talk-192.png',
       vibrate: [200, 100, 200],
-      tag: 'stella-talk-msg',
+      tag: 'stella-talk-' + (data.roomId || 'msg'),   // 방별 스택(같은 방은 갱신, 다른 방은 별도 팝업)
       renotify: true,
       data: { url: data.url || '/talk', roomId: data.roomId || '' }
-    })
-  );
+    });
+  })());
 });
 
 self.addEventListener('notificationclick', e => {
@@ -101,10 +112,15 @@ self.addEventListener('periodicsync', e => {
   }
 });
 
-// 클라이언트가 강제 업데이트 요청 시
+// 클라이언트가 강제 업데이트 요청 시 + 카톡식 팝업 판단용 상태 수신
 self.addEventListener('message', e => {
   if (e.data === 'skipWaiting') self.skipWaiting();
   if (e.data === 'clearCache') {
     caches.keys().then(keys => Promise.all(keys.map(k => caches.delete(k))));
+  }
+  const d = e.data;
+  if (d && typeof d === 'object') {
+    if (d.type === 'CURRENT_ROOM') _talkCurrentRoom = d.roomId || '';
+    if (d.type === 'MUTES') _talkMutes = d.mutes || {};
   }
 });

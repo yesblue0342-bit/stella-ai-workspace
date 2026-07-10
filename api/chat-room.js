@@ -170,7 +170,7 @@ export default async function handler(req, res) {
       // 백그라운드 Web Push(VAPID 키 설정 시에만 동작, 실패 무해) — 응답을 막지 않는다.
       try {
         sendChatPush({
-          members: data.members || members, senderId: userId,
+          members: data.members || members, senderId: userId, senderName: sender,
           title: data.title || title, body: message || ("📎 " + fileName), roomId
         }).catch(() => {});
       } catch (e) {}

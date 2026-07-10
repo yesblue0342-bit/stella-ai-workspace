@@ -1026,6 +1026,7 @@ function deleteRoom(){
   closeModal('roomSettingsModal');
   stopLongPoll();
   _cur=null;
+  try{ swSyncState(); }catch(e){}
   document.getElementById('chatRoom').style.display='none';
   document.getElementById('noRoom').style.display='flex';
   if(window.innerWidth<=700)document.getElementById('sidebar').classList.remove('hidden-mobile');
@@ -1081,6 +1082,7 @@ function openRoom(id){
   clearTalkNotifications(); // C4: 방 읽음 → 해당 알림 닫기
   startPolling();
   startLongPoll();   // 실시간 채널(실패 시 폴링이 안전망)
+  try{ swSyncState(); }catch(e){}   // SW에 '보고 있는 방' 알림 → 이 방 푸시 팝업 생략(카톡 동일)
 }
 // ── 폴링 / 실시간 수신 (STAGE 1: 증분 동기화 + 적응형 폴링) ──
 // _lastSyncAt[roomId] = 마지막으로 받은 serverTime(ms). 다음 폴링은 since=이 값으로 새 메시지만 요청.
@@ -1348,6 +1350,7 @@ function toggleCurMute(){
   var b=document.getElementById('muteBtn');
   if(b){ b.textContent=muted?'🔕':'🔔'; b.title=muted?'알림 꺼짐 (탭하여 켜기)':'알림 켜짐 (탭하여 끄기)'; }
   toast(muted?'🔕 이 방 알림을 껐습니다 (뱃지는 유지)':'🔔 이 방 알림을 켰습니다');
+  try{ swSyncState(); }catch(e){}   // SW 푸시 팝업도 뮤트 반영
 }
 function mentionsMe(text){
   if(!text)return false;
@@ -1596,9 +1599,10 @@ function playMelody(key){
   }catch(e){ return false; }
 }
 
-// 선택 음성 문구를 실제로 읽기 (ko-KR → 기본 voice → 비프음). STAGE 2: 미리듣기 전용.
-// FIX-LOCK [2] mp3 우선 → 없거나 실패하면 TTS → 그것도 불가면 비프음
-function speakVoice(key){
+// 선택 음성 문구를 실제로 읽기 (ko-KR → 기본 voice → 비프음).
+// FIX-LOCK [2] mp3 우선 → 없거나 실패하면 TTS → 그것도 불가면 비프음.
+// quiet=true: 멜로디에 '얹어서' 재생하는 실알림 경로 — TTS 불가여도 비프음 폴백 생략(이중음 방지).
+function speakVoice(key, quiet){
   if(!TALK_VOICES[key]) key='s1';
   var mp3=TALK_VOICE_MP3 && TALK_VOICE_MP3[key];
   if(mp3){
@@ -1606,15 +1610,15 @@ function speakVoice(key){
       var a=_voiceAudioCache[key]||(_voiceAudioCache[key]=new Audio(mp3));
       a.currentTime=0;
       var p=a.play();
-      if(p&&p.catch) p.catch(function(){ ttsVoice(key); }); // 재생 실패 시 TTS 폴백
+      if(p&&p.catch) p.catch(function(){ ttsVoice(key, quiet); }); // 재생 실패 시 TTS 폴백
       return;
     }catch(e){ /* 폴백 진행 */ }
   }
-  ttsVoice(key);
+  ttsVoice(key, quiet);
 }
-function ttsVoice(key){
+function ttsVoice(key, quiet){
   var cfg=TALK_VOICES[key]||TALK_VOICES['s1'];
-  if(!('speechSynthesis' in window) || !window.SpeechSynthesisUtterance){ beepFallback(); return; }
+  if(!('speechSynthesis' in window) || !window.SpeechSynthesisUtterance){ if(!quiet) beepFallback(); return; }
   try{
     var synth=window.speechSynthesis;
     try{ synth.cancel(); }catch(e){}
@@ -1623,11 +1627,11 @@ function ttsVoice(key){
     var v=pickKoVoice(); if(v) u.voice=v; // 없으면 브라우저 기본 voice 사용
     var spoke=false;
     u.onstart=function(){ spoke=true; };
-    u.onerror=function(){ if(!spoke) beepFallback(); };
+    u.onerror=function(){ if(!spoke && !quiet) beepFallback(); };
     synth.speak(u);
     // 합성이 아예 시작되지 않으면(차단) 비프음 폴백
-    setTimeout(function(){ try{ if(!spoke && !synth.speaking && !synth.pending) beepFallback(); }catch(e){} }, 700);
-  }catch(e){ beepFallback(); }
+    setTimeout(function(){ try{ if(!spoke && !synth.speaking && !synth.pending && !quiet) beepFallback(); }catch(e){} }, 700);
+  }catch(e){ if(!quiet) beepFallback(); }
 }
 
 // 메시지 수신 시 호출 - 설정 모드대로 소리/진동/무음
@@ -1646,8 +1650,10 @@ function playNotifySound(msgId){
     // 재생 직전 오디오 unlock 1회 + 큐 깨우기(자동재생 정책 / 다시 안 울림 방지)
     try{ unlockAudio(); }catch(e){}
     var key=getVoiceKey();
-    // 켜짐 + 포그라운드면 음성으로도 읽기(작업1-3)
-    try{ if(loadNotif().voiceSpeak && document.visibilityState==='visible'){ speakVoice(key); } }catch(e){}
+    // ★수신음 = 설정한 음성("스텔라~" 등): 실제 알림에서도 미리듣기와 동일하게 음성 문구를 재생한다.
+    //   (기존엔 멜로디만 울려 "띠리링 한 번"으로 끝나던 문제. 포그라운드 한정 — 백그라운드/앱종료는
+    //    Web Push 시스템 팝업+알림음이 담당. quiet=true 로 TTS 불가 시 이중 비프 방지)
+    try{ if(document.visibilityState==='visible'){ speakVoice(key, true); } }catch(e){}
     // 실제 소리 재생 (mp3 우선 → 강화 멜로디).
     function _emit(){
       var mp3=TALK_VOICE_MP3 && TALK_VOICE_MP3[key];
@@ -1770,6 +1776,7 @@ function closeMobileRoom(){
   document.getElementById('chatRoom').style.display='none';
   document.getElementById('noRoom').style.display='flex';
   _cur=null;renderRooms();
+  try{ swSyncState(); }catch(e){}
 }
 
 // ── 메시지 렌더 ──
@@ -2763,9 +2770,10 @@ function forceUpdate(){
 function requestNotification(){if(Notification.permission==='default')Notification.requestPermission().then(function(p){if(p==='granted'){try{ notify('알림','알림이 설정되었습니다.',null); }catch(e){ console.warn('[requestNotification] confirm notify failed:', e); }subscribePush();}updateNotifBanner();}).catch(function(){});else if(Notification.permission==='granted')subscribePush();}
 // ── 백그라운드 Web Push 구독(앱 닫혀 있어도 알림). VAPID 키 미설정이면 서버가 enabled:false 반환 → 조용히 종료.
 function _urlB64ToU8(b64){var pad='='.repeat((4-b64.length%4)%4);var s=(b64+pad).replace(/-/g,'+').replace(/_/g,'/');var raw=atob(s);var out=new Uint8Array(raw.length);for(var i=0;i<raw.length;i++)out[i]=raw.charCodeAt(i);return out;}
-var _pushSubscribing=false;
+var _pushSubscribing=false, _pushSubscribedAt=0;
 async function subscribePush(){
   try{
+    if(Date.now()-_pushSubscribedAt < 10*60*1000) return;   // 성공 후 10분간 재시도 안 함
     if(_pushSubscribing) return; _pushSubscribing=true;
     var myId=getMyId(); if(!myId||myId==='나') { _pushSubscribing=false; return; }
     if(!('serviceWorker' in navigator)||!('PushManager' in window)){ _pushSubscribing=false; return; }
@@ -2775,7 +2783,8 @@ async function subscribePush(){
     var reg=await navigator.serviceWorker.ready;
     var sub=await reg.pushManager.getSubscription();
     if(!sub){ sub=await reg.pushManager.subscribe({userVisibleOnly:true, applicationServerKey:_urlB64ToU8(kr.publicKey)}); }
-    await fetch('/api/push-subscribe',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({userId:myId, subscription:sub.toJSON?sub.toJSON():sub})}).catch(function(){});
+    await fetch('/api/push-subscribe',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({userId:myId, subscription:sub.toJSON?sub.toJSON():sub})});
+    _pushSubscribedAt=Date.now();
   }catch(e){ /* 구독 실패는 무해(폴링 알림은 그대로 동작) */ }
   finally{ _pushSubscribing=false; }
 }
@@ -2882,6 +2891,32 @@ function openRoomDeep(roomId){
 function setupTalkDeepLink(){
   try{ var rid=new URLSearchParams(location.search||'').get('room'); if(rid) setTimeout(function(){ openRoomDeep(rid); }, 700); }catch(e){}
 }
+// ── SW 상태 동기화 (카톡식 팝업 판단용: 보고 있는 방이면 시스템 팝업 생략, 뮤트 방 생략) ──
+function swSend(msg){ try{ if(navigator.serviceWorker && navigator.serviceWorker.controller) navigator.serviceWorker.controller.postMessage(msg); }catch(e){} }
+function swSyncState(){
+  swSend({type:'CURRENT_ROOM', roomId:(_cur && !_cur.isMyChat && document.visibilityState==='visible')?_cur.id:''});
+  swSend({type:'MUTES', mutes:loadMutes()});
+}
+// ── SW 푸시를 열린 창에서 수신 — 폴링보다 빠른 즉시 반영 + 설정한 음성 재생 ──
+function handlePushMessage(d){
+  try{
+    var roomId=d.roomId||'';
+    // 목록 폴링의 중복 알림 방지: 이 방의 알림 기준시각을 지금으로 전진
+    if(roomId){ _notifyLastAt[roomId]=Date.now(); _saveNotifyAt(); }
+    if(_cur && _cur.id===roomId){
+      markActivity();
+      syncRoomFromServer(false);   // 즉시 동기화(사운드/렌더는 sync 경로가 처리, 롱폴과 중복 무해)
+      return;
+    }
+    if(document.visibilityState==='visible'){
+      // 다른 방을 보는 중: 인앱 사운드(설정 음성) + 토스트. 숨김 상태는 SW 시스템 팝업이 담당(이중음 방지).
+      var _mention=mentionsMe(d.body);
+      if(!isMuted(roomId) || _mention) playNotifySound('push_'+roomId);
+      showRoomToast(roomId, d.title||'새 메시지', d.body||'');
+      try{ syncRoomListFromServer(); }catch(e){}
+    }
+  }catch(e){}
+}
 function setupSWMessages(){
   try{
     if('serviceWorker' in navigator){
@@ -2889,9 +2924,18 @@ function setupSWMessages(){
         var d=ev.data||{};
         if(d.type==='OPEN_ROOM' && d.roomId) openRoomDeep(d.roomId);
         else if(d.type==='PERIODIC_SYNC'){ try{ syncRoomListFromServer(); }catch(e){} }
+        else if(d.type==='PUSH_MESSAGE'){ handlePushMessage(d); }
       });
+      // SW 교체(업데이트) 시 휘발 상태 재전송
+      navigator.serviceWorker.addEventListener('controllerchange', function(){ try{ swSyncState(); }catch(e){} });
     }
   }catch(e){}
+  document.addEventListener('visibilitychange', function(){
+    try{ swSyncState(); }catch(e){}
+    // 복귀 시 푸시 구독 상태 점검(서버가 방금 키를 활성화했을 수 있음 — 성공 후 10분 가드)
+    if(document.visibilityState==='visible'){ try{ subscribePush(); }catch(e){} }
+  });
+  setTimeout(function(){ try{ swSyncState(); }catch(e){} }, 1500);   // SW 준비 후 초기 1회
 }
 function registerPeriodicSync(){
   try{
