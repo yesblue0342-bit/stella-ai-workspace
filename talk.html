@@ -1379,14 +1379,29 @@ function notify(title, body, roomId){
   var tag = 'stella-talk-'+(roomId||'msg');
   var url = '/talk'+(roomId?('?room='+encodeURIComponent(roomId)):'');
   var opts = { body: shownBody, icon:'/icons/talk-192.png?v=3', badge:'/icons/talk-192.png?v=3', vibrate:[200,100,200], tag:tag, renotify:true, data:{ url:url, roomId:roomId||'' } };
+  var full = 'Stella Talk · '+title;
+  // 2차 수정: controller는 최초 로드/하드 리로드에서 null → 페이지 Notification 생성자로 빠졌고,
+  // 안드로이드 크롬은 페이지 생성자 미지원(Illegal constructor)이라 첫 팝업이 조용히 유실됐다.
+  // → controller 체크 없이 SW ready를 기다려 showNotification(등록 완료 전 도착한 첫 메시지도 대기 후 표시),
+  //   SW 실패/3초 내 미준비 시에만 페이지 생성자 폴백(데스크톱용, 실패는 console.warn).
+  var _fellBack=false;
+  function _pageNotif(reason){
+    if(_fellBack) return; _fellBack=true;
+    try{ new Notification(full, opts); }
+    catch(e){ console.warn('[notify] page Notification fallback failed ('+reason+'):', e); }
+  }
   try{
-    if(navigator.serviceWorker && navigator.serviceWorker.controller){
-      navigator.serviceWorker.ready.then(function(reg){ reg.showNotification('Stella Talk · '+title, opts); })
-        .catch(function(){ try{ new Notification('Stella Talk · '+title, opts); }catch(e){} });
+    if(navigator.serviceWorker){
+      var _t=setTimeout(function(){ _pageNotif('sw-not-ready'); }, 3000);
+      navigator.serviceWorker.ready.then(function(reg){
+        clearTimeout(_t);
+        if(_fellBack) return;   // 타임아웃 폴백이 이미 표시함(중복 방지)
+        return reg.showNotification(full, opts);
+      }).catch(function(e){ clearTimeout(_t); console.warn('[notify] sw showNotification failed:', e); _pageNotif('sw-failed'); });
     } else {
-      new Notification('Stella Talk · '+title, opts);
+      _pageNotif('no-sw');
     }
-  }catch(e){}
+  }catch(e){ console.warn('[notify] failed:', e); }
 }
 
 // C4: 읽으면(방 열기/앱 포커스) 떠 있는 Stella Talk 알림을 닫는다 + 배지 갱신
@@ -1646,6 +1661,8 @@ function playNotifySound(msgId){
     if(_audioCtx && _audioCtx.state==='suspended'){
       try{ var rp=_audioCtx.resume(); if(rp&&rp.then){ rp.then(_emit).catch(_emit); } else _emit(); }catch(e){ _emit(); }
     } else { _emit(); }
+    // 2차 진단: 사용자 제스처 전에는 자동재생 정책으로 ctx가 못 깨어나 무음이 됨 — 현장 추적용 로그(동작 변경 없음)
+    setTimeout(function(){ try{ if(_audioCtx && _audioCtx.state!=='running') console.warn('[notifySound] AudioContext state:', _audioCtx.state, '(사용자 제스처 전에는 무음일 수 있음)'); }catch(e){} }, 400);
   }catch(e){}
 }
 
@@ -1682,18 +1699,16 @@ function syncSoundUI(){
 }
 
 // 작업3: 혼자 테스트 — 소리 + (권한 있으면)팝업 둘 다 즉시 확인
+// 2차 수정: 실수신과 동일 경로(playNotifySound + notify) 사용 — 테스트만 통과하고 실전은 실패하는 불일치 제거.
 function testNotify(){
   try{ unlockAudio(); }catch(e){}
   playNotifySound('test-'+Date.now());
-  try{
-    if(window.Notification && Notification.permission==='granted'){
-      if(navigator.serviceWorker && navigator.serviceWorker.ready){
-        navigator.serviceWorker.ready.then(function(reg){
-          reg.showNotification('Stella Talk · 테스트', {body:'알림 테스트 ✅', icon:'/icons/talk-192.png', tag:'stella-talk-test', renotify:true});
-        }).catch(function(){ try{ new Notification('Stella Talk · 테스트',{body:'알림 테스트 ✅',icon:'/icons/talk-192.png'}); }catch(e){} });
-      } else { try{ new Notification('Stella Talk · 테스트',{body:'알림 테스트 ✅',icon:'/icons/talk-192.png'}); }catch(e){} }
-    }
-  }catch(e){}
+  if(window.Notification && Notification.permission==='granted'){
+    notify('테스트', '알림 테스트 ✅', null);
+  } else {
+    try{ toast('🔕 알림 권한이 꺼져 있어 팝업은 표시되지 않아요'); }catch(e){}
+    console.warn('[testNotify] Notification permission:', window.Notification?Notification.permission:'unsupported');
+  }
 }
 
 // 앱 아이콘 뱃지 업데이트 (홈화면 숫자)
@@ -2743,7 +2758,9 @@ function forceUpdate(){
   }
 }
 
-function requestNotification(){if(Notification.permission==='default')Notification.requestPermission().then(function(p){if(p==='granted'){new Notification('Stella Talk',{body:'알림이 설정되었습니다.',icon:'/icons/talk-192.png'});subscribePush();}updateNotifBanner();}).catch(function(){});else if(Notification.permission==='granted')subscribePush();}
+// 2차 수정: 안드로이드 크롬은 페이지 new Notification()이 throw(Illegal constructor) →
+// try-catch 없이 쓰면 subscribePush/updateNotifBanner가 스킵됐다. 확인 알림은 SW 경로(notify)로 통일.
+function requestNotification(){if(Notification.permission==='default')Notification.requestPermission().then(function(p){if(p==='granted'){try{ notify('알림','알림이 설정되었습니다.',null); }catch(e){ console.warn('[requestNotification] confirm notify failed:', e); }subscribePush();}updateNotifBanner();}).catch(function(){});else if(Notification.permission==='granted')subscribePush();}
 // ── 백그라운드 Web Push 구독(앱 닫혀 있어도 알림). VAPID 키 미설정이면 서버가 enabled:false 반환 → 조용히 종료.
 function _urlB64ToU8(b64){var pad='='.repeat((4-b64.length%4)%4);var s=(b64+pad).replace(/-/g,'+').replace(/_/g,'/');var raw=atob(s);var out=new Uint8Array(raw.length);for(var i=0;i<raw.length;i++)out[i]=raw.charCodeAt(i);return out;}
 var _pushSubscribing=false;
