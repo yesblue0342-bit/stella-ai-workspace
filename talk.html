@@ -433,6 +433,12 @@ body.theme-dark .theme-btn.active{background:#1e3a5f}
       <button class="hbtn" onclick="requestNotification()">알림 권한</button>
     <button class="hbtn" onclick="openSoundSettings()">🔔 알림음</button>
     </div>
+    <div class="sp-row">
+      <label>백그라운드 알림</label>
+      <button class="hbtn" onclick="checkPushStatus()">🩺 상태 확인</button>
+      <button class="hbtn" onclick="testBackgroundPush()" style="margin-left:4px;background:#16a34a;color:#fff">📲 테스트</button>
+    </div>
+    <div id="pushStatusBox" style="display:none;font-size:.78rem;line-height:1.7;background:var(--bg2);border:1px solid var(--border);border-radius:10px;padding:10px 12px;margin-top:6px;white-space:pre-wrap"></div>
     <div class="sp-section">앱</div>
     <div class="sp-row" id="installRow" style="display:none">
       <label>홈 화면에 설치</label>
@@ -2788,22 +2794,66 @@ function requestNotification(){if(Notification.permission==='default')Notificati
 // ── 백그라운드 Web Push 구독(앱 닫혀 있어도 알림). VAPID 키 미설정이면 서버가 enabled:false 반환 → 조용히 종료.
 function _urlB64ToU8(b64){var pad='='.repeat((4-b64.length%4)%4);var s=(b64+pad).replace(/-/g,'+').replace(/_/g,'/');var raw=atob(s);var out=new Uint8Array(raw.length);for(var i=0;i<raw.length;i++)out[i]=raw.charCodeAt(i);return out;}
 var _pushSubscribing=false, _pushSubscribedAt=0;
-async function subscribePush(){
+// 구독 진행 단계/실패를 기록 — 설정의 '백그라운드 알림 상태' 진단에 표시(조용한 실패 금지)
+function _pushDiag(step, ok, detail){
+  try{ localStorage.setItem('stella_push_diag', JSON.stringify({step:step, ok:!!ok, detail:String(detail||''), at:Date.now()})); }catch(e){}
+}
+async function subscribePush(force){
   try{
-    if(Date.now()-_pushSubscribedAt < 10*60*1000) return;   // 성공 후 10분간 재시도 안 함
-    if(_pushSubscribing) return; _pushSubscribing=true;
-    var myId=getMyId(); if(!myId||myId==='나') { _pushSubscribing=false; return; }
-    if(!('serviceWorker' in navigator)||!('PushManager' in window)){ _pushSubscribing=false; return; }
-    if(!window.Notification||Notification.permission!=='granted'){ _pushSubscribing=false; return; }
-    var kr=await fetch('/api/push-subscribe?action=key',{cache:'no-store'}).then(function(r){return r.json();}).catch(function(){return null;});
-    if(!kr||!kr.enabled||!kr.publicKey){ _pushSubscribing=false; return; } // 키 미설정 → 비활성(무해)
+    if(!force && Date.now()-_pushSubscribedAt < 10*60*1000) return 'ok';   // 성공 후 10분간 재시도 안 함
+    if(_pushSubscribing) return 'busy'; _pushSubscribing=true;
+    var myId=getMyId(); if(!myId||myId==='나') { _pushSubscribing=false; return _pushDiag('login',false,'로그인 필요'),'no-login'; }
+    if(!('serviceWorker' in navigator)||!('PushManager' in window)){ _pushSubscribing=false; return _pushDiag('support',false,'이 브라우저는 푸시 미지원'),'no-support'; }
+    if(!window.Notification||Notification.permission!=='granted'){ _pushSubscribing=false; return _pushDiag('perm',false,'알림 권한: '+(window.Notification?Notification.permission:'없음')),'no-perm'; }
+    var kr=await fetch('/api/push-subscribe?action=key',{cache:'no-store'}).then(function(r){return r.json();}).catch(function(e){return {err:String(e&&e.message||e)};});
+    if(!kr||!kr.enabled||!kr.publicKey){ _pushSubscribing=false; return _pushDiag('serverKey',false,'서버 푸시 비활성: '+JSON.stringify(kr||{}).slice(0,80)),'no-key'; }
     var reg=await navigator.serviceWorker.ready;
     var sub=await reg.pushManager.getSubscription();
     if(!sub){ sub=await reg.pushManager.subscribe({userVisibleOnly:true, applicationServerKey:_urlB64ToU8(kr.publicKey)}); }
-    await fetch('/api/push-subscribe',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({userId:myId, subscription:sub.toJSON?sub.toJSON():sub})});
+    var sr=await fetch('/api/push-subscribe',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({userId:myId, subscription:sub.toJSON?sub.toJSON():sub})}).then(function(r){return r.json();});
+    if(!sr||!sr.ok){ _pushSubscribing=false; return _pushDiag('serverSave',false,(sr&&sr.message)||'서버 저장 실패'),'save-fail'; }
     _pushSubscribedAt=Date.now();
-  }catch(e){ /* 구독 실패는 무해(폴링 알림은 그대로 동작) */ }
+    _pushDiag('done',true,'구독 등록 완료 ('+(sr.count||1)+'개 기기)');
+    // SW에 재구독용 설정 영속(브라우저가 구독을 회전시키는 pushsubscriptionchange 대비)
+    try{ swSend({type:'PUSH_CFG', publicKey:kr.publicKey, userId:myId}); }catch(e){}
+    return 'ok';
+  }catch(e){ _pushDiag('subscribe',false,String(e&&e.message||e)); console.warn('[push] 구독 실패:', e); return 'error'; }
   finally{ _pushSubscribing=false; }
+}
+// ── 백그라운드 알림 자가진단(설정 패널) — 어디서 끊겼는지 폰에서 바로 확인 ──
+async function checkPushStatus(){
+  var box=document.getElementById('pushStatusBox'); if(box){ box.style.display='block'; box.textContent='확인 중...'; }
+  var lines=[];
+  var perm=(window.Notification&&Notification.permission)||'미지원';
+  lines.push((perm==='granted'?'✅':'❌')+' 알림 권한: '+perm+(perm!=='granted'?' → 위 "알림 권한" 버튼을 누르세요':''));
+  var swOk=false;
+  try{ await Promise.race([navigator.serviceWorker.ready, new Promise(function(_,rej){ setTimeout(function(){rej(new Error('timeout'));},3000); })]); swOk=true; }catch(e){}
+  lines.push((swOk?'✅':'❌')+' 서비스워커: '+(swOk?'활성':'미준비(새로고침 후 재시도)'));
+  var sub=null;
+  try{ if(swOk){ var reg2=await navigator.serviceWorker.ready; sub=await reg2.pushManager.getSubscription(); } }catch(e){}
+  lines.push((sub?'✅':'❌')+' 이 기기 구독: '+(sub?'등록됨':'없음'));
+  var st=null;
+  try{ st=await fetch('/api/push-subscribe?action=status&userId='+encodeURIComponent(getMyId()||''),{cache:'no-store'}).then(function(r){return r.json();}); }catch(e){}
+  lines.push((st&&st.enabled?'✅':'❌')+' 서버 푸시: '+(st?(st.enabled?('활성 ('+(st.keySource||'')+')'):'비활성'):'응답 없음'));
+  if(st && typeof st.subs==='number') lines.push((st.subs>0?'✅':'❌')+' 서버에 저장된 내 구독: '+(st.subs<0?'확인 실패':(st.subs+'개 기기')));
+  try{ var d=JSON.parse(localStorage.getItem('stella_push_diag')||'null'); if(d&&!d.ok) lines.push('⚠️ 최근 구독 시도: ['+d.step+'] '+d.detail); }catch(e){}
+  // 권한은 있는데 구독이 빠져 있으면 즉시 자동 복구 시도
+  if(perm==='granted' && (!sub || !(st&&st.subs>0))){
+    lines.push('… 자동 재구독 시도 중');
+    var r=await subscribePush(true);
+    lines.push(r==='ok'?'✅ 재구독 성공 — 다시 [상태 확인]을 눌러 확인하세요':'❌ 재구독 실패('+r+')');
+  }
+  if(box) box.textContent=lines.join('\n');
+}
+// 백그라운드 E2E 테스트: 서버가 5초 뒤 나에게 실제 푸시 발송 → 그 사이 홈으로 나가면 팝업 수신 확인
+async function testBackgroundPush(){
+  var myId=getMyId(); if(!myId){ toast('로그인 후 이용하세요'); return; }
+  var r=await subscribePush(true);
+  if(r!=='ok'&&r!=='busy'){ toast('구독 등록이 안 됐어요 — [상태 확인] 결과를 보세요'); checkPushStatus(); return; }
+  var res=await fetch('/api/push-subscribe?action=test',{method:'POST',headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({userId:myId, delaySec:5})}).then(function(x){return x.json();}).catch(function(){return null;});
+  if(res&&res.ok){ toast('📲 지금 홈 화면으로 나가세요! 5초 뒤 팝업이 오면 성공'); }
+  else{ toast('테스트 실패: '+((res&&res.message)||'서버 오류')); checkPushStatus(); }
 }
 // ── 작업2: 알림 권한 배너 (미허용 시 원탭 켜기) ──
 function dismissNotifBanner(){ var b=document.getElementById('notifBanner'); if(b)b.style.display='none'; try{sessionStorage.setItem('stella_notif_banner_dismissed','1');}catch(e){} }

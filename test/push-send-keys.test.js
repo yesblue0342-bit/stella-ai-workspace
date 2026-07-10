@@ -89,6 +89,39 @@ test("VAPID: env 키가 있으면 env 우선", async () => {
   } finally { __resetForTest(); restore(); }
 });
 
+test("구독 읽기 오류: 빈 목록으로 캐시 오염되지 않고 복구 후 정상 조회", async () => {
+  const restore = clearEnv();
+  try {
+    __resetForTest();
+    const s = fakeStore({ "subs_userB": { type: "pushSubs", userId: "userB", subs: [{ endpoint: "https://push.example/b1", keys: { p256dh: "k", auth: "a" } }] } });
+    __setStoreForTest(s.ops);
+    s.setFailReads(true);
+    const l1 = await getSubscriptions("userB");
+    assert.equal(l1.length, 0, "오류 중엔 빈 목록(발송만 스킵)");
+    s.setFailReads(false);
+    const l2 = await getSubscriptions("userB");
+    assert.equal(l2.length, 1, "오류가 캐시로 고착되지 않고 복구 즉시 정상 조회");
+  } finally { __resetForTest(); restore(); }
+});
+
+test("구독 저장: 읽기 오류 중엔 기존 기기 구독을 덮어쓰지 않는다(clobber 방지)", async () => {
+  const restore = clearEnv();
+  try {
+    __resetForTest();
+    const s = fakeStore({ "subs_userC": { type: "pushSubs", userId: "userC", subs: [{ endpoint: "https://push.example/c-old", keys: { p256dh: "k", auth: "a" } }] } });
+    __setStoreForTest(s.ops);
+    s.setFailReads(true);
+    const r = await saveSubscription("userC", { endpoint: "https://push.example/c-new", keys: { p256dh: "k2", auth: "a2" } });
+    assert.equal(r.ok, false, "읽기 오류 시 저장 중단");
+    assert.equal(s.files.get("subs_userC").subs.length, 1, "기존 파일 미손상");
+    assert.equal(s.files.get("subs_userC").subs[0].endpoint, "https://push.example/c-old");
+    s.setFailReads(false);
+    const r2 = await saveSubscription("userC", { endpoint: "https://push.example/c-new", keys: { p256dh: "k2", auth: "a2" } });
+    assert.equal(r2.ok, true);
+    assert.equal(r2.count, 2, "복구 후엔 기존+신규 병합 저장");
+  } finally { __resetForTest(); restore(); }
+});
+
 test("구독 upsert: endpoint 기준 갱신·조회", async () => {
   const restore = clearEnv();
   try {

@@ -1,4 +1,4 @@
-const CACHE = 'stella-v117';
+const CACHE = 'stella-v118';
 const KEEP_CACHES = [CACHE, 'stella-talk-prefs'];   // prefs(알림모드/뮤트)는 업데이트 때 지우지 않음
 
 self.addEventListener('install', e => self.skipWaiting());
@@ -135,5 +135,27 @@ self.addEventListener('message', e => {
     if (d.type === 'CURRENT_ROOM') _talkCurrentRoom = d.roomId || '';
     if (d.type === 'MUTES') { _talkMutes = d.mutes || {}; e.waitUntil ? e.waitUntil(_prefsPut('mutes', _talkMutes)) : _prefsPut('mutes', _talkMutes); }
     if (d.type === 'NOTIFY_MODE') { _talkNotifyMode = d.mode || 'sound'; e.waitUntil ? e.waitUntil(_prefsPut('mode', _talkNotifyMode)) : _prefsPut('mode', _talkNotifyMode); }
+    if (d.type === 'PUSH_CFG') { const cfg = { publicKey: d.publicKey || '', userId: d.userId || '' }; e.waitUntil ? e.waitUntil(_prefsPut('pushCfg', cfg)) : _prefsPut('pushCfg', cfg); }
   }
+});
+
+// ★브라우저가 푸시 구독을 회전/만료시키면(pushsubscriptionchange) 앱이 닫혀 있어도 SW가
+//   저장해둔 VAPID 공개키·userId로 즉시 재구독 + 서버에 재등록 → 푸시가 조용히 죽지 않게 한다.
+function _b64ToU8(b64) {
+  const pad = '='.repeat((4 - b64.length % 4) % 4);
+  const s = (b64 + pad).replace(/-/g, '+').replace(/_/g, '/');
+  const raw = atob(s); const out = new Uint8Array(raw.length);
+  for (let i = 0; i < raw.length; i++) out[i] = raw.charCodeAt(i);
+  return out;
+}
+self.addEventListener('pushsubscriptionchange', e => {
+  e.waitUntil((async () => {
+    try {
+      const cfg = await _prefsGet('pushCfg', null);
+      if (!cfg || !cfg.publicKey || !cfg.userId) return;
+      const sub = await self.registration.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: _b64ToU8(cfg.publicKey) });
+      await fetch('/api/push-subscribe', { method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ userId: cfg.userId, subscription: sub.toJSON ? sub.toJSON() : sub }) });
+    } catch (err) { /* 다음 앱 실행 시 subscribePush 가 복구 */ }
+  })());
 });
