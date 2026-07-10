@@ -1,446 +1,88 @@
-import { detectSmartIntent, getSmartContextForMessage } from "../lib/place-weather-utils.js";
-import { saveJsonToDrive, readJsonFromDrive, listJsonFromDrive, buildDriveContextForChat } from "../lib/drive-utils.js";
-import { buildMemoryContext, saveMemory as saveMemoryAzure } from "../lib/memory-db.mjs";
-// Stella GPT 답변 라우팅(루트 / 전용, body.route 게이트). 다른 앱(ABAP/Codex)은 미전송 → 영향 없음.
-import { wantsTable, buildSystemPrompt as routeSystemPrompt, extractText } from "../lib/router.mjs";
-// 이미지 직접 분석(vision): API별 올바른 이미지 블록 + 비전모델 보장 (포맷 불일치 회귀 방지).
-import { visionImageBlock, ensureVisionModel, parseDataUrl } from "../lib/vision-format.mjs";
-// 메모리는 사용자별 민감정보 → 인증 토큰이 있으면 그 uid 로 스코프(없으면 기존 동작 유지: 핵심 챗 비차단).
+// api/chat.js — Stella GPT / ABAP / Codex 공용 채팅 엔드포인트.
+//
+// 이 파일은 라우팅과 응답 조립만 담당한다. 실제 구현은 lib/chat/* 모듈에 있다:
+//   intent.mjs        의도 감지(Drive/GitHub) + 히스토리 트리밍 (순수)
+//   system-prompt.mjs 시스템 프롬프트 조립 (순수)
+//   weather.mjs       날씨 직접 응답(Open-Meteo, 캐시)
+//   github-actions.mjs 레포 self-call 액션
+//   context.mjs       실시간 검색 / Drive 컨텍스트 준비
+//   memory.mjs        장기 메모리 로드·추출·저장
+//   openai-client.mjs OpenAI Responses / Chat Completions + TPM 방어
+//   claude-client.mjs Anthropic Messages
+//   abap-analyze.mjs  대용량 ABAP 청킹 분석
+
 import { getAuthUser } from "../lib/session.js";
-// Stella Codex 비용 표시 전용(bare+wantUsage) — 그 외 호출부는 미사용.
+import { wantsTable, buildSystemPrompt as routeSystemPrompt } from "../lib/router.mjs";
 import { estimateOpenAiCostUsd } from "../lib/openai-pricing.mjs";
-// OpenAI Rate Limit(429/TPM) 방어: 재시도·롤링 예산·토큰추정·모델 다운그레이드(순수 유틸).
+
 import {
-  estimateTokens, estimateMessagesTokens, isRateLimitError, withRateLimitRetry,
-  TpmBudget, safeMaxTokens, shouldChunk, downgradeModel, isDowngradable,
-  friendlyRateLimitMessage,
-} from "../lib/openai-tpm.mjs";
-// 대용량 ABAP 소스 청킹/종합(전체 라인 커버리지 + 중복 제거).
-import { chunkAbapSource, mergeAbapAnalyses, looksLikeAbap } from "../lib/abap-chunk.mjs";
+  trimHistoryByChars, isTpmError, detectDriveIntent, detectGitHubIntent,
+  isWeatherQuery, needsRealtimeSearch, needsWeatherContext, needsSapDriveSearch,
+} from "../lib/chat/intent.mjs";
+import { STELLA_SYSTEM_PROMPT, VFF_PREFIX, buildSystemPrompt } from "../lib/chat/system-prompt.mjs";
+import { handleWeather } from "../lib/chat/weather.mjs";
+import { runGitHubIntent } from "../lib/chat/github-actions.mjs";
+import { prepareSearchContext, searchDriveContext, buildDriveContext, buildDriveReadSummary } from "../lib/chat/context.mjs";
+import {
+  getMemoryPrompt, needsFullMemory, extractMemoryFromConversation, persistExtractedMemory,
+} from "../lib/chat/memory.mjs";
+import { callResponses, streamResponses, callOpenAI } from "../lib/chat/openai-client.mjs";
+import { callClaude, isClaudeModelName } from "../lib/chat/claude-client.mjs";
+import { analyzeAbapInChunks, shouldChunkAbap } from "../lib/chat/abap-analyze.mjs";
 
-// ───────── OpenAI TPM 설정 (조직 한도; 티어 상승 시 env로 상향) ─────────
-// Tier 1 gpt-4.1 TPM = 30,000. 배포 환경변수로 재정의 가능(코드 방어는 티어와 무관하게 유지).
-const OPENAI_TPM_LIMIT = Math.max(4000, Number(process.env.OPENAI_TPM_LIMIT) || 30000);
-const OPENAI_MAX_RETRIES = Math.max(1, Number(process.env.OPENAI_MAX_RETRIES) || 6);
-// gpt-4.1은 mini보다 TPM 한도가 낮다 → 롤링 예산은 gpt-4.1 기준으로 잡는다(가장 빡빡한 경계).
-const tpmBudget = new TpmBudget({ limit: OPENAI_TPM_LIMIT, windowMs: 60000, safety: 0.85 });
-const sleep = (ms) => new Promise((r) => setTimeout(r, Math.max(0, ms)));
+// 하위 호환: 다른 라우트(api/cc/*, api/codex/agent.js)와 테스트가 이 경로에서 import 한다.
+export { detectDriveIntent, trimHistoryByChars, isTpmError };
 
-// OpenAI Responses API + web_search 호출 (실시간 질문). 응답 contract(text)는 호출부에서 유지.
-async function callResponses({ model, system, history, message, images = [], search = false }) {
-  const apiKey = process.env.OPENAI_API_KEY;
-  if (!apiKey) throw new Error("OPENAI_API_KEY not configured");
-  const input = [];
-  for (const m of (Array.isArray(history) ? history : []).slice(-12)) {
-    input.push({ role: m.role === "assistant" ? "assistant" : "user", content: String(m.content || "") });
-  }
-  const imgs = (Array.isArray(images) ? images : []).filter((u) => u && String(u).startsWith("data:"));
-  if (imgs.length) {
-    // Responses API 정확한 이미지 블록(input_image + 문자열 image_url). 공유 util로 포맷 일치 보장.
-    const blocks = imgs.map((u) => { const { base64, mediaType } = parseDataUrl(u); return visionImageBlock({ api: "responses", base64, mediaType }); });
-    input.push({ role: "user", content: [{ type: "input_text", text: String(message || "") }, ...blocks] });
-  } else {
-    input.push({ role: "user", content: String(message || "") });
-  }
-  // 이미지가 있으면 비전 가능 모델 보장(텍스트전용이면 gpt-4o로 교체).
-  const visModel = ensureVisionModel(model, imgs.length > 0, "openai");
-  const bodyObj = { model: visModel, instructions: system, input };
-  // ★ 직접 비전 우선: 이미지가 있으면 web_search 툴을 붙이지 않는다(툴 흐름으로 빠져 거부/빈응답 → OCR 폴백되는 문제 차단).
-  if (search && !imgs.length) bodyObj.tools = [{ type: "web_search" }];
-  const ctrl = new AbortController();
-  // web_search는 응답이 길어질 수 있음 → 290초 상한으로 무한 대기/좀비 연결 방지.
-  const timer = setTimeout(() => ctrl.abort(), 290000);
-  try {
-    const r = await fetch("https://api.openai.com/v1/responses", {
-      method: "POST",
-      headers: { "Content-Type": "application/json", Authorization: `Bearer ${apiKey}` },
-      body: JSON.stringify(bodyObj),
-      signal: ctrl.signal,
-    });
-    if (!r.ok) throw new Error(`OpenAI ${r.status}: ${(await r.text()).slice(0, 300)}`);
-    return extractText(await r.json());
-  } finally { clearTimeout(timer); }
+// 이미지 base64 합산 상한 — 초과 시 비전 호출 전에 한국어로 안내(본문/비전 토큰 한도 초과 방지).
+const MAX_IMAGE_BYTES = 18 * 1024 * 1024;
+const MAX_HISTORY_CHARS = 24000;
+
+// 응답 지연 없이(setImmediate) 대화에서 메모리를 추출·저장한다.
+function scheduleMemoryUpdate({ userId, history, message, answer, isClaudeModel }) {
+  setImmediate(async () => {
+    try {
+      const newItems = await extractMemoryFromConversation({ history, message, answer, isClaudeModel });
+      await persistExtractedMemory(userId, newItems);
+    } catch (e) { console.warn("[Memory] 업데이트 실패:", e.message); }
+  });
 }
 
-// OpenAI Responses API 스트리밍(SSE). onDelta(텍스트조각) 콜백으로 점진 전달, 최종 누적문자열 반환.
-// 실패 시 throw → 호출부(핸들러)가 SSE error 이벤트 전송, 클라는 비스트리밍으로 폴백.
-async function streamResponses({ model, system, history, message, images = [], search = false, onDelta }) {
-  const apiKey = process.env.OPENAI_API_KEY;
-  if (!apiKey) throw new Error("OPENAI_API_KEY not configured");
-  const input = [];
-  for (const m of (Array.isArray(history) ? history : []).slice(-12)) {
-    input.push({ role: m.role === "assistant" ? "assistant" : "user", content: String(m.content || "") });
+// Stella GPT(루트 /) 라우팅 경로: web_search + gpt-4o. 429면 mini → mini+히스토리 축소로 자가 치유.
+async function callRoutedWithTpmFallback(args, timings) {
+  try {
+    return await callResponses({ ...args, model: "gpt-4o" });
+  } catch (e) {
+    if (!isTpmError(e)) throw e;
+    timings.tpmFallback = "gpt-4o-mini";
+    try {
+      return await callResponses({ ...args, model: "gpt-4o-mini" });
+    } catch (e2) {
+      if (!isTpmError(e2)) throw e2;
+      timings.tpmFallback = "gpt-4o-mini+trim";
+      return await callResponses({ ...args, model: "gpt-4o-mini", history: args.history.slice(-4) });
+    }
   }
-  const imgs = (Array.isArray(images) ? images : []).filter((u) => u && String(u).startsWith("data:"));
-  if (imgs.length) {
-    const blocks = imgs.map((u) => { const { base64, mediaType } = parseDataUrl(u); return visionImageBlock({ api: "responses", base64, mediaType }); });
-    input.push({ role: "user", content: [{ type: "input_text", text: String(message || "") }, ...blocks] });
-  } else {
-    input.push({ role: "user", content: String(message || "") });
-  }
-  const visModel = ensureVisionModel(model, imgs.length > 0, "openai");
-  const bodyObj = { model: visModel, instructions: system, input, stream: true };
-  if (search && !imgs.length) bodyObj.tools = [{ type: "web_search" }];
-  const ctrl = new AbortController();
-  const timer = setTimeout(() => ctrl.abort(), 290000);
+}
+
+// SSE 스트리밍 응답(클라가 stream:true로 opt-in 시에만). 실패해도 클라가 비스트리밍으로 폴백한다.
+async function respondStreaming(res, args) {
+  res.setHeader("Content-Type", "text/event-stream; charset=utf-8");
+  res.setHeader("Cache-Control", "no-cache, no-transform");
+  res.setHeader("X-Accel-Buffering", "no"); // 프록시 버퍼링 방지
   let full = "";
   try {
-    const r = await fetch("https://api.openai.com/v1/responses", {
-      method: "POST",
-      headers: { "Content-Type": "application/json", Authorization: `Bearer ${apiKey}` },
-      body: JSON.stringify(bodyObj),
-      signal: ctrl.signal,
+    full = await streamResponses({
+      ...args,
+      model: "gpt-4o",
+      onDelta: (d) => { try { res.write(`data: ${JSON.stringify({ delta: d })}\n\n`); } catch (e) {} },
     });
-    if (!r.ok) throw new Error(`OpenAI ${r.status}: ${(await r.text()).slice(0, 200)}`);
-    if (!r.body) throw new Error("no stream body");
-    const dec = new TextDecoder();
-    let buf = "";
-    for await (const chunk of r.body) {
-      buf += dec.decode(chunk, { stream: true });
-      let idx;
-      while ((idx = buf.indexOf("\n\n")) >= 0) {
-        const ev = buf.slice(0, idx); buf = buf.slice(idx + 2);
-        const dl = ev.split("\n").find((l) => l.startsWith("data:"));
-        if (!dl) continue;
-        const js = dl.slice(5).trim();
-        if (!js || js === "[DONE]") continue;
-        let o; try { o = JSON.parse(js); } catch { continue; }
-        if (o.type === "response.output_text.delta" && typeof o.delta === "string") {
-          full += o.delta; if (onDelta) onDelta(o.delta);
-        } else if (o.type === "response.error" || o.error) {
-          throw new Error((o.error && o.error.message) || "stream error");
-        }
-      }
-    }
-    return full;
-  } finally { clearTimeout(timer); }
-}
-
-// 이미지 base64 전송을 위해 body 크기 제한 상향
-// ───────── 시스템 프롬프트 ─────────
-const STELLA_SYSTEM_PROMPT = `You are Stella GPT, KH's personal AI workspace assistant. Reply in Korean.
-
-[RESPONSE FORMAT - MANDATORY, NO EXCEPTIONS]
-EVERY response MUST follow this exact structure:
-1. One-line summary (결론 한 줄)
-2. Markdown table if there are 2+ items (반드시 표)
-3. Max 2 lines of additional notes if needed
-
-FORBIDDEN in default mode:
-- Numbered lists with 5+ items
-- Multiple ## headings
-- Long paragraphs
-- Saying "I cannot access" - just do it or give the link
-
-ALLOWED only when user says "자세히", "설명해줘", "왜", "상세히":
-- Detailed prose explanation
-
-[EXECUTION RULES]
-- "해줘/수정해줘/정리해줘" → execute immediately, show result only
-- GitHub: server auto-calls /api/github-read and /api/github-update
-- Weather: call API directly, never say "cannot provide"
-- No off-topic answers
-
-[MAP LINKS]
-- 국내: [카카오맵](https://map.kakao.com/link/search/장소명)
-- 해외: [Google Maps](https://maps.google.com/?q=장소명)
-
-[REPO] yesblue0342-bit/stella-ai-workspace | main file: index.html
-[KH] SAP QM/PP consultant, Celltrion BISON project, novelist/poet/rapper/martial artist`;
-
-// ───────── TPM(분당 토큰) 가드 ─────────
-// 첨부 히스토리 + Drive 컨텍스트가 겹치면 요청이 40K+ 토큰으로 불어나
-// TPM 한도가 낮은 조직(gpt-4o 30K)에서 429 "Request too large"가 났다.
-// ① 히스토리 문자 총량을 최근 우선으로 제한, ② 429 시 한도 넉넉한 gpt-4o-mini 로 1회 자동 재시도.
-export function trimHistoryByChars(history, maxChars = 24000) {
-  const h = Array.isArray(history) ? history : [];
-  let total = 0;
-  const out = [];
-  for (let i = h.length - 1; i >= 0; i--) {
-    const len = String(h[i]?.content || "").length;
-    if (out.length && total + len > maxChars) break; // 최소 1개(최신)는 유지
-    total += len;
-    out.unshift(h[i]);
+    try { res.write(`data: ${JSON.stringify({ done: true })}\n\n`); } catch (e) {}
+  } catch (e) {
+    const msg = String((e && e.message) || e || "stream error").replace(/sk-[A-Za-z0-9_-]{12,}/g, "***").slice(0, 200);
+    try { res.write(`data: ${JSON.stringify({ error: msg })}\n\n`); } catch (e2) {}
   }
-  return out;
-}
-// OpenAI 429/TPM 초과 에러인가 (자동 폴백 대상 판별)
-export function isTpmError(err) {
-  const m = String((err && err.message) || err || "");
-  return /\b429\b|tokens per min|Request too large|rate[ _-]?limit/i.test(m);
-}
-
-// ───────── Drive 의도 감지 (정밀) ─────────
-// ⚠️ 과거엔 영어 'drive' 부분 문자열('driver'/'driven'/'OneDrive')과 '아무 줄이나 #로 시작'
-//    (마크다운 제목, 파이썬/셸 주석, C '#include')에도 발동해 무관한 Drive 전체 스캔 +
-//    최대 28K자 무관 내용 주입 + web_search 비활성화가 일어났다.
-//    → 명시적 의도(한국어 '드라이브', 'my/google drive' 단어, Drive/Docs 링크, '#명령' 규약)만 인식.
-export function detectDriveIntent(message) {
-  const raw = String(message || "");
-  const msg = raw.toLowerCase();
-  if (/내 드라이브|드라이브/.test(raw)) return true;                       // 한국어는 기존 UX 유지
-  if (/\b(?:my|google)\s*drive\b|\bgdrive\b/.test(msg)) return true;      // 영어는 수식어+단어 경계 필수
-  if (/drive\.google\.com|docs\.google\.com/.test(msg)) return true;      // 공유 링크
-  if (/#폴더/.test(raw)) return true;
-  // '#폴더명' 명령 규약: '#'+비공백으로 시작하는 짧은 줄만.
-  // '# 제목'(공백), '##…', '#!'(셔뱅), C/전처리 지시문, 80자 초과 줄은 본문으로 간주.
-  for (const l of raw.split(/\r?\n/)) {
-    const t = l.trim();
-    if (!/^#[^#\s!]/.test(t)) continue;
-    if (/^#(?:include|define|pragma|if|ifdef|ifndef|endif|else|elif|error|undef|region|endregion)\b/i.test(t)) continue;
-    if (t.length > 80) continue;
-    return true;
-  }
-  return false;
-}
-
-// ───────── GitHub 의도 감지 (정밀) ─────────
-// ⚠️ 일반 업무 질문(예: "이 부분 스펙 정리해줘. SAP QM CBO프로그램")이 관리 액션으로
-//    오인되어 "auth 폴더 정리 완료" 같은 엉뚱한 답을 반환하던 버그 수정.
-//    → 아주 명시적인 관리자 명령일 때만 액션으로 처리하고, 그 외는 전부 AI가 답하게 한다.
-function detectGitHubIntent(message) {
-  const raw = String(message || "");
-  const m = raw.toLowerCase();
-
-  // auth 폴더 정리 — 반드시 'auth' 뒤에 '폴더/cleanup' 이 붙은 명시 명령일 때만.
-  // ('author'·'OAuth'·'정리' 단독 등 흔한 단어에는 절대 걸리지 않게)
-  const authCmd = /auth[\s_-]*(폴더|cleanup|클린업)/.test(m) || m.includes("auth-cleanup") || m.includes("auth cleanup");
-  if (authCmd && /(정리|cleanup|클린업|clean)/.test(m)) {
-    return { type: "auth_cleanup" };
-  }
-
-  // 파일 읽기/수정 — 대상이 '레포 코드 파일'(.html/.js/.json 등)일 때만.
-  //   SAP/업무 파일(.abap/.pdf/.xlsx/.txt 등)이나 파일명이 없으면 일반 질문 → AI가 답한다.
-  const isRepoFile = (p) => /\.(html?|m?jsx?|tsx?|json|css|md|ya?ml|sh|py|env|toml)$/i.test(String(p));
-  const readMatch = raw.match(/(?:읽어|불러|확인해|조회해|보여줘)[^\n]*?([a-zA-Z0-9_\-\/]+\.[a-zA-Z]{2,6})/);
-  if (readMatch && isRepoFile(readMatch[1])) return { type: "read", path: readMatch[1] };
-  const updateMatch = raw.match(/(?:수정|고쳐|변경|커밋|배포)[^\n]*?([a-zA-Z0-9_\-\/]+\.[a-zA-Z]{2,6})/);
-  if (updateMatch && isRepoFile(updateMatch[1])) return { type: "update_intent", path: updateMatch[1] };
-
-  // GitHub 상태 확인 — 'github' 명시가 있을 때만.
-  if (m.includes("github") && (m.includes("확인") || m.includes("연결") || m.includes("상태"))) {
-    return { type: "github_status" };
-  }
-  return null;
-}
-
-// ───────── GitHub API 호출 ─────────
-// 같은 서버의 다른 /api 라우트를 호출(self-call). OCI 단일 서버라 기본은 루프백.
-// 외부 도메인이 필요하면 PUBLIC_BASE_URL 로 오버라이드.
-function selfBase() {
-  return (process.env.PUBLIC_BASE_URL || `http://127.0.0.1:${process.env.PORT || 8970}`).replace(/\/+$/, "");
-}
-
-async function callGitHubRead(path) {
-  const r = await fetch(`${selfBase()}/api/github-read?path=${encodeURIComponent(path)}`);
-  return r.json();
-}
-
-async function callGitHubUpdate(path, content, commitMsg) {
-  const r = await fetch(`${selfBase()}/api/github-update`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ path, content, message: commitMsg })
-  });
-  return r.json();
-}
-
-async function callAuthCleanup() {
-  const r = await fetch(`${selfBase()}/api/auth-cleanup`, { method: "POST" });
-  return r.json();
-}
-
-// ───────── 날씨 직접 처리 (Open-Meteo - 무료, 한국 완벽 지원) ─────────
-const KR_CITIES = {
-  "송도":{lat:37.3823,lng:126.6569},"인천":{lat:37.4563,lng:126.7052},
-  "서울":{lat:37.5665,lng:126.9780},"강남":{lat:37.5172,lng:127.0473},
-  "성남":{lat:37.4200,lng:127.1265},"판교":{lat:37.3947,lng:127.1112},
-  "수원":{lat:37.2636,lng:127.0286},"부산":{lat:35.1796,lng:129.0756},
-  "대전":{lat:36.3504,lng:127.3845},"대구":{lat:35.8714,lng:128.6014},
-  "광주":{lat:35.1595,lng:126.8526},"울산":{lat:35.5384,lng:129.3114},
-  "제주":{lat:33.4890,lng:126.4983},"익산":{lat:35.9483,lng:126.9576},
-  "전주":{lat:35.8242,lng:127.1480},"청주":{lat:36.6424,lng:127.4890},
-  "천안":{lat:36.8151,lng:127.1139},"포항":{lat:36.0190,lng:129.3435},
-  "창원":{lat:35.2280,lng:128.6811},"고양":{lat:37.6584,lng:126.8320},
-  "용인":{lat:37.2411,lng:127.1776},"평택":{lat:36.9921,lng:127.1128},
-  "분당":{lat:37.3595,lng:127.1051},"일산":{lat:37.6761,lng:126.7769},
-  "의정부":{lat:37.7382,lng:127.0337},"연수구":{lat:37.4108,lng:126.6780},
-};
-
-function wmoToKr(code) {
-  const map = {
-    0:"맑음",1:"대체로 맑음",2:"부분적으로 흐림",3:"흐림",
-    45:"안개",48:"안개(서리)",
-    51:"가벼운 이슬비",53:"이슬비",55:"짙은 이슬비",
-    61:"가벼운 비",63:"비",65:"폭우",
-    71:"가벼운 눈",73:"눈",75:"폭설",77:"싸라기눈",
-    80:"소나기(약)",81:"소나기",82:"폭우 소나기",
-    95:"뇌우",96:"우박 뇌우",99:"폭우 뇌우"
-  };
-  return map[code] || "정보없음";
-}
-
-// 날씨 자연어 요약 생성
-function buildWeatherSummary(w) {
-  const parts = [];
-  // 기온 표현
-  const t = Number(w.temp);
-  let tempPhrase = "";
-  if (t >= 30) tempPhrase = "매우 더운 날씨";
-  else if (t >= 25) tempPhrase = "더운 편";
-  else if (t >= 20) tempPhrase = "따뜻한 날씨";
-  else if (t >= 15) tempPhrase = "선선한 날씨";
-  else if (t >= 10) tempPhrase = "쌀쌀한 날씨";
-  else if (t >= 5) tempPhrase = "추운 편";
-  else if (t >= 0) tempPhrase = "추운 날씨";
-  else tempPhrase = "매우 추운 날씨";
-
-  const feelGap = Math.abs(Number(w.feels) - t);
-  const feelNote = feelGap >= 3 ? `(체감은 ${Number(w.feels)>t?'더 높음':'더 낮음'})` : "";
-
-  parts.push(`현재 ${w.desc} 상태로 ${tempPhrase}입니다${feelNote?' '+feelNote:''}.`);
-
-  // 우산
-  if (Number(w.precip) >= 50) parts.push("☔ **우산을 꼭 챙기세요.**");
-  else if (Number(w.precip) >= 30) parts.push("☔ 우산을 챙기는 것을 권장합니다.");
-
-  // 바람
-  if (Number(w.wind) >= 10) parts.push("🌬 바람이 강하니 주의하세요.");
-
-  // UV
-  if (Number(w.uv) >= 8) parts.push("☀️ 자외선이 매우 강합니다. 선크림과 모자를 챙기세요.");
-  else if (Number(w.uv) >= 6) parts.push("☀️ 자외선이 강한 편입니다.");
-
-  // 습도
-  if (Number(w.humid) >= 80) parts.push("💧 습도가 높아 무더울 수 있습니다.");
-  else if (Number(w.humid) <= 30) parts.push("🏜 공기가 건조하니 수분 섭취에 유의하세요.");
-
-  return `> ${parts.join(' ')}`;
-}
-
-async function handleWeather(message) {
-  // 위치명 추출
-  const locMatch = message.match(/([가-힣]{2,10}(?:시|구|군|동|읍|면|도)?)/);
-  const locationName = locMatch ? locMatch[1] : "송도";
-  const isDomestic = /[가-힣]/.test(locationName);
-
-  // 1) 좌표 확보
-  let lat = null, lng = null, resolvedName = locationName;
-  for (const [city, coord] of Object.entries(KR_CITIES)) {
-    if (locationName.includes(city) || city.includes(locationName)) {
-      lat = coord.lat; lng = coord.lng; resolvedName = city;
-      break;
-    }
-  }
-
-  // 2) Google Places 지오코딩 폴백
-  if (!lat || !lng) {
-    const key = process.env.GOOGLE_WEATHER_API_KEY || process.env.GOOGLE_MAPS_API_KEY;
-    if (key) {
-      try {
-        const geoRes = await fetch("https://places.googleapis.com/v1/places:searchText", {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            "X-Goog-Api-Key": key,
-            "X-Goog-FieldMask": "places.displayName,places.location"
-          },
-          body: JSON.stringify({ textQuery: locationName, languageCode: "ko" })
-        });
-        const geoData = await geoRes.json();
-        const place = geoData.places?.[0];
-        if (place?.location) {
-          lat = place.location.latitude;
-          lng = place.location.longitude;
-          resolvedName = place.displayName?.text || locationName;
-        }
-      } catch {}
-    }
-  }
-
-  // 위치 못 찾으면 폴백
-  if (!lat || !lng) {
-    return `**${locationName}** 위치를 찾을 수 없습니다.
-
-[네이버 날씨](https://search.naver.com/search.naver?query=${encodeURIComponent(locationName+" 날씨")}) | [Google 날씨](https://www.google.com/search?q=${encodeURIComponent(locationName+" 날씨")})`;
-  }
-
-  // 3) Open-Meteo API 호출
-  try {
-    const url = new URL("https://api.open-meteo.com/v1/forecast");
-    url.searchParams.set("latitude", String(lat));
-    url.searchParams.set("longitude", String(lng));
-    url.searchParams.set("current", "temperature_2m,relative_humidity_2m,apparent_temperature,is_day,precipitation,weather_code,wind_speed_10m");
-    url.searchParams.set("daily", "weather_code,temperature_2m_max,temperature_2m_min,precipitation_probability_max,uv_index_max");
-    url.searchParams.set("timezone", "Asia/Seoul");
-    url.searchParams.set("forecast_days", "1");
-
-    const r = await fetch(url.toString());
-    if (!r.ok) throw new Error("status " + r.status);
-    const w = await r.json();
-    const cur = w.current || {};
-    const daily = w.daily || {};
-
-    // 날씨 코드 → 한국어
-    const wmo = {0:"맑음",1:"대체로 맑음",2:"부분적으로 흐림",3:"흐림",45:"안개",48:"서리 안개",51:"가벼운 이슬비",53:"이슬비",55:"강한 이슬비",61:"약한 비",63:"비",65:"강한 비",71:"약한 눈",73:"눈",75:"강한 눈",80:"약한 소나기",81:"소나기",82:"강한 소나기",95:"천둥번개",96:"천둥번개+우박"};
-    const desc = wmo[cur.weather_code] || "정보 없음";
-    const isDay = cur.is_day === 1;
-
-    const temp = cur.temperature_2m?.toFixed(1) ?? "-";
-    const feels = cur.apparent_temperature?.toFixed(1) ?? "-";
-    const humid = cur.relative_humidity_2m ?? "-";
-    const windSpeed = cur.wind_speed_10m?.toFixed(1) ?? "-";
-    const tempMax = daily.temperature_2m_max?.[0]?.toFixed(1) ?? "-";
-    const tempMin = daily.temperature_2m_min?.[0]?.toFixed(1) ?? "-";
-    const precip = daily.precipitation_probability_max?.[0] ?? 0;
-    const uv = daily.uv_index_max?.[0]?.toFixed(1) ?? "-";
-
-    const umbrella = precip >= 60 ? "🌂 우산 필수" : precip >= 30 ? "☔ 우산 챙기면 좋음" : "☀️ 우산 불필요";
-    const uvDesc = Number(uv) >= 8 ? "매우 높음" : Number(uv) >= 6 ? "높음" : Number(uv) >= 3 ? "보통" : "낮음";
-    const humidDesc = Number(humid) > 70 ? "높음" : Number(humid) < 40 ? "건조" : "보통";
-    const windDesc = Number(windSpeed) > 10 ? "강풍 주의" : Number(windSpeed) > 5 ? "바람 있음" : "약함";
-
-    const mapLink = isDomestic
-      ? `[네이버 날씨](https://search.naver.com/search.naver?query=${encodeURIComponent(resolvedName+" 날씨")})`
-      : `[Google 날씨](https://www.google.com/search?q=${encodeURIComponent(resolvedName+" weather")})`;
-
-    return [
-      `**${resolvedName} 현재 날씨** — ${isDay?"☀️":"🌙"} ${desc}`,
-      ``,
-      buildWeatherSummary({resolvedName,desc,temp,feels,humid,wind:windSpeed,precip,uv,umbrella,windDesc,uvDesc,humidDesc}),
-      ``,
-      `| 항목 | 값 | 비고 |`,
-      `|---|---|---|`,
-      `| 🌡 기온 | ${temp}°C | 체감 ${feels}°C |`,
-      `| 📊 최고/최저 | ${tempMax}°C / ${tempMin}°C | 오늘 |`,
-      `| 💧 습도 | ${humid}% | ${humidDesc} |`,
-      `| 🌬 바람 | ${windSpeed}m/s | ${windDesc} |`,
-      `| 🌧 강수확률 | ${precip}% | ${umbrella} |`,
-      `| ☀️ UV 지수 | ${uv} | ${uvDesc} |`,
-      ``,
-      `${mapLink}`
-    ].join("\n");
-  } catch(e) {
-    return `**${resolvedName} 날씨** API 일시 오류\n\n[네이버 날씨](https://search.naver.com/search.naver?query=${encodeURIComponent(resolvedName+" 날씨")})`;
-  }
-}
-
-// ───────── 메인 핸들러 ─────────
-// ── G1 성능: 메모리 프롬프트 워밍 캐시 + 구간 타이밍 ──
-// warm 서버리스 인스턴스 내 반복 요청에서 Azure SQL/Drive 메모리 fetch를 제거(가장 큰 반복 병목).
-const _memCache = new Map(); // userId -> { prompt, ts }
-const MEM_TTL_MS = 60000;
-function invalidateMemoryCache(userId) { _memCache.delete(userId); }
-async function getMemoryPrompt(userId, needsFullMemory) {
-  const e = _memCache.get(userId);
-  if (e && (Date.now() - e.ts) < MEM_TTL_MS) return { prompt: e.prompt, cached: true };
-  let memoryPrompt = await buildMemoryContext(userId);        // Azure SQL 우선
-  if (!memoryPrompt) {                                         // 빈값이면 Drive 폴백
-    const memory = await loadMemory(userId, needsFullMemory);
-    memoryPrompt = memoryToPrompt(memory);
-  }
-  _memCache.set(userId, { prompt: memoryPrompt || "", ts: Date.now() });
-  return { prompt: memoryPrompt || "", cached: false };
+  try { res.end(); } catch (e) {}
+  return full;
 }
 
 export default async function handler(req, res) {
@@ -450,215 +92,104 @@ export default async function handler(req, res) {
   try {
     const body = req.body || {};
     const message = String(body.message || "");
-    let aiMessage = message;
-    let actualDriveContext = null;
-    // TPM(분당 토큰) 절약: 히스토리(첨부 텍스트 포함) 문자 총량을 최근 우선으로 제한 —
+    // TPM 절약: 히스토리(첨부 텍스트 포함) 문자 총량을 최근 우선으로 제한 —
     // 첨부·Drive 컨텍스트가 겹치면 요청이 40K+ 토큰으로 불어 429가 나던 문제의 1차 가드.
-    const history = trimHistoryByChars(Array.isArray(body.history) ? body.history : [], 24000);
+    const history = trimHistoryByChars(Array.isArray(body.history) ? body.history : [], MAX_HISTORY_CHARS);
     const model = body.model || "gpt-4.1-mini";
     const system = body.system || STELLA_SYSTEM_PROMPT;
     const images = Array.isArray(body.images) ? body.images.slice(0, 4) : [];
     // 인증 토큰이 있으면 메모리 스코프를 토큰 uid 로 강제(타인 메모리 접근 차단). 없으면 기존 값 폴백(비차단).
-    const _authUser = getAuthUser(req);
-    const userId = (_authUser && _authUser.uid) || String(body.userId || body.user_id || "").trim() || "anonymous";
+    const authUser = getAuthUser(req);
+    const userId = (authUser && authUser.uid) || String(body.userId || body.user_id || "").trim() || "anonymous";
 
-    // STEP E: 용량 가드 — 이미지 base64 합산이 너무 크면(본문/비전 토큰 한도 초과) 직접 비전 전에 한국어 안내.
-    //   프론트가 이미 1568px/JPEG로 다운스케일하므로 정상 첨부는 통과. 신규 청크 업로드는 만들지 않는다.
+    // 프론트가 이미 1568px/JPEG로 다운스케일하므로 정상 첨부는 통과.
     const imgBytes = images.reduce((a, u) => a + (typeof u === "string" ? u.length : 0), 0);
-    if (imgBytes > 18 * 1024 * 1024) {
+    if (imgBytes > MAX_IMAGE_BYTES) {
       return res.status(200).json({ ok: true, provider: "vision-guard",
         text: "첨부 이미지 용량이 너무 큽니다(합산 ~18MB 초과). 캡쳐를 더 작게(텍스트 위주로 잘라서) 다시 올리거나, 이미지를 1~2장으로 줄여 주세요." });
     }
 
-    // ── G1: 구간별 타이밍(병목 특정용). 응답 timings + 서버 로그로 남김 ──
-    const _t0 = Date.now();
+    // ── 구간별 타이밍(병목 특정용). 응답 timings + 서버 로그로 남김 ──
+    const t0 = Date.now();
     const timings = {};
-    const mark = (k) => { timings[k] = Date.now() - _t0; };
+    const mark = (k) => { timings[k] = Date.now() - t0; };
+
     // 메모리 로드를 검색/Drive와 병렬로 선(先)착수 (userId만 의존, 결과는 아래에서 await)
-    const needsFullMemoryEarly = history.length === 0
-      || /기억|메모리|이전|내 정보|나에 대해|알고 있|히스토리/.test(message.toLowerCase());
-    const _memStart = Date.now();
-    const memoryPromise = getMemoryPrompt(userId, needsFullMemoryEarly)
-      .then(r => { timings.memoryMs = Date.now() - _memStart; timings.memoryCached = r.cached; return r.prompt; })
-      .catch(() => { timings.memoryMs = Date.now() - _memStart; return ""; });
+    const memStart = Date.now();
+    const memoryPromise = getMemoryPrompt(userId, needsFullMemory(history, message))
+      .then((r) => { timings.memoryMs = Date.now() - memStart; timings.memoryCached = r.cached; return r.prompt; })
+      .catch(() => { timings.memoryMs = Date.now() - memStart; return ""; });
 
-    // ① 날씨 직접 처리
-    const weatherKw = ["날씨","기온","우산","weather","forecast"];
-    if (weatherKw.some(w => message.toLowerCase().includes(w))) {
+    // ① 날씨 직접 처리 (모델 호출 없음)
+    if (isWeatherQuery(message)) {
       const weatherResult = await handleWeather(message);
-      if (weatherResult) {
-        return res.status(200).json({ ok: true, text: weatherResult, provider: "weather" });
-      }
+      if (weatherResult) return res.status(200).json({ ok: true, text: weatherResult, provider: "weather" });
     }
 
-    // ② GitHub 직접 실행
-    const ghIntent = detectGitHubIntent(message);
-    if (ghIntent) {
-      try {
-        if (ghIntent.type === "auth_cleanup") {
-          const r = await callAuthCleanup();
-          const text = r.ok
-            ? `✅ auth 폴더 정리 완료\n| 항목 | 내용 |\n|---|---|\n| 정리된 폴더 | ${r.message || "완료"} |\n| 유지된 폴더 ID | ${r.kept || "-"} |`
-            : `❌ 정리 실패: ${r.error || r.message}`;
-          return res.status(200).json({ ok: true, text, provider: "github" });
-        }
-        if (ghIntent.type === "read") {
-          const r = await callGitHubRead(ghIntent.path);
-          const preview = r.content ? r.content.slice(0, 500) : (r.error || "읽기 실패");
-          const text = `📄 **${ghIntent.path}** 파일 내용 (앞 500자)\n\`\`\`\n${preview}\n\`\`\``;
-          return res.status(200).json({ ok: true, text, provider: "github" });
-        }
-        if (ghIntent.type === "github_status") {
-          const r = await callGitHubRead("package.json");
-          const text = r.content
-            ? `✅ GitHub 연결 정상\n| 항목 | 상태 |\n|---|---|\n| 저장소 | yesblue0342-bit/stella-ai-workspace |\n| Read | ✅ |\n| Commit | ✅ (GITHUB_TOKEN 등록됨) |\n| 자동배포 | ✅ (GitHub Actions → OCI) |`
-            : `❌ GitHub 연결 실패: ${r.error || "토큰 확인 필요"}`;
-          return res.status(200).json({ ok: true, text, provider: "github" });
-        }
-      } catch (ghErr) {
-        // GitHub 실패 시 AI로 폴백
-      }
-    }
+    // ② GitHub 직접 실행 (실패하면 null → AI 폴백)
+    const githubText = await runGitHubIntent(detectGitHubIntent(message));
+    if (githubText) return res.status(200).json({ ok: true, text: githubText, provider: "github" });
 
-    // ③ 일반 AI 처리 - 키워드 기반 조건부 실행 (속도 최적화)
-    const msg = message.toLowerCase();
-
-    // [웹검색/날씨] 키워드가 있을 때만 실행
-    const needsSearch  = /구글|검색|최신|뉴스|오늘|지금|현재|실시간/.test(msg);
-    const needsWeather = /날씨|기온|우산|비|눈|더위|추위|forecast|weather/.test(msg);
+    // ③ 일반 AI 처리 — 키워드 게이트로 불필요한 외부 호출 제거
     // skipDrive: 클라이언트(gpt.html 분석 플로우 등)가 이미 Drive 내용을 읽어 message에 넣은 경우
     // 서버가 같은 폴더를 중복으로 다시 읽지 않게 하는 opt-in 플래그.
-    const needsDrive   = body.skipDrive === true ? false : detectDriveIntent(message);
-    const needsSapSearch = /sap|qa32|qm|pp|abap|inspection|bom|migo|mb51|검사|품질|공정|자재|트랜잭션/.test(msg);
+    const needsDrive = body.skipDrive === true ? false : detectDriveIntent(message);
 
-    // 웹/날씨 검색 (조건부)
     let searchContext = { used: false };
-    if (needsSearch || needsWeather) {
-      try { searchContext = await prepareSearchContext(message); } catch(e) {}
+    if (needsRealtimeSearch(message) || needsWeatherContext(message)) {
+      try { searchContext = await prepareSearchContext(message); } catch (e) {}
     }
 
-    // Drive 파일 읽기 (경로 지시어 있을 때만)
+    let aiMessage = message;
     let driveContext = null;
+    let actualDriveContext = null;
     if (needsDrive) {
-      try {
-        actualDriveContext = await buildDriveContextForChat(message);
-        if (actualDriveContext?.prompt) {
-          // Drive 파일 내용이 너무 크면 context 초과 방지를 위해 28,000자로 truncate
-          let driveContent = actualDriveContext.prompt;
-          if (driveContent.length > 28000) {
-            driveContent = driveContent.slice(0, 28000) + "\n\n⚠️ 파일이 너무 커서 앞부분(28,000자)만 분석합니다. 전체 내용은 파일 링크로 열어보세요.";
-          }
-          aiMessage = message + driveContent;
-          const readNames = (actualDriveContext.files||[]).filter(f=>f.read).map(f=>f.name);
-          const unreadNames = (actualDriveContext.files||[]).filter(f=>!f.read).map(f=>f.name);
-          driveContext = [
-            `선택 경로: ${actualDriveContext.path}`,
-            `실제로 읽은 파일(${readNames.length}개): ${readNames.join(", ")||"없음"}`,
-            `읽지 못한 파일: ${unreadNames.join(", ")||"없음"}`
-          ].join("\n");
-          // 파일을 하나도 못 읽었으면 명시
-          if(readNames.length === 0){
-            driveContext += "\n\n⚠️ 읽은 파일이 0개입니다. 절대 내용을 지어내지 말고 파일을 읽지 못했다고 답하세요.";
-          }
-        } else {
-          // buildDriveContextForChat가 null 반환 = 경로 인식 실패
-          driveContext = `⚠️ Drive 경로를 인식하지 못했습니다 (입력: "${String(message).slice(0,50)}"). 내용을 지어내지 말고, 정확한 폴더명으로 다시 시도하라고 안내하세요.`;
-        }
-      } catch(driveErr) {
-        aiMessage = message + `\n\n[STELLA_GOOGLE_DRIVE_READ_ERROR]\n${driveErr.message}\n[/STELLA_GOOGLE_DRIVE_READ_ERROR]\n\nDrive 파일 내용을 읽지 못했습니다.`;
-        driveContext = `Drive 읽기 오류: ${driveErr.message}`;
-      }
-    }
-
-    // SAP/업무 키워드 있을 때만 Drive 검색 (최대 3개 요약)
-    if (!driveContext && needsSapSearch) {
+      ({ aiMessage, driveContext, actualDriveContext } = await buildDriveContext(message));
+    } else if (needsSapDriveSearch(message)) {
       driveContext = await searchDriveContext(message);
     }
-
     mark("contextMs"); // 검색+Drive 구간 종료 시점
 
-    // ④ 메모리 로드 — 위에서 검색/Drive와 병렬 착수한 promise를 여기서 회수(추가 대기 최소화)
-    // 메모리: Azure SQL 우선 → 빈값이면 Drive 폴백. warm 캐시(60s)로 반복 요청 fetch 제거.
+    // ④ 메모리 회수 — 위에서 병렬 착수한 promise (추가 대기 최소화)
     const memoryPrompt = await memoryPromise;
-    mark("preModelMs"); // 모델 호출 직전까지 총 준비 시간
+    mark("preModelMs");
     // 정적 시스템 프롬프트를 앞에, 자주 바뀌는 메모리를 뒤에 배치 —
     // 프롬프트 프리픽스가 안정되어 제공자측 자동 프롬프트 캐싱에 유리하고, 지시문이 항상 먼저 온다.
-    const prompt = buildSystemPrompt(
-      system + (memoryPrompt ? "\n\n" + memoryPrompt : ""),
-      searchContext,
-      driveContext
-    );
-    
+    const prompt = buildSystemPrompt(system + (memoryPrompt ? "\n\n" + memoryPrompt : ""), searchContext, driveContext);
+
     // 모델 기반으로 API 완전 분리 (Claude 선택 시 OpenAI 절대 미호출)
-    const isClaudeModel = model.toLowerCase().includes("claude") || model.toLowerCase().includes("fable");
-    // Stella GPT(루트 /) 라우팅: body.route 일 때만. 실시간 질문→web_search+gpt-4o, 일반→gpt-4o-mini.
-    const routed = !!body.route && !isClaudeModel;
+    const isClaudeModel = isClaudeModelName(model);
+    const routed = !!body.route && !isClaudeModel; // Stella GPT(루트 /)만 body.route 전송
     let answer;
     let provider;
-    let usageInfo = null; // Stella Codex(bare+wantUsage) 전용 — 다른 호출부는 항상 null(응답 필드 미추가)
-    const _modelStart = Date.now();
+    let usageInfo = null; // Stella Codex(bare+wantUsage) 전용 — 그 외 호출부는 항상 null
+    const modelStart = Date.now();
+
     if (routed) {
       const wantTable = wantsTable(message);
-      // 메모리 노드(kh_memory) + Drive 컨텍스트는 extra 로 합쳐 보존. 표는 온디맨드.
+      // 메모리 노드 + Drive 컨텍스트는 extra 로 합쳐 보존. 표는 온디맨드.
       // 검색 게이트 제거: web_search를 항상 제공해 모델이 필요할 때 검색(맛집·장소·실시간 정확도 ↑, 환각 제거).
       const routeSys = routeSystemPrompt({ table: wantTable, extra: [memoryPrompt, driveContext].filter(Boolean).join("\n\n") });
-      // #구글드라이브/드라이브 명령은 web_search보다 우선 → 그땐 검색 미제공(Drive 내용으로 답). 그 외엔 항상 web_search.
+      // #드라이브 명령은 web_search보다 우선 → 그땐 검색 미제공(Drive 내용으로 답). 그 외엔 항상 web_search.
       const useSearch = !needsDrive;
+      const callArgs = { system: routeSys, history, message: aiMessage, images, search: useSearch };
       provider = useSearch ? "openai-search" : "openai";
-      // ── 스트리밍(SSE): 클라가 stream:true로 opt-in 시에만. 실패해도 클라가 비스트리밍으로 폴백 → 현재 동작 보존.
+
       if (body.stream === true) {
-        res.setHeader("Content-Type", "text/event-stream; charset=utf-8");
-        res.setHeader("Cache-Control", "no-cache, no-transform");
-        res.setHeader("X-Accel-Buffering", "no"); // 프록시 버퍼링 방지
-        let full = "";
-        try {
-          full = await streamResponses({ model: "gpt-4o", system: routeSys, history, message: aiMessage, images, search: useSearch,
-            onDelta: (d) => { try { res.write(`data: ${JSON.stringify({ delta: d })}\n\n`); } catch (e) {} } });
-          try { res.write(`data: ${JSON.stringify({ done: true })}\n\n`); } catch (e) {}
-        } catch (e) {
-          const msg = String((e && e.message) || e || "stream error").replace(/sk-[A-Za-z0-9_-]{12,}/g, "***").slice(0, 200);
-          try { res.write(`data: ${JSON.stringify({ error: msg })}\n\n`); } catch (e2) {}
-        }
-        try { res.end(); } catch (e) {}
-        // 메모리 업데이트(스트리밍 종료 후, 비동기)
-        setImmediate(async () => {
-          try {
-            const ni = await extractMemoryFromConversation({ model, history, message: aiMessage, answer: full, isClaudeModel: false });
-            if (ni && Object.values(ni).some((a) => Array.isArray(a) && a.length > 0)) await updateMemory(userId, ni, false);
-          } catch (e) {}
-        });
+        const full = await respondStreaming(res, callArgs);
+        scheduleMemoryUpdate({ userId, history, message: aiMessage, answer: full, isClaudeModel: false });
         return;
       }
-      try {
-        answer = await callResponses({ model: "gpt-4o", system: routeSys, history, message: aiMessage, images, search: useSearch });
-      } catch (e) {
-        if (!isTpmError(e)) throw e;
-        // TPM 한도 초과(429) → 한도가 훨씬 넉넉한 gpt-4o-mini 로 자동 재시도(내용 보존, 자가 치유).
-        // 그래도 초과하면 히스토리를 최근 4개로 줄여 마지막 재시도.
-        timings.tpmFallback = "gpt-4o-mini";
-        try {
-          answer = await callResponses({ model: "gpt-4o-mini", system: routeSys, history, message: aiMessage, images, search: useSearch });
-        } catch (e2) {
-          if (!isTpmError(e2)) throw e2;
-          timings.tpmFallback = "gpt-4o-mini+trim";
-          answer = await callResponses({ model: "gpt-4o-mini", system: routeSys, history: history.slice(-4), message: aiMessage, images, search: useSearch });
-        }
-      }
+      answer = await callRoutedWithTpmFallback(callArgs, timings);
       timings.routed = true; timings.searchAlways = useSearch; timings.driveFirst = needsDrive; timings.tableUsed = wantTable;
     } else if (isClaudeModel) {
       provider = "claude";
-      const _vff = body.vff === true;
-      const _vffPrefix = 'VFF 모드: Fable 5 수준의 품질로 응답하라. 단계적 사고, 구체적 근거, 명확한 구조를 갖추되 불필요한 반복을 제거한다.';
-      const _finalPrompt = _vff ? _vffPrefix + '\n\n' + prompt : prompt;
-      answer = await callClaude({ model, system: _finalPrompt, history, message: aiMessage, images });
+      const finalPrompt = body.vff === true ? VFF_PREFIX + "\n\n" + prompt : prompt;
+      answer = await callClaude({ model, system: finalPrompt, history, message: aiMessage, images });
     } else {
       provider = "openai";
-      const wantUsage = !!body.bare && !!body.wantUsage; // Stella Codex 비용 표시 전용 — 그 외 호출부는 기존 문자열 반환 그대로
-      // ── 대용량 ABAP 청킹 게이트: (1) 입력이 안전마진(TPM 60%) 초과 & (2) ABAP 코드성 텍스트 & (3) Drive 문서 Q&A 아님.
-      //     일반 문서 Q&A를 조각내면 답이 깨지므로 게이트를 좁게 잡는다(회귀 방지).
-      const estIn = estimateTokens(prompt) + estimateTokens(aiMessage)
-        + (Array.isArray(history) ? history.reduce((a, m) => a + estimateTokens(m && m.content), 0) : 0);
-      const useChunking = !needsDrive && shouldChunk(estIn, { limit: OPENAI_TPM_LIMIT }) && looksLikeAbap(aiMessage);
+      const wantUsage = !!body.bare && !!body.wantUsage; // Stella Codex 비용 표시 전용
+      const { use: useChunking } = shouldChunkAbap({ system: prompt, message: aiMessage, history, isDriveQuery: needsDrive });
       if (useChunking) {
         const chunked = await analyzeAbapInChunks({ model, system: prompt, question: message, payload: aiMessage, images });
         answer = chunked.text;
@@ -675,53 +206,21 @@ export default async function handler(req, res) {
         }
       }
     }
-    timings.modelMs = Date.now() - _modelStart;
-    timings.totalMs = Date.now() - _t0;
-    try { console.log("[chat timings]", provider, model, JSON.stringify(timings)); } catch(e) {}
+    timings.modelMs = Date.now() - modelStart;
+    timings.totalMs = Date.now() - t0;
+    try { console.log("[chat timings]", provider, model, JSON.stringify(timings)); } catch (e) {}
 
     // ⑤ 메모리 업데이트 (비동기 - 응답 지연 없음)
-    setImmediate(async () => {
-      try {
-        const newItems = await extractMemoryFromConversation({
-          model, history, message: aiMessage, answer, isClaudeModel
-        });
-        if (newItems && Object.values(newItems).some(a => Array.isArray(a) && a.length > 0)) {
-          await updateMemory(userId, newItems, isClaudeModel); // Drive(폴백 보존)
-          invalidateMemoryCache(userId); // 새 메모리 반영 위해 워밍 캐시 무효화
-          // Azure SQL에도 기록(우선 백엔드). 각 항목을 메모리 행으로 dedupe 저장. graceful.
-          try {
-            for (const [cat, arr] of Object.entries(newItems)) {
-              if (!Array.isArray(arr)) continue;
-              for (const item of arr) {
-                const t = typeof item === "string" ? item : (item && (item.text || item.memory_text));
-                if (t && String(t).trim()) await saveMemoryAzure(userId, { memory_text: String(t).trim(), category: cat, source: "ai_inferred" });
-              }
-            }
-          } catch (e2) {}
-        }
-      } catch(e) { console.warn("[Memory] 업데이트 실패:", e.message); }
-    });
-    
+    scheduleMemoryUpdate({ userId, history, message: aiMessage, answer, isClaudeModel });
+
     return res.status(200).json({
       ok: true,
       text: answer,
       provider,
       timings,
       searchContext,
-      driveRead: actualDriveContext ? {
-        path: actualDriveContext.path,
-        files: (actualDriveContext.files || []).map(f => ({
-          id: f.id,
-          name: f.name,
-          mimeType: f.mimeType,
-          read: !!f.read,
-          error: f.error || "",
-          link: f.link || (f.id ? ((f.isFolder || f.mimeType === "application/vnd.google-apps.folder")
-            ? `https://drive.google.com/drive/folders/${f.id}`
-            : `https://drive.google.com/file/d/${f.id}/view`) : "")
-        }))
-      } : null,
-      ...(usageInfo ? { usage: usageInfo.usage, costUsd: estimateOpenAiCostUsd(usageInfo.model, usageInfo.usage) } : {})
+      driveRead: buildDriveReadSummary(actualDriveContext),
+      ...(usageInfo ? { usage: usageInfo.usage, costUsd: estimateOpenAiCostUsd(usageInfo.model, usageInfo.usage) } : {}),
     });
   } catch (error) {
     // 어떤 예외에서도 JSON 반환(프런트 safeJson 호환). 타임아웃/중단은 504 + 안내, 그 외 500.
@@ -735,421 +234,3 @@ export default async function handler(req, res) {
     });
   }
 }
-
-// Drive StellaGPT 폴더 검색 (SAP/업무 관련 질문 시)
-async function searchDriveContext(message) {
-  try {
-    const msg = String(message || "").toLowerCase();
-    const driveKw = ["sap","qa32","qm","pp","abap","inspection","lot","bom","mr21","migo","mb51","검사","품질","공정","자재","트랜잭션"];
-    if (!driveKw.some(k => msg.includes(k))) return null;
-    const { searchDrive } = await import("../lib/drive-utils.js");
-    // searchDrive는 {folder, files} 객체를 반환 — 배열로 다루면 length가 undefined라 항상 null이 되어
-    // SAP 키워드 Drive 컨텍스트가 무음 실패하던 버그 수정.
-    const result = await searchDrive(message, { scope: "StellaGPT", pageSize: 5 }).catch(() => null);
-    const files = Array.isArray(result?.files) ? result.files : [];
-    if (!files.length) return null;
-    return files.slice(0, 3)
-      .map(f => `[Drive:${f.name}] ${f.webViewLink || ""}${f.modifiedTime ? ` (수정 ${String(f.modifiedTime).slice(0, 10)})` : ""}`)
-      .join("\n");
-  } catch { return null; }
-}
-
-async function prepareSearchContext(message) {
-  try {
-    const smart = detectSmartIntent(message);
-    if (smart === "place" || smart === "weather") {
-      return await getSmartContextForMessage(message);
-    }
-  } catch (error) {
-    return { used: false, error: error.message };
-  }
-  return { used: false };
-}
-
-
-// ═══════════════════════════════════════════════
-// 메모리 노드 시스템 - KH 장기 기억
-// Drive: StellaGPT/memory/{userId}_memory.json
-// ═══════════════════════════════════════════════
-
-const MEMORY_FOLDER = ["memory"];
-const MAX_MEMORY_ITEMS = 50; // 항목별 최대 개수
-
-// 메모리 로드 (기본 파일 + 폴더 내 추가 파일 모두 합치기)
-// memory/ 폴더에 chatgpt_history.json, claude_memory.json 등 추가 파일을 넣으면 자동으로 합쳐짐
-async function loadMemory(userId, fullScan = false) {
-  const base = { userId, facts: [], patterns: [], preferences: [], context: [], updatedAt: null };
-
-  // 1) 기본 메모리 파일 로드
-  try {
-    const data = await readJsonFromDrive({
-      folderPath: MEMORY_FOLDER,
-      fileName: `${userId}_memory`
-    });
-    if (data) {
-      base.facts = Array.isArray(data.facts) ? data.facts : [];
-      base.patterns = Array.isArray(data.patterns) ? data.patterns : [];
-      base.preferences = Array.isArray(data.preferences) ? data.preferences : [];
-      base.context = Array.isArray(data.context) ? data.context : [];
-      base.updatedAt = data.updatedAt || null;
-    }
-  } catch(e) {}
-
-  // 2) 폴더 내 추가 파일들 스캔 (fullScan=true 일 때만 - 속도 최적화)
-  // 기본은 {userId}_memory.json 하나만 읽고, 필요할 때만 폴더 전체 스캔
-  if (!fullScan) return base;
-  try {
-    const files = await listJsonFromDrive({ folderPath: MEMORY_FOLDER, pageSize: 50 });
-    for (const f of files) {
-      const fname = f.name.replace(/\.json$/i, "");
-      // 기본 파일은 이미 읽었으므로 스킵
-      if (fname === `${userId}_memory`) continue;
-      try {
-        const ext = await readJsonFromDrive({ folderPath: MEMORY_FOLDER, fileName: fname });
-        if (!ext || !ext.data) continue;
-        const d = ext.data;
-        // 형식 1: {facts:[], patterns:[], preferences:[], context:[]} - 표준 형식
-        if (Array.isArray(d.facts))       base.facts       = [...base.facts,       ...d.facts];
-        if (Array.isArray(d.patterns))    base.patterns    = [...base.patterns,    ...d.patterns];
-        if (Array.isArray(d.preferences)) base.preferences = [...base.preferences, ...d.preferences];
-        if (Array.isArray(d.context))     base.context     = [...base.context,     ...d.context];
-        // 형식 2: {memories: [...]} - ChatGPT 메모리 export 형식
-        if (Array.isArray(d.memories)) {
-          base.facts = [...base.facts, ...d.memories.map(m => typeof m === "string" ? m : (m.memory || m.text || JSON.stringify(m)))];
-        }
-        // 형식 3: {items: [...]} or {entries: [...]} - 기타 형식
-        if (Array.isArray(d.items))   base.facts = [...base.facts,   ...d.items.map(m => typeof m === "string" ? m : JSON.stringify(m))];
-        if (Array.isArray(d.entries)) base.facts = [...base.facts, ...d.entries.map(m => typeof m === "string" ? m : JSON.stringify(m))];
-        // 형식 4: 단순 문자열 배열
-        if (Array.isArray(d) && d.every(x => typeof x === "string")) base.facts = [...base.facts, ...d];
-        console.log(`[Memory] 추가 파일 로드: ${fname}`);
-      } catch(e2) {}
-    }
-  } catch(e) {}
-
-  // 중복 제거 + MAX 적용
-  const dedup = arr => [...new Set(arr.filter(Boolean))].slice(-MAX_MEMORY_ITEMS);
-  base.facts       = dedup(base.facts);
-  base.patterns    = dedup(base.patterns);
-  base.preferences = dedup(base.preferences);
-  base.context     = dedup(base.context);
-
-  return base;
-}
-
-// 메모리 저장
-async function saveMemory(userId, memory) {
-  try {
-    await saveJsonToDrive({
-      folderPath: MEMORY_FOLDER,
-      fileName: `${userId}_memory`,
-      data: { ...memory, updatedAt: new Date().toISOString() }
-    });
-  } catch(e) { console.warn("[Memory] 저장 실패:", e.message); }
-}
-
-// 대화에서 기억할 정보 추출 (AI 활용)
-async function extractMemoryFromConversation({ model, history, message, answer, isClaudeModel }) {
-  try {
-    const recentConv = [
-      ...history.slice(-6).map(m => `${m.role === "assistant" ? "Stella" : "KH"}: ${String(m.content||"").slice(0,200)}`),
-      `KH: ${String(message||"").slice(0,300)}`,
-      `Stella: ${String(answer||"").slice(0,300)}`
-    ].join("\n");
-
-    const extractPrompt = `다음 대화에서 KH(사용자)에 대해 기억할 가치 있는 정보를 JSON으로 추출하세요.
-추출 기준:
-- facts: KH의 확실한 사실 (직업, 프로젝트, 위치, 가족 등)
-- patterns: 반복되는 질문 패턴이나 업무 방식
-- preferences: 선호도 (답변 형식, 관심사, 좋아하는 것)
-- context: 현재 진행 중인 업무나 관심사
-
-없으면 빈 배열. 새 정보만 추출 (기존과 중복 제외).
-반드시 JSON만 반환:
-{"facts":[],"patterns":[],"preferences":[],"context":[]}
-
-대화:
-${recentConv}`;
-
-    let extracted;
-    if (isClaudeModel) {
-      const r = await fetch("https://api.anthropic.com/v1/messages", {
-        method: "POST",
-        headers: { "Content-Type": "application/json", "x-api-key": process.env.ANTHROPIC_API_KEY, "anthropic-version": "2023-06-01" },
-        body: JSON.stringify({ model: "claude-haiku-4-5-20251001", max_tokens: 512, system: "JSON only.", messages: [{ role:"user", content: extractPrompt }] })
-      });
-      const d = await r.json();
-      extracted = JSON.parse(d.content?.[0]?.text || "{}");
-    } else {
-      const r = await fetch("https://api.openai.com/v1/chat/completions", {
-        method: "POST",
-        headers: { "Content-Type": "application/json", Authorization: `Bearer ${process.env.OPENAI_API_KEY}` },
-        body: JSON.stringify({ model: "gpt-4o-mini", temperature: 0, max_tokens: 512, response_format: { type: "json_object" },
-          messages: [{ role:"system", content:"JSON only." }, { role:"user", content: extractPrompt }] })
-      });
-      const d = await r.json();
-      extracted = JSON.parse(d.choices?.[0]?.message?.content || "{}");
-    }
-    return extracted;
-  } catch(e) { console.warn("[Memory] 추출 실패:", e.message); return null; }
-}
-
-// 메모리 업데이트 (중복 제거 + 최대 개수 유지)
-async function updateMemory(userId, newItems, isClaudeModel) {
-  const memory = await loadMemory(userId);
-  const now = new Date().toISOString();
-  
-  const addUnique = (arr, newArr, maxN) => {
-    if (!Array.isArray(newArr) || !newArr.length) return arr;
-    const existing = new Set(arr.map(x => String(x).toLowerCase().trim()));
-    const filtered = newArr.filter(x => x && !existing.has(String(x).toLowerCase().trim()));
-    return [...arr, ...filtered].slice(-maxN);
-  };
-
-  if (newItems) {
-    memory.facts = addUnique(memory.facts, newItems.facts, MAX_MEMORY_ITEMS);
-    memory.patterns = addUnique(memory.patterns, newItems.patterns, 30);
-    memory.preferences = addUnique(memory.preferences, newItems.preferences, 30);
-    memory.context = addUnique(memory.context, newItems.context, 20);
-  }
-  
-  await saveMemory(userId, memory);
-  return memory;
-}
-
-// 메모리를 시스템 프롬프트용 텍스트로 변환
-function memoryToPrompt(memory) {
-  if (!memory) return "";
-  const parts = [];
-  if (memory.facts?.length) parts.push(`[KH 알려진 사실]\n${memory.facts.slice(-15).map(f=>"• "+f).join("\n")}`);
-  if (memory.preferences?.length) parts.push(`[KH 선호도]\n${memory.preferences.slice(-10).map(f=>"• "+f).join("\n")}`);
-  if (memory.context?.length) parts.push(`[현재 업무 맥락]\n${memory.context.slice(-8).map(f=>"• "+f).join("\n")}`);
-  if (memory.patterns?.length) parts.push(`[질문 패턴]\n${memory.patterns.slice(-8).map(f=>"• "+f).join("\n")}`);
-  if (!parts.length) return "";
-  const updated = memory.updatedAt ? `(${memory.updatedAt.slice(0,10)} 기준)` : "";
-  return `[=== KH 장기 메모리 ${updated} ===]\n${parts.join("\n\n")}\n[=== 메모리 끝 ===]`;
-}
-
-function buildSystemPrompt(system, searchContext, driveContext) {
-  let prompt = system;
-  // 다운로드/복사 능력 고지 — 모델이 '기능 없음'이라 거절하지 않게(앱이 모든 답변에 자동으로 버튼 부착).
-  prompt += `\n\n[다운로드/복사] 이 앱은 당신의 모든 답변(표든 산문·목록이든, 길이와 무관하게)에 Excel·Word·PDF·PPT·TXT·Markdown 다운로드 버튼과 표·URL 복사 버튼을 자동으로 붙여줍니다. 이미 항상 제공되므로 '다운로드/엑셀/PDF 기능이 없다'거나 '직접 복사해서 붙여넣으라'는 말을 절대 하지 마세요. 그냥 요청받은 내용을 정상적으로 작성하면 됩니다. 표를 요청받으면 마크다운 표(첫 행을 헤더로, 헤더 다음 줄에 |---| 구분선 필수)로 정리하세요. ★표를 절대 코드블록(\`\`\`)으로 감싸지 마세요 — 표가 깨져 보입니다. 표는 본문에 직접 쓰세요. ★당신은 파일을 직접 만들거나 전달하거나 나중에 보낼 수 없습니다 — '파일을 준비하겠습니다', '잠시만 기다려 주세요', '파일을 준비했습니다' 같은 거짓 약속을 절대 하지 마세요. 파일 요청엔 요청된 내용 전체를 지금 이 답변 본문에 즉시 작성하세요.`;
-  if (searchContext?.used && searchContext.context) {
-    prompt += `\n\n[실시간 컨텍스트]\n${searchContext.context}`;
-  }
-  if (driveContext) {
-    prompt += `\n\n[Google Drive 실제 파일 내용]\n${driveContext}`;
-    prompt += `\n\n[★ 절대 규칙 - Google Drive 응답]\n`
-      + `1. 위 "실제로 읽은 파일" 목록에 있는 파일만 근거로 답하세요.\n`
-      + `2. 파일을 하나도 읽지 못했거나 "읽기 오류"가 있으면, 절대 내용을 지어내지 말고 다음과 같이 답하세요: "해당 경로에서 파일을 읽지 못했습니다. 폴더명이 정확한지, Stella DB에 파일이 있는지 확인해 주세요."\n`
-      + `3. 파일명(예: 개발_계획.docx, 기능_명세서.xlsx 같은 가상의 파일)을 추측해서 만들어내면 절대 안 됩니다.\n`
-      + `4. 예시 표나 가상의 데이터를 만들지 마세요. 실제 읽은 내용이 없으면 없다고 하세요.`;
-  }
-  return prompt;
-}
-
-function resolveOpenAIModel(model) {
-  const m = String(model || "").toLowerCase().trim();
-  if (m.includes("5.5") || m === "chatgpt-5.5-latest") return "gpt-4o";
-  if (m === "gpt-5") return "gpt-4o";
-  if (m === "gpt-4.1") return "gpt-4.1";
-  if (m === "gpt-4.1-mini") return "gpt-4.1-mini";
-  if (m === "gpt-4o") return "gpt-4o";
-  if (m === "gpt-4o-mini") return "gpt-4o-mini";
-  return "gpt-4o";
-}
-
-const CLAUDE_MODELS = {
-  "claude-fable-5": "claude-fable-5",
-  "claude-opus-4-8": "claude-opus-4-8",
-  "claude-opus-4-7": "claude-opus-4-7",
-  "claude-opus-4-6": "claude-opus-4-6",
-  "claude-sonnet-4-6": "claude-sonnet-4-6",
-  "claude-haiku-4-5-20251001": "claude-haiku-4-5-20251001"
-};
-
-function resolveClaudeModel(model) {
-  const m = String(model || "").toLowerCase().trim();
-  if (CLAUDE_MODELS[m]) return CLAUDE_MODELS[m];
-  if (m.includes("fable")) return "claude-fable-5";
-  if (m.includes("opus")) {
-    if (m.includes("4.8") || m.includes("4-8")) return "claude-opus-4-8";
-    if (m.includes("4.7") || m.includes("4-7")) return "claude-opus-4-7";
-    if (m.includes("4.6") || m.includes("4-6")) return "claude-opus-4-6";
-    return "claude-opus-4-8";
-  }
-  if (m.includes("haiku")) return "claude-haiku-4-5-20251001";
-  if (m.includes("sonnet")) return "claude-sonnet-4-6";
-  if (m.includes("claude")) return "claude-sonnet-4-6";
-  return "claude-sonnet-4-6";
-}
-
-async function callOpenAI({ model, system, history, message, images = [], bare = false, returnUsage = false, onRetry = null }) {
-  const apiKey = process.env.OPENAI_API_KEY;
-  if (!apiKey) throw new Error("OPENAI_API_KEY not configured");
-  const imgs = (Array.isArray(images) ? images : []).filter(u => u && String(u).startsWith("data:"));
-  // 이미지가 있으면 비전 가능 모델 보장(gpt-4.1-mini 등은 비전 지원이라 유지).
-  const selectedModel = ensureVisionModel(resolveOpenAIModel(model), imgs.length > 0, "openai");
-  // bare=true(예: Stella Codex 코딩 어시스턴트)는 "[표+요약]" 강제 형식 프리픽스를 생략
-  const pfx = bare ? "" : "[표+요약 형식으로 답변] ";
-  // ★ 정적 system 프롬프트를 항상 messages[0]에 고정 → OpenAI 자동 prompt caching 히트율 ↑(반복 토큰 절감).
-  const messages = [
-    { role: "system", content: system },
-    ...history.slice(-12).map(m => ({ role: m.role === "assistant" ? "assistant" : "user", content: String(m.content || "") })),
-    { role: "user", content: imgs.length > 0
-      ? [{ type:"text", text:pfx+String(message||"") },
-         ...imgs.map(u=>{ const { base64, mediaType } = parseDataUrl(u); const b = visionImageBlock({ api:"chat", base64, mediaType }); b.image_url.detail = "auto"; return b; })]
-      : pfx+String(message||"") }
-  ];
-
-  // 입력 토큰 사전 추정. TPM은 입력+출력 합산 과금이므로, 예산이 빡빡할 때만 max_tokens(출력)를 조인다.
-  // 예산에 여유가 충분하면 max_tokens를 붙이지 않아 기존 동작(긴 출력 완결)을 그대로 보존한다(회귀 방지).
-  const estIn = estimateMessagesTokens(messages);
-  const budgetRoom = tpmBudget.cap() - estIn;             // 안전예산에서 입력 뺀 출력 여유
-  const CONSTRAIN_BELOW = 8192;                            // 여유가 이 미만일 때만 출력 상한 적용
-  const maxTokens = budgetRoom < CONSTRAIN_BELOW
-    ? safeMaxTokens(estIn, { limit: OPENAI_TPM_LIMIT, safety: 0.85, desired: 4096, floor: 512 })
-    : null;                                                // null = max_tokens 미지정(기존 동작)
-  const outBudget = maxTokens || 4096;                     // 롤링 예산 예측용 출력 근사
-  // 입력만으로 gpt-4.1 예산에 근접하면 처음부터 mini로 시작(mini는 TPM 한도가 훨씬 넉넉).
-  const startTooBig = shouldChunk(estIn, { limit: OPENAI_TPM_LIMIT }) && isDowngradable(selectedModel);
-
-  let usedModel = selectedModel;
-  const doCall = async (attempt) => {
-    // 429가 2회 이상 반복되거나, 애초에 입력이 큰 경우 → mini로 다운그레이드(내용 보존, 자가 치유).
-    usedModel = ((attempt >= 2 || startTooBig) && isDowngradable(selectedModel))
-      ? downgradeModel(selectedModel) : selectedModel;
-    // 롤링 TPM 예산: 최근 60초 누적이 한도에 가까우면 오래된 토큰이 빠질 때까지 선제 대기(429 발생 전 회피).
-    const waitMs = Math.min(30000, tpmBudget.waitMsFor(estIn + outBudget));
-    if (waitMs > 0) await sleep(waitMs);
-
-    const reqBody = { model: usedModel, temperature: 0.1, messages };
-    if (maxTokens != null) reqBody.max_tokens = maxTokens;
-    const response = await fetch("https://api.openai.com/v1/chat/completions", {
-      method: "POST",
-      headers: { "Content-Type": "application/json", Authorization: `Bearer ${apiKey}` },
-      body: JSON.stringify(reqBody)
-    });
-    const data = await response.json().catch(() => ({}));
-    if (!response.ok) {
-      const e = new Error(data?.error?.message || `OpenAI API error ${response.status}`);
-      e.status = response.status;
-      e.headers = response.headers; // Retry-After 파싱용
-      throw e;
-    }
-    // 실제 소비 토큰을 롤링 예산에 기록(다음 요청 throttle 정확도 ↑). usage 없으면 추정치로.
-    tpmBudget.record((data.usage && data.usage.total_tokens) || (estIn + outBudget));
-    let text = data.choices?.[0]?.message?.content || "응답 없음";
-    // max_tokens로 잘린 경우(예산이 빡빡해 출력 상한을 건 상황)엔 완결처럼 반환하지 않고 이어쓰기 안내.
-    if (maxTokens != null && data.choices?.[0]?.finish_reason === "length") {
-      text += "\n\n⚠️ 답변이 길이 제한으로 잘렸습니다. \"이어서 계속\"이라고 입력하면 이어서 작성합니다.";
-    }
-    return { text, usage: data.usage || null, model: usedModel };
-  };
-
-  let result;
-  try {
-    result = await withRateLimitRetry(doCall, {
-      maxRetries: OPENAI_MAX_RETRIES, capMs: 60000, baseMs: 1000, sleep,
-      onRetry: (info) => { try { onRetry && onRetry(info); } catch (_) {} },
-    });
-  } catch (e) {
-    // raw 429는 사용자에게 노출하지 않는다 — 친화 메시지로 치환(핸들러 catch가 그대로 전달).
-    if (isRateLimitError(e)) throw new Error(friendlyRateLimitMessage(e));
-    throw e;
-  }
-  // returnUsage=true(Stella Codex 비용 표시용)일 때만 객체 반환 — 다른 호출부는 기존 문자열 반환 그대로(회귀 없음).
-  if (returnUsage) return { text: result.text, usage: result.usage, model: result.model };
-  return result.text;
-}
-
-// 대용량 ABAP 소스를 청크로 나누어 각 청크를 분석하고 결과를 종합한다(전체 라인 커버리지 + 429 방어).
-// question: 사용자 질문(짧음), payload: 분석 대상 전체 텍스트(질문+소스 결합). 각 청크 호출은
-// callOpenAI 내부의 재시도·롤링예산·mini 폴백을 그대로 활용한다. images는 첫 청크에만 붙인다.
-async function analyzeAbapInChunks({ model, system, question, payload, images = [], onProgress = null }) {
-  // 청크 입력 목표: 안전예산의 ~40%. 토큰→문자 근사(×3, 보수적) → 출력 여유 확보 + 롤링 윈도우 안전.
-  const maxChars = Math.max(6000, Math.round(OPENAI_TPM_LIMIT * 0.40 * 3));
-  const chunks = chunkAbapSource(payload, { maxChars });
-  if (chunks.length <= 1) {
-    const r = await callOpenAI({ model, system, history: [], message: payload, images, bare: true, returnUsage: true });
-    return { text: r.text, chunks: 1, usage: r.usage, model: r.model };
-  }
-  const results = [];
-  const usage = { prompt_tokens: 0, completion_tokens: 0, total_tokens: 0 };
-  let usedModel = model;
-  for (const ch of chunks) {
-    if (onProgress) { try { onProgress(ch.index + 1, chunks.length); } catch (_) {} }
-    const chunkMsg =
-      `[사용자 질문]\n${question || "이 ABAP 소스의 오류/경고/개선점을 분석하세요."}\n\n` +
-      `[분석 대상 — 청크 ${ch.index + 1}/${chunks.length}, 라인 ${ch.startLine}–${ch.endLine}]\n` +
-      "아래는 대용량 ABAP 소스의 일부입니다. 이 청크에 해당하는 부분만 분석해 " +
-      "오류·경고·성능/개선점을 항목별(- 불릿)로 제시하세요. 다른 청크는 별도로 분석됩니다.\n\n" +
-      "```abap\n" + ch.text + "\n```";
-    const r = await callOpenAI({
-      model, system, history: [], message: chunkMsg,
-      images: ch.index === 0 ? images : [], bare: true, returnUsage: true,
-    });
-    usedModel = r.model || usedModel;
-    results.push({ index: ch.index, total: chunks.length, startLine: ch.startLine, endLine: ch.endLine, text: r.text });
-    if (r.usage) {
-      usage.prompt_tokens += r.usage.prompt_tokens || 0;
-      usage.completion_tokens += r.usage.completion_tokens || 0;
-      usage.total_tokens += r.usage.total_tokens || 0;
-    }
-  }
-  return { text: mergeAbapAnalyses(results), chunks: chunks.length, usage, model: usedModel };
-}
-
-async function callClaude({ model, system, history, message, images = [] }) {
-  const apiKey = process.env.ANTHROPIC_API_KEY;
-  if (!apiKey) throw new Error("ANTHROPIC_API_KEY not configured");
-  const imgs = (Array.isArray(images) ? images : []).filter(u => u && String(u).startsWith("data:"));
-  const selectedModel = ensureVisionModel(resolveClaudeModel(model), imgs.length > 0, "claude");
-  // Anthropic Messages API는 첫 메시지가 user여야 한다(assistant로 시작하면 400).
-  // trimHistoryByChars/slice(-12)가 자른 히스토리는 assistant로 시작할 수 있으므로 선두 assistant 제거.
-  const h = (Array.isArray(history) ? history : []).slice(-12);
-  while (h.length && h[0] && h[0].role === "assistant") h.shift();
-  // 55초 타임아웃 가드 (장기 요청을 우아하게 종료해 좀비 연결 방지)
-  const controller = new AbortController();
-  const timeoutId = setTimeout(() => controller.abort(), 55000);
-  let response;
-  try {
-  response = await fetch("https://api.anthropic.com/v1/messages", {
-    method: "POST",
-    signal: controller.signal,
-    headers: { "Content-Type": "application/json", "x-api-key": apiKey, "anthropic-version": "2023-06-01" },
-    body: JSON.stringify({
-      model: selectedModel,
-      max_tokens: 4096,
-      system,
-      messages: [
-        ...h.map(m => ({ role: m.role === "assistant" ? "assistant" : "user", content: String(m.content || "") })),
-        { role: "user", content: imgs.length > 0
-          ? [...imgs.map(u=>{ const { base64, mediaType } = parseDataUrl(u); return visionImageBlock({ api:"claude", base64, mediaType }); }), { type:"text", text:String(message||"") }]
-          : String(message||"") }
-      ]
-    })
-  });
-  const data = await response.json();
-  if (!response.ok) throw new Error(data.error?.message || "Claude API error");
-  let text = data.content?.map(c => c.text || "").join("\n") || "응답 없음";
-  // max_tokens에서 잘린 답변을 완결된 것처럼 반환하지 않는다 — 사용자에게 이어쓰기 안내.
-  if (data.stop_reason === "max_tokens") {
-    text += "\n\n⚠️ 답변이 최대 길이 제한으로 잘렸습니다. \"이어서 계속\"이라고 입력하면 이어서 작성합니다.";
-  }
-  return text;
-  } catch(e) {
-    if (e.name === "AbortError") throw new Error("응답 시간이 너무 깁니다. 질문을 더 짧게 해주세요.");
-    throw e;
-  } finally {
-    clearTimeout(timeoutId);
-  }
-}
-
-
-
-
-
-
-
-
