@@ -46,3 +46,10 @@ test("buildPushPayload: 기본값/roomId url", () => {
   assert.equal(d.title, "Stella Talk");
   assert.equal(d.url, "/talk");
 });
+
+test("buildPushPayload: senderId 포함(수신 창 자기수신 방어값)", () => {
+  const p = JSON.parse(buildPushPayload({ title: "t", body: "b", roomId: "r1", senderId: "userA" }));
+  assert.equal(p.senderId, "userA");
+  const d = JSON.parse(buildPushPayload({ roomId: "r1" }));
+  assert.equal(d.senderId, "");   // 미지정 시 빈 문자열(수신자는 항상 통과)
+});

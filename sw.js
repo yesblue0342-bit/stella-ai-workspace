@@ -1,10 +1,11 @@
-const CACHE = 'stella-v116';
+const CACHE = 'stella-v117';
+const KEEP_CACHES = [CACHE, 'stella-talk-prefs'];   // prefs(알림모드/뮤트)는 업데이트 때 지우지 않음
 
 self.addEventListener('install', e => self.skipWaiting());
 self.addEventListener('activate', e => {
   e.waitUntil(
     caches.keys().then(keys =>
-      Promise.all(keys.filter(k => k !== CACHE).map(k => caches.delete(k)))
+      Promise.all(keys.filter(k => KEEP_CACHES.indexOf(k) === -1).map(k => caches.delete(k)))
     ).then(() => self.clients.claim())
   );
 });
@@ -53,9 +54,14 @@ self.addEventListener('fetch', e => {
   );
 });
 
-// 클라이언트가 알려주는 휘발성 상태(카톡식 팝업 판단용) — SW 재시작 시 초기화(그 땐 팝업 표시로 폴백)
-let _talkCurrentRoom = '';   // 현재 사용자가 보고 있는 방 (보이는·포커스 창 기준)
+// 클라이언트가 알려주는 상태(카톡식 팝업 판단용). in-memory 는 SW 재시작 시 사라지므로
+// 알림모드/뮤트는 Cache 에도 영속화 → 앱이 완전히 닫힌 상태의 콜드 스타트 푸시도 무음/뮤트를 존중.
+let _talkCurrentRoom = '';   // 현재 사용자가 보고 있는 방 (앱 열려 있을 때만 의미 → 영속화 안 함)
 let _talkMutes = {};         // 방별 알림 끔 { roomId: 1 }
+let _talkNotifyMode = 'sound'; // 전역 알림 모드 sound/vibrate/silent — 무음이면 시스템 팝업 소리 억제
+const PREFS_CACHE = 'stella-talk-prefs';
+async function _prefsPut(key, val){ try{ const c=await caches.open(PREFS_CACHE); await c.put('/__pref/'+key, new Response(JSON.stringify(val))); }catch(e){} }
+async function _prefsGet(key, fallback){ try{ const r=await caches.match('/__pref/'+key); if(r) return JSON.parse(await r.text()); }catch(e){} return fallback; }
 
 self.addEventListener('push', e => {
   let data = { title: 'Stella Talk', body: '새 메시지가 있습니다.' };
@@ -63,19 +69,25 @@ self.addEventListener('push', e => {
   const title = data.title ? ('Stella Talk · ' + data.title) : 'Stella Talk';
   e.waitUntil((async () => {
     const list = await clients.matchAll({ type: 'window', includeUncontrolled: true });
-    // 열린 창에 즉시 전달 → 인앱 사운드(설정한 음성)/토스트/즉시 동기화 (폴링보다 빠름)
-    list.forEach(c => { try { c.postMessage({ type: 'PUSH_MESSAGE', roomId: data.roomId || '', title: data.title || '', body: data.body || '' }); } catch (err) {} });
+    // 열린 창에 즉시 전달 → 인앱 사운드(설정한 음성)/토스트/즉시 동기화 (폴링보다 빠름). senderId=자기수신 방어값.
+    list.forEach(c => { try { c.postMessage({ type: 'PUSH_MESSAGE', roomId: data.roomId || '', senderId: data.senderId || '', title: data.title || '', body: data.body || '' }); } catch (err) {} });
+    // 콜드 스타트 대비: in-memory 가 비어 있으면 영속값으로 복원.
+    const mode = _talkNotifyMode || await _prefsGet('mode', 'sound');
+    const mutes = (Object.keys(_talkMutes).length ? _talkMutes : await _prefsGet('mutes', {})) || {};
     // 카톡 동일: 그 방을 화면에 띄워 보고 있으면 시스템 팝업 생략. 방별 뮤트도 존중.
     const viewing = list.some(c => (c.visibilityState === 'visible') && _talkCurrentRoom && data.roomId && _talkCurrentRoom === data.roomId);
     if (viewing) return;
-    if (data.roomId && _talkMutes[data.roomId]) return;
+    if (data.roomId && mutes[data.roomId]) return;
+    // ★무음 설정: 팝업(배너)은 그대로 띄우되 시스템 알림음/진동만 끈다(silent:true). 사운드/진동 모드는 기존대로.
+    const silent = (mode === 'silent');
     await self.registration.showNotification(title, {
       body: data.body || '새 메시지',
       icon: '/icons/talk-192.png',
       badge: '/icons/talk-192.png',
-      vibrate: [200, 100, 200],
+      vibrate: silent ? [] : [200, 100, 200],
+      silent: silent,
       tag: 'stella-talk-' + (data.roomId || 'msg'),   // 방별 스택(같은 방은 갱신, 다른 방은 별도 팝업)
-      renotify: true,
+      renotify: !silent,
       data: { url: data.url || '/talk', roomId: data.roomId || '' }
     });
   })());
@@ -121,6 +133,7 @@ self.addEventListener('message', e => {
   const d = e.data;
   if (d && typeof d === 'object') {
     if (d.type === 'CURRENT_ROOM') _talkCurrentRoom = d.roomId || '';
-    if (d.type === 'MUTES') _talkMutes = d.mutes || {};
+    if (d.type === 'MUTES') { _talkMutes = d.mutes || {}; e.waitUntil ? e.waitUntil(_prefsPut('mutes', _talkMutes)) : _prefsPut('mutes', _talkMutes); }
+    if (d.type === 'NOTIFY_MODE') { _talkNotifyMode = d.mode || 'sound'; e.waitUntil ? e.waitUntil(_prefsPut('mode', _talkNotifyMode)) : _prefsPut('mode', _talkNotifyMode); }
   }
 });

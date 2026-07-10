@@ -1381,7 +1381,11 @@ function notify(title, body, roomId){
   var shownBody = count>1 ? ('메시지 '+count+'개') : body;
   var tag = 'stella-talk-'+(roomId||'msg');
   var url = '/talk'+(roomId?('?room='+encodeURIComponent(roomId)):'');
-  var opts = { body: shownBody, icon:'/icons/talk-192.png?v=3', badge:'/icons/talk-192.png?v=3', vibrate:[200,100,200], tag:tag, renotify:true, data:{ url:url, roomId:roomId||'' } };
+  // ★소리 정책: 무음모드면 시스템 팝업음 억제(팝업은 유지). 포그라운드면 인앱 사운드(playNotifySound)가
+  //   이미 울리므로 시스템음을 꺼 이중음을 막는다. 백그라운드+소리/진동 모드에서만 시스템 기본음 허용.
+  var _mode=(function(){ try{ return getNotifMode(); }catch(e){ return 'sound'; } })();
+  var _silent = (_mode==='silent') || (document.visibilityState==='visible');
+  var opts = { body: shownBody, icon:'/icons/talk-192.png?v=3', badge:'/icons/talk-192.png?v=3', vibrate:_silent?[]:[200,100,200], silent:_silent, tag:tag, renotify:!_silent, data:{ url:url, roomId:roomId||'' } };
   var full = 'Stella Talk · '+title;
   // 2차 수정: controller는 최초 로드/하드 리로드에서 null → 페이지 Notification 생성자로 빠졌고,
   // 안드로이드 크롬은 페이지 생성자 미지원(Illegal constructor)이라 첫 팝업이 조용히 유실됐다.
@@ -1653,7 +1657,14 @@ function playNotifySound(msgId){
     // ★수신음 = 설정한 음성("스텔라~" 등): 실제 알림에서도 미리듣기와 동일하게 음성 문구를 재생한다.
     //   (기존엔 멜로디만 울려 "띠리링 한 번"으로 끝나던 문제. 포그라운드 한정 — 백그라운드/앱종료는
     //    Web Push 시스템 팝업+알림음이 담당. quiet=true 로 TTS 불가 시 이중 비프 방지)
-    try{ if(document.visibilityState==='visible'){ speakVoice(key, true); } }catch(e){}
+    //   ★키보드 닫힘 수정: 안드로이드 크롬은 speechSynthesis.speak() 가 소프트키보드를 닫는다.
+    //    입력창에 포커스가 있으면(=사용자가 타이핑 중) TTS를 건너뛴다 — 멜로디(WebAudio)는 IME를
+    //    건드리지 않으므로 그대로 재생. 타이핑 중이 아닐 때만 설정 음성을 낭독.
+    try{
+      var _inp=document.getElementById('chatInput');
+      var _typing=(document.activeElement===_inp);
+      if(document.visibilityState==='visible' && !_typing){ speakVoice(key, true); }
+    }catch(e){}
     // 실제 소리 재생 (mp3 우선 → 강화 멜로디).
     function _emit(){
       var mp3=TALK_VOICE_MP3 && TALK_VOICE_MP3[key];
@@ -1678,6 +1689,7 @@ function setNotifyMode(mode){
   saveNotif({mode:mode});
   syncSoundUI();
   unlockAudio();
+  try{ swSyncState(); }catch(e){}   // ★변경 즉시 SW에 모드 반영(무음↔소리 팝업음 억제/해제)
   if(mode==='vibrate'){ try{ if(navigator.vibrate) navigator.vibrate([120,60,120]); }catch(e){} }
   else if(mode==='sound'){ playMelody(getVoiceKey()); }   // 멜로디로 즉시 피드백
 }
@@ -2247,6 +2259,9 @@ function handleFileSelect(files){
   Array.from(files).forEach(function(f){_attachFiles.push(f);});
   renderAttachPreview();
   document.getElementById('fileInput').value='';
+  // ★키보드 유지: 파일 선택(시스템 피커)이 닫히며 포커스가 풀려 자판이 사라지던 문제 →
+  //   입력창에 다시 포커스해 캡션을 바로 이어 칠 수 있게 한다.
+  try{ var inp=document.getElementById('chatInput'); if(inp && !inp.disabled) inp.focus(); }catch(e){}
 }
 function renderAttachPreview(){
   const bar=document.getElementById('attachPreview');
@@ -2451,6 +2466,8 @@ async function sendMsg(){
   }
   // ⑤ 서버 동기화는 1초 후 (서버 반영 시간 확보)
   setTimeout(function(){ syncRoomFromServer(false); }, 1000);
+  // ★키보드 유지: 전송(특히 사진 업로드) 후 입력창 포커스 복원 → 대화를 바로 이어갈 수 있게.
+  try{ if(inp && !inp.disabled) inp.focus(); }catch(e){}
 }
 
 // ── 타이핑 표시 ──
@@ -2896,11 +2913,15 @@ function swSend(msg){ try{ if(navigator.serviceWorker && navigator.serviceWorker
 function swSyncState(){
   swSend({type:'CURRENT_ROOM', roomId:(_cur && !_cur.isMyChat && document.visibilityState==='visible')?_cur.id:''});
   swSend({type:'MUTES', mutes:loadMutes()});
+  swSend({type:'NOTIFY_MODE', mode:getNotifMode()});   // ★무음이면 SW 시스템 팝업 소리 억제(팝업은 유지)
 }
 // ── SW 푸시를 열린 창에서 수신 — 폴링보다 빠른 즉시 반영 + 설정한 음성 재생 ──
 function handlePushMessage(d){
   try{
     var roomId=d.roomId||'';
+    // ★자기수신 방어: 내가 보낸 메시지의 푸시가(타깃 계산 엣지케이스로) 내 창에 돌아와도 소리/토스트 금지.
+    var myId=getMyId();
+    if(d.senderId && myId && String(d.senderId)===String(myId)) return;
     // 목록 폴링의 중복 알림 방지: 이 방의 알림 기준시각을 지금으로 전진
     if(roomId){ _notifyLastAt[roomId]=Date.now(); _saveNotifyAt(); }
     if(_cur && _cur.id===roomId){
