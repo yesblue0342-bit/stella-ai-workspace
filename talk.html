@@ -484,6 +484,8 @@ body.theme-dark .theme-btn.active{background:#1e3a5f}
 <script>
 const SK='stella_talk_rooms_v2';
 const ST='stella_talk_settings_v1';
+// ★자동 업데이트용 빌드 버전 — sw.js 의 CACHE('stella-vNNN')와 반드시 함께 올린다.
+const TALK_BUILD='v119';
 let _rooms=[], _cur=null, _members=[], _inviteMembers=[], _attachFiles=[];
 
 // ── 설정 로드/저장 ──
@@ -1464,13 +1466,14 @@ var TALK_VOICES = {
   'byeolha':   {emoji:'🌟', label:'김별하~',      phrase:'김별하',     rate:1.05, pitch:1.72, melody:[[698.46,0,0.16],[932.33,0.15,0.28]]},                // F5→A#5
   'queen':     {emoji:'👑', label:'앵쥬 왕비님~', phrase:'앵쥬 왕비님',rate:1.0,  pitch:1.55, melody:[[392.00,0,0.22],[523.25,0.22,0.30]]}                  // 낮고 우아한 2음(G4→C5)
 };
-// FIX-LOCK [2] 실제 녹음(mp3) 교체 지점 — key별 mp3 경로를 넣으면 TTS 대신 우선 재생.
-// 예: { s1:'/sounds/stella.mp3', queen:'/sounds/queen.mp3', ... }. 파일 없으면 TTS 폴백.
-// D1: 가족이 녹음한 음성 파일은 public 루트의 /sounds/ 에 두고 아래 경로를 채우면 됨.
-//     (예: 저장소 루트에 sounds/queen.mp3 추가 → Vercel이 /sounds/queen.mp3 로 서빙)
+// ★알림 벨소리 = 실제 음성 파일(서버가 OpenAI TTS로 1회 생성·캐시, /api/talk-voice).
+//   브라우저 TTS는 안드로이드에서 "최근 터치" 없으면 차단 → 수신 시 띠링만 나오고
+//   타이핑 중(방금 터치)에만 음성이 나오던 반대 증상의 근본 해결.
+//   파일 로드 실패(키 미설정 등) 시 Audio.play() 실패 → 멜로디 폴백(무해).
 var TALK_VOICE_MP3 = {
-  's1': null, 's2': null, 'byeolping': null, 'gongju': null, 'byeolha': null,
-  'queen': null  // /sounds/queen.mp3 배치 시 경로 입력
+  's1':'/api/talk-voice?key=s1', 's2':'/api/talk-voice?key=s2',
+  'byeolping':'/api/talk-voice?key=byeolping', 'gongju':'/api/talk-voice?key=gongju',
+  'byeolha':'/api/talk-voice?key=byeolha', 'queen':'/api/talk-voice?key=queen'
 };
 var _voiceAudioCache = {};
 
@@ -1522,7 +1525,16 @@ function pickKoVoice(){
 }
 
 // ★ 첫 사용자 제스처에서 오디오/음성 unlock (자동재생 정책 대응)
+var _voicePreloaded=false;
 function unlockAudio(){
+  // 첫 제스처에서 선택된 알림 음성 파일 프리로드 → 첫 수신부터 즉시 재생
+  if(!_voicePreloaded){
+    _voicePreloaded=true;
+    try{
+      var _vk=getVoiceKey(); var _vu=TALK_VOICE_MP3&&TALK_VOICE_MP3[_vk];
+      if(_vu && !_voiceAudioCache[_vk]){ var _va=new Audio(); _va.preload='auto'; _va.src=_vu; _voiceAudioCache[_vk]=_va; }
+    }catch(e){}
+  }
   if(!_audioCtx){
     try{
       _audioCtx = new (window.AudioContext || window.webkitAudioContext)();
@@ -1660,25 +1672,19 @@ function playNotifySound(msgId){
     // 재생 직전 오디오 unlock 1회 + 큐 깨우기(자동재생 정책 / 다시 안 울림 방지)
     try{ unlockAudio(); }catch(e){}
     var key=getVoiceKey();
-    // ★수신음 = 설정한 음성("스텔라~" 등): 실제 알림에서도 미리듣기와 동일하게 음성 문구를 재생한다.
-    //   (기존엔 멜로디만 울려 "띠리링 한 번"으로 끝나던 문제. 포그라운드 한정 — 백그라운드/앱종료는
-    //    Web Push 시스템 팝업+알림음이 담당. quiet=true 로 TTS 불가 시 이중 비프 방지)
-    //   ★키보드 닫힘 수정: 안드로이드 크롬은 speechSynthesis.speak() 가 소프트키보드를 닫는다.
-    //    입력창에 포커스가 있으면(=사용자가 타이핑 중) TTS를 건너뛴다 — 멜로디(WebAudio)는 IME를
-    //    건드리지 않으므로 그대로 재생. 타이핑 중이 아닐 때만 설정 음성을 낭독.
-    try{
-      var _inp=document.getElementById('chatInput');
-      var _typing=(document.activeElement===_inp);
-      if(document.visibilityState==='visible' && !_typing){ speakVoice(key, true); }
-    }catch(e){}
-    // 실제 소리 재생 (mp3 우선 → 강화 멜로디).
+    // ★수신 벨소리 = 설정한 음성 파일("스텔라~" 등, /api/talk-voice 서버 생성 mp3).
+    //   - 화면 보는 중 + 타이핑 아님 → 음성 파일 재생(실패 시 멜로디 폴백)
+    //   - 타이핑 중 → 짧은 멜로디만(입력 방해/키보드 이슈 방지 — "타이핑 중 스텔라 소리" 불만 해결)
+    //   - 백그라운드 → 멜로디(주 채널은 Web Push 시스템 팝업)
     function _emit(){
       var mp3=TALK_VOICE_MP3 && TALK_VOICE_MP3[key];
-      if(mp3){
+      var _typing=false;
+      try{ _typing=(document.activeElement===document.getElementById('chatInput')); }catch(e){}
+      if(mp3 && !_typing && document.visibilityState==='visible'){
         try{ var a=_voiceAudioCache[key]||(_voiceAudioCache[key]=new Audio(mp3)); a.currentTime=0;
           var p=a.play(); if(p&&p.catch) p.catch(function(){ playMelody(key); }); return; }catch(e){}
       }
-      playMelody(key);   // 주 알림음(강화 멜로디)
+      playMelody(key);   // 타이핑 중/백그라운드/재생 실패: 짧은 멜로디
     }
     // ctx가 suspended면 resume 완료 후 재생(즉시 재생 시 무음 되는 레이스 수정) — #2 소리 안 남
     if(_audioCtx && _audioCtx.state==='suspended'){
@@ -1707,7 +1713,7 @@ function previewSound(key){
   saveNotif({voiceKey:key, mode:'sound'});
   syncSoundUI();
   unlockAudio();
-  playMelody(key);
+  // 실제 수신 벨소리와 동일하게: 음성 파일(mp3) 우선 재생 — speakVoice 가 mp3→TTS→비프 순 폴백
   speakVoice(key);
 }
 
@@ -2963,6 +2969,34 @@ function initTalk(){
   registerPeriodicSync();
   setupPasteImage();     // STAGE 7: 클립보드 이미지 붙여넣기
   setupOnlineOffline();  // STAGE 7: 오프라인 배너 + 복구 시 재동기화/미전송 발송
+  setupAutoUpdate();     // ★새 버전 배포 시 자동 새로고침(수동 '강제 업데이트' 불필요)
+}
+
+// ── 자동 업데이트: 서버 sw.js 의 버전(stella-vNNN)과 내 TALK_BUILD 를 비교, 다르면
+//    안전한 순간(타이핑 중 아님)에 자동 새로고침. 10분마다 + 화면 복귀 시 확인.
+//    (그동안 "고쳐도 폰이 옛 버전"이라 수정이 반영 안 되던 문제의 재발 방지)
+var _lastAutoReloadAt=0;
+function setupAutoUpdate(){
+  async function check(){
+    try{
+      var t=await fetch('/sw.js',{cache:'no-store'}).then(function(r){ return r.ok?r.text():''; });
+      var m=t.match(/stella-(v\d+)/);
+      if(!m || m[1]===TALK_BUILD) return;
+      // 새 버전 발견 — 타이핑 중이면 미루고, 리로드 루프 방지로 10분에 1회만
+      var inp=document.getElementById('chatInput');
+      var typing=(document.activeElement===inp && inp && inp.value);
+      var last=Number(localStorage.getItem('stella_talk_autoreload_at')||0);
+      if(typing || Date.now()-last<10*60*1000){ setTimeout(check, 60*1000); return; }
+      try{ localStorage.setItem('stella_talk_autoreload_at', String(Date.now())); }catch(e){}
+      try{ toast('새 버전으로 업데이트합니다...'); }catch(e){}
+      // SW도 함께 갱신되도록 등록 업데이트 후 리로드
+      try{ if(navigator.serviceWorker){ var reg=await navigator.serviceWorker.getRegistration(); if(reg) await reg.update(); } }catch(e){}
+      setTimeout(function(){ location.reload(); }, 800);
+    }catch(e){}
+  }
+  setInterval(check, 10*60*1000);
+  document.addEventListener('visibilitychange', function(){ if(document.visibilityState==='visible') check(); });
+  setTimeout(check, 4000);
 }
 // STAGE 6: 알림/딥링크로 전달된 방 열기 (방 목록 로드 대기 후 재시도)
 function openRoomDeep(roomId){
