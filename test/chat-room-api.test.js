@@ -132,6 +132,40 @@ test("send: createdAt이 잠금 안에서 찍혀 get의 serverTime 커서가 큐
   __resetForTest();
 });
 
+test("delete-message: altIds 3중 대조(이메일로 저장된 옛 메시지도 본인 삭제 가능) + 타인 403 유지 + 삭제 tombstone 증분 전파", async () => {
+  __resetForTest();
+  const t0 = Date.now();
+  const store = new Map();
+  const key = (n) => n.replace(/\.json$/, "");
+  // 과거 세션이 userId 에 '이메일'을 저장한 메시지 (현재 로그인 id 는 'wife')
+  store.set("rd", { roomId: "rd", members: ["wife", "hub"], messages: [
+    { id: "m1", userId: "wife@mail.com", sender: "앵쥬", message: "옛 메시지", createdAt: new Date(t0 - 5000).toISOString() },
+    { id: "m2", userId: "hub", sender: "hub", message: "남편 메시지", createdAt: new Date(t0 - 4000).toISOString() }
+  ] });
+  __setIoForTest({
+    async listIndex() { const m = new Map(); for (const k of store.keys()) m.set(k, { id: "id_" + k, modifiedTime: new Date(0).toISOString() }); return m; },
+    async findByName(n) { return store.has(key(n)) ? "id_" + key(n) : null; },
+    async read(id) { const k = id.replace(/^id_/, ""); if (!store.has(k)) throw new Error("nf"); return JSON.parse(JSON.stringify(store.get(k))); },
+    async write(n, _i, d) { store.set(key(n), JSON.parse(JSON.stringify(d))); return "id_" + key(n); }
+  });
+
+  // 1) 기존 방식(userId 만)이라면 403 이던 케이스 — altIds(이메일) 포함으로 본인 인정
+  let r = await call({ action: "delete-message" }, { roomId: "rd", messageId: "m1", userId: "wife", altIds: ["앵쥬", "wife@mail.com"] });
+  assert.equal(r.status, 200);
+  assert.equal(r.body.ok, true, "이메일로 저장된 본인 메시지 삭제 성공");
+
+  // 2) 타인 메시지는 altIds 를 넣어도 403
+  r = await call({ action: "delete-message" }, { roomId: "rd", messageId: "m2", userId: "wife", altIds: ["앵쥬", "wife@mail.com"] });
+  assert.equal(r.status, 403, "타인 메시지 삭제 차단 유지");
+
+  // 3) since 증분 폴링에 '삭제 tombstone'(옛 createdAt) 포함 → 상대 화면에 삭제 실시간 반영
+  r = await call({ action: "get", roomId: "rd", userId: "hub", since: String(t0 - 1000) });
+  const del = (r.body.messages || []).find((m) => m.id === "m1");
+  assert.ok(del, "since 이후 삭제된 옛 메시지가 증분 응답에 포함됨");
+  assert.equal(del.deleted, true);
+  __resetForTest();
+});
+
 test("read: 일시적 Drive 읽기 오류가 다른 사용자의 읽음 기록을 파괴하지 않는다", async () => {
   __resetForTest();
   const store = new Map();

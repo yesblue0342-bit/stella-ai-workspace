@@ -59,7 +59,8 @@ export default async function handler(req, res) {
       let out = allMsgs;
       let hasMore = false;
       if (since > 0) {
-        out = allMsgs.filter((m) => msgTime(m) > since);          // 새 메시지만
+        // 새 메시지 + since 이후 '삭제된' 옛 메시지(tombstone) 포함 → 상대 화면에도 삭제가 실시간 반영
+        out = allMsgs.filter((m) => msgTime(m) > since || (m.deletedAt && (new Date(m.deletedAt).getTime() || 0) > since));
       } else if (limit > 0 && allMsgs.length > limit) {
         out = allMsgs.slice(-limit);                              // 최근 limit개
         hasMore = true;
@@ -281,6 +282,8 @@ export default async function handler(req, res) {
       const roomId = makeRoomId(req.body?.roomId || req.query.roomId);
       const messageId = clean(req.body?.messageId || req.query.messageId);
       const userId = clean(req.body?.userId || req.query.userId);
+      // 과거 세션이 메시지에 이메일/표시이름을 userId 로 저장한 이력 호환 — 본인 확인 3중 대조.
+      const altIds = (Array.isArray(req.body?.altIds) ? req.body.altIds : []).map(clean).filter(Boolean).slice(0, 5);
       if (!roomId || !messageId) return res.status(400).json({ ok: false, message: "roomId, messageId 필요" });
       try {
         await mutateRoom(roomId, (existing) => {
@@ -288,9 +291,13 @@ export default async function handler(req, res) {
           const messages = (existing.messages || []).slice();
           const idx = messages.findIndex((m) => m.id === messageId);
           if (idx === -1) throw httpError(404, "메시지 없음");
-          // 본인 메시지만 삭제 가능
-          if (userId && messages[idx].userId && messages[idx].userId !== userId) {
-            throw httpError(403, "본인 메시지만 삭제할 수 있습니다.");
+          // 본인 메시지만 삭제 가능 — 메시지의 userId 또는 sender 가 요청자의 id/altIds 중 하나와 일치하면 본인
+          if (userId) {
+            const owners = new Set([userId, ...altIds].map(String));
+            const msgUid = String(messages[idx].userId || "");
+            const msgSender = String(messages[idx].sender || "");
+            const mine = (!msgUid && !msgSender) || owners.has(msgUid) || owners.has(msgSender);
+            if (!mine) throw httpError(403, "본인 메시지만 삭제할 수 있습니다.");
           }
           // soft delete: 내용은 지우되 "삭제된 메시지입니다" 표시 (카톡 방식)
           messages[idx] = { ...messages[idx], message: "", fileName: null, fileUrl: null, deleted: true, deletedAt: new Date().toISOString() };
