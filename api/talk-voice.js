@@ -13,7 +13,7 @@ import { readFile, writeFile, mkdir } from "fs/promises";
 
 // ★목소리 톤: 아주 어리고 귀여운 여자아이. (이전 'nova' 성인톤이 "공포스럽다" 피드백 → 밝고 높은 아이 톤으로)
 //   추가로 클라이언트가 재생 시 피치를 올려(playbackRate) 더 귀엽고 어리게 만든다.
-const CUTE = "아주 어리고 사랑스러운 5~7살 한국 여자아이 목소리. 톤은 높고 맑고 밝게, 애교 있고 상냥하게, 미소 지으며 말하듯 통통 튀는 느낌으로. 무섭거나 낮거나 어른스러운 느낌은 절대 금지.";
+const CUTE = "귀엽고 사랑스러운 8살 한국 여자아이의 목소리로. 아이답게 톤은 높고 맑고 밝게, 애교 있고 상냥하게, 방긋 웃으며 말하듯 통통 튀고 활기차게. 절대 어른 여성·성인 아나운서 톤이 아니며, 낮거나 무섭거나 차분한 느낌은 금지. 진짜 초등학교 저학년 어린이가 신나서 부르는 느낌.";
 export const VOICE_PHRASES = {
   s1:        { text: "스텔라~",       inst: CUTE + " 이름을 반갑게 부르듯 끝을 살짝 올려서." },
   s2:        { text: "스텔라, 톡!",   inst: CUTE + " 경쾌하게, '톡'은 짧고 통통 튀게." },
@@ -24,7 +24,7 @@ export const VOICE_PHRASES = {
 };
 
 // 캐시 버전 — 목소리/생성 파라미터를 바꾸면 올린다(옛 무서운 음성 재사용 방지). 클라 URL의 v= 와 함께.
-const CACHE_VER = "2";
+const CACHE_VER = "3";
 const CACHE_DIR = "/tmp/talk-voice";
 const mem = new Map();           // key -> Buffer
 const inflight = new Map();      // key -> Promise<Buffer>

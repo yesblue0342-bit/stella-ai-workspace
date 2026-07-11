@@ -485,7 +485,7 @@ body.theme-dark .theme-btn.active{background:#1e3a5f}
 const SK='stella_talk_rooms_v2';
 const ST='stella_talk_settings_v1';
 // ★자동 업데이트용 빌드 버전 — sw.js 의 CACHE('stella-vNNN')와 반드시 함께 올린다.
-const TALK_BUILD='v120';
+const TALK_BUILD='v121';
 let _rooms=[], _cur=null, _members=[], _inviteMembers=[], _attachFiles=[];
 
 // ── 설정 로드/저장 ──
@@ -1471,7 +1471,7 @@ var TALK_VOICES = {
 //   타이핑 중(방금 터치)에만 음성이 나오던 반대 증상의 근본 해결.
 //   파일 로드 실패(키 미설정 등) 시 Audio.play() 실패 → 멜로디 폴백(무해).
 // v= 캐시 버스트(브라우저 7일 캐시 무효화 — 옛 무서운 톤 파일 방지). 서버 CACHE_VER 와 함께 올린다.
-var VOICE_V='2';
+var VOICE_V='3';
 var TALK_VOICE_MP3 = {
   's1':'/api/talk-voice?key=s1&v='+VOICE_V, 's2':'/api/talk-voice?key=s2&v='+VOICE_V,
   'byeolping':'/api/talk-voice?key=byeolping&v='+VOICE_V, 'gongju':'/api/talk-voice?key=gongju&v='+VOICE_V,
@@ -1479,7 +1479,8 @@ var TALK_VOICE_MP3 = {
 };
 // ★재생 피치업 — mp3 를 조금 빠르게(preservesPitch=false) 재생해 톤을 올려 '귀여운 아이 목소리'로.
 //   원래 speechSynthesis pitch 감성(높음)을 파일 재생에서 재현. 값이 클수록 더 높고 어리게.
-var VOICE_RATE={ s1:1.40, s2:1.38, byeolping:1.45, gongju:1.30, byeolha:1.40, queen:1.18 };
+// 8살 여아 톤: 피치를 조금 더 올려 확실히 어리고 귀엽게(과하면 알아듣기 어려워 1.5 이하 유지).
+var VOICE_RATE={ s1:1.46, s2:1.45, byeolping:1.50, gongju:1.40, byeolha:1.46, queen:1.30 };
 // 선택 음성 파일을 피치업해 재생. 성공 시 true(플레이 시작), 실패 시 false(호출부가 폴백).
 function playVoiceFile(key, onFail){
   var mp3=TALK_VOICE_MP3 && TALK_VOICE_MP3[key];
