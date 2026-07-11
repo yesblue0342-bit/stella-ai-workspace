@@ -461,6 +461,16 @@ body.theme-dark .theme-btn.active{background:#1e3a5f}
       <button class="mode-opt" data-mode="vibrate" onclick="setNotifyMode('vibrate')" style="flex:1">📳<br>진동</button>
       <button class="mode-opt" data-mode="silent" onclick="setNotifyMode('silent')" style="flex:1">🔕<br>무음</button>
     </div>
+    <!-- ★내 목소리(딸 목소리)로 벨소리 녹음 — 이 기기에만 저장, 외부 전송 없음 -->
+    <div style="border:1px solid var(--accent,#7c3aed);border-radius:12px;padding:10px 12px;margin-bottom:14px">
+      <div style="font-size:.84rem;font-weight:800;margin-bottom:4px">💕 내 목소리로 벨소리</div>
+      <div style="font-size:.74rem;color:var(--text2);margin-bottom:8px">딸이 "스텔라~"처럼 말하는 걸 녹음하면 그게 알림음이 됩니다. (이 폰에만 저장·외부 전송 없음)</div>
+      <button class="sound-opt active" id="customRingOpt" onclick="previewSound('custom')" data-key="custom" style="display:none;width:100%;margin-bottom:8px">💕 내 목소리 벨소리 <span style="font-size:.72rem;color:var(--text2)">(눌러 미리듣기)</span></button>
+      <div style="display:flex;gap:8px">
+        <button class="sound-opt" id="recBtn" onclick="toggleRecordRing()" style="flex:1;text-align:center">🎙 녹음하기</button>
+        <button class="sound-opt" id="recDelBtn" onclick="deleteCustomRing()" style="display:none;text-align:center">🗑 삭제</button>
+      </div>
+    </div>
     <div style="font-size:.8rem;color:var(--text2);margin-bottom:8px">🎵 알림 음성 (눌러서 미리듣기)</div>
     <div id="voiceOptList" style="display:flex;flex-direction:column;gap:8px;margin-bottom:18px">
       <button class="sound-opt" onclick="previewSound('s1')" data-key="s1">⭐ 스텔라~ <span style="font-size:.75rem;color:var(--text2)">(기본)</span></button>
@@ -485,7 +495,7 @@ body.theme-dark .theme-btn.active{background:#1e3a5f}
 const SK='stella_talk_rooms_v2';
 const ST='stella_talk_settings_v1';
 // ★자동 업데이트용 빌드 버전 — sw.js 의 CACHE('stella-vNNN')와 반드시 함께 올린다.
-const TALK_BUILD='v122';
+const TALK_BUILD='v123';
 let _rooms=[], _cur=null, _members=[], _inviteMembers=[], _attachFiles=[];
 
 // ── 설정 로드/저장 ──
@@ -1459,6 +1469,7 @@ window.addEventListener('focus', function(){
 // STAGE 2: melody = [주파수Hz, 시작오프셋s, 길이s] 배열 — WebAudio 합성 알림음(파일 불필요, 항상 동작).
 //          음성키별로 짧고(0.3~0.5초) 구분되는 멜로디. TTS는 미리듣기 전용으로 강등.
 var TALK_VOICES = {
+  'custom':    {emoji:'🎙', label:'내 목소리',    phrase:'',           rate:1.0,  pitch:1.0,  melody:[[659.25,0,0.18],[987.77,0.16,0.26]]},                 // ★앱에서 직접 녹음(이 기기 localStorage). melody는 폴백
   's1':        {emoji:'⭐', label:'스텔라~',      phrase:'스텔라',     rate:1.05, pitch:1.75, melody:[[659.25,0,0.18],[987.77,0.16,0.26]]},                 // 밝은 상승 2음(E5→B5)
   's2':        {emoji:'✨', label:'스텔라~톡',    phrase:'스텔라 톡',  rate:1.08, pitch:1.70, melody:[[523.25,0,0.14],[659.25,0.13,0.14],[783.99,0.26,0.24]]}, // 3음 아르페지오(C5-E5-G5)
   'byeolping': {emoji:'💫', label:'우리 별핑~',   phrase:'우리 별핑',  rate:1.05, pitch:1.80, melody:[[783.99,0,0.16],[1046.50,0.15,0.26]]},                // G5→C6 통통
@@ -1480,10 +1491,21 @@ var TALK_VOICE_MP3 = {
 // ★재생 피치업 — mp3 를 조금 빠르게(preservesPitch=false) 재생해 톤을 올려 '귀여운 아이 목소리'로.
 //   원래 speechSynthesis pitch 감성(높음)을 파일 재생에서 재현. 값이 클수록 더 높고 어리게.
 // 8살 여아 톤: 피치를 조금 더 올려 확실히 어리고 귀엽게(과하면 알아듣기 어려워 1.5 이하 유지).
-var VOICE_RATE={ s1:1.46, s2:1.45, byeolping:1.50, gongju:1.40, byeolha:1.46, queen:1.30 };
-// 선택 음성 파일을 피치업해 재생. 성공 시 true(플레이 시작), 실패 시 false(호출부가 폴백).
+var VOICE_RATE={ custom:1.0, s1:1.46, s2:1.45, byeolping:1.50, gongju:1.40, byeolha:1.46, queen:1.30 };
+// ── 내 목소리(직접 녹음) 벨소리: 이 기기 localStorage 에만 저장(외부 전송 없음) ──
+function _customRingKey(){ return 'stella_talk_customring_'+(getMyId()||'guest'); }
+function getCustomRing(){ try{ return localStorage.getItem(_customRingKey())||''; }catch(e){ return ''; } }
+function hasCustomRing(){ return getCustomRing().length>50; }
+function setCustomRing(dataUrl){
+  try{ localStorage.setItem(_customRingKey(), dataUrl||''); delete _voiceAudioCache['custom']; return true; }
+  catch(e){ try{ toast('저장 공간이 부족해요 — 더 짧게(5초 이내) 녹음해주세요'); }catch(_){}; return false; }
+}
+function clearCustomRing(){ try{ localStorage.removeItem(_customRingKey()); }catch(e){} delete _voiceAudioCache['custom']; }
+// 키→실제 재생 소스: custom 은 녹음 dataURL, 그 외는 서버/정적 mp3
+function resolveVoiceSrc(key){ return key==='custom' ? getCustomRing() : ((TALK_VOICE_MP3 && TALK_VOICE_MP3[key])||''); }
+// 선택 음성 파일을 (필요 시 피치업) 재생. 성공 시 true(플레이 시작), 실패 시 false(호출부가 폴백).
 function playVoiceFile(key, onFail){
-  var mp3=TALK_VOICE_MP3 && TALK_VOICE_MP3[key];
+  var mp3=resolveVoiceSrc(key);
   if(!mp3) return false;
   try{
     var a=_voiceAudioCache[key]||(_voiceAudioCache[key]=new Audio(mp3));
@@ -1532,7 +1554,11 @@ function saveNotif(patch){
   try{ localStorage.setItem(_talkNotifKey(), JSON.stringify(s)); }catch(e){}
 }
 function getNotifMode(){ return loadNotif().mode||'sound'; }
-function getVoiceKey(){ var k=loadNotif().voiceKey; return TALK_VOICES[k]?k:'s1'; }
+function getVoiceKey(){
+  var k=loadNotif().voiceKey;
+  if(k==='custom' && !hasCustomRing()) return 's1';   // 녹음이 없으면(예: 새 기기) 기본음으로 폴백
+  return TALK_VOICES[k]?k:'s1';
+}
 
 // 음성 목록 비동기 워밍업
 try{ if('speechSynthesis' in window){ window.speechSynthesis.getVoices(); window.speechSynthesis.onvoiceschanged=function(){ try{ window.speechSynthesis.getVoices(); }catch(e){} }; } }catch(e){}
@@ -1718,11 +1744,78 @@ function setNotifyMode(mode){
 // STAGE 2: 미리듣기는 멜로디 + TTS 둘 다 허용(설정 화면 한정).
 function previewSound(key){
   if(!TALK_VOICES[key]) key='s1';
+  if(key==='custom' && !hasCustomRing()){ try{ toast('먼저 아래 "🎙 녹음하기"로 목소리를 녹음하세요'); }catch(e){} return; }
   saveNotif({voiceKey:key, mode:'sound'});
   syncSoundUI();
   unlockAudio();
+  // custom(내 목소리)은 파일 재생만(TTS 폴백 무의미) — 실패 시 멜로디
+  if(key==='custom'){ if(!playVoiceFile('custom', function(){ playMelody('custom'); })) playMelody('custom'); return; }
   // 실제 수신 벨소리와 동일하게: 음성 파일(mp3) 우선 재생 — speakVoice 가 mp3→TTS→비프 순 폴백
   speakVoice(key);
+}
+
+// ── 내 목소리 벨소리 녹음(MediaRecorder → dataURL → localStorage) ──
+var _mediaRec=null, _recStream=null, _recChunks=[], _recTimer=null;
+function updateRecUI(){
+  var recording=!!(_mediaRec && _mediaRec.state==='recording');
+  var b=document.getElementById('recBtn');
+  if(b){ b.textContent=recording?'⏹ 녹음 중지 (다 말하고 누르세요)':'🎙 녹음하기'; b.classList.toggle('active',recording); }
+  var has=hasCustomRing();
+  var opt=document.getElementById('customRingOpt'); if(opt) opt.style.display=has?'':'none';
+  var del=document.getElementById('recDelBtn'); if(del) del.style.display=(has&&!recording)?'':'none';
+}
+async function toggleRecordRing(){
+  try{ unlockAudio(); }catch(e){}
+  if(_mediaRec && _mediaRec.state==='recording'){ stopRecordRing(); return; }
+  if(!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia || !window.MediaRecorder){
+    try{ toast('이 브라우저는 앱 내 녹음을 지원하지 않아요'); }catch(e){} return;
+  }
+  try{ _recStream=await navigator.mediaDevices.getUserMedia({audio:true}); }
+  catch(e){ try{ toast('마이크 권한을 허용해주세요'); }catch(_){}; return; }
+  _recChunks=[];
+  var mime='';
+  try{
+    if(MediaRecorder.isTypeSupported){
+      if(MediaRecorder.isTypeSupported('audio/webm;codecs=opus')) mime='audio/webm;codecs=opus';
+      else if(MediaRecorder.isTypeSupported('audio/webm')) mime='audio/webm';
+      else if(MediaRecorder.isTypeSupported('audio/mp4')) mime='audio/mp4';
+    }
+  }catch(e){}
+  try{ _mediaRec = mime? new MediaRecorder(_recStream,{mimeType:mime}) : new MediaRecorder(_recStream); }
+  catch(e){ try{ _mediaRec=new MediaRecorder(_recStream); }catch(e2){ try{ toast('녹음을 시작할 수 없어요'); }catch(_){}; _recStream.getTracks().forEach(function(t){t.stop();}); return; } }
+  _mediaRec.ondataavailable=function(ev){ if(ev.data && ev.data.size) _recChunks.push(ev.data); };
+  _mediaRec.onstop=function(){
+    try{ if(_recStream) _recStream.getTracks().forEach(function(t){t.stop();}); }catch(e){}
+    var blob=new Blob(_recChunks, {type:(_mediaRec&&_mediaRec.mimeType)||'audio/webm'});
+    if(!blob.size){ try{ toast('녹음된 소리가 없어요 — 다시 시도'); }catch(e){}; updateRecUI(); return; }
+    var fr=new FileReader();
+    fr.onload=function(){
+      var dataUrl=String(fr.result||'');
+      if(dataUrl.length>1200000){ try{ toast('녹음이 너무 길어요 — 5초 이내로 다시 녹음해주세요'); }catch(e){}; updateRecUI(); return; }
+      if(setCustomRing(dataUrl)){
+        saveNotif({voiceKey:'custom', mode:'sound'});
+        try{ toast('녹음 완료! 이제 이 목소리가 알림음이에요 🎉'); }catch(e){}
+        syncSoundUI(); updateRecUI();
+        setTimeout(function(){ try{ playVoiceFile('custom', function(){ playMelody('custom'); }); }catch(e){} }, 250);
+      } else { updateRecUI(); }
+    };
+    fr.onerror=function(){ try{ toast('녹음 저장 실패 — 다시 시도'); }catch(e){}; updateRecUI(); };
+    fr.readAsDataURL(blob);
+  };
+  try{ _mediaRec.start(); }catch(e){ try{ toast('녹음 시작 실패'); }catch(_){}; return; }
+  updateRecUI();
+  if(_recTimer) clearTimeout(_recTimer);
+  _recTimer=setTimeout(function(){ stopRecordRing(); }, 10000);   // 안전상 10초 자동 정지
+}
+function stopRecordRing(){
+  try{ if(_recTimer){ clearTimeout(_recTimer); _recTimer=null; } }catch(e){}
+  try{ if(_mediaRec && _mediaRec.state==='recording') _mediaRec.stop(); }catch(e){}
+}
+function deleteCustomRing(){
+  clearCustomRing();
+  if(loadNotif().voiceKey==='custom') saveNotif({voiceKey:'s1'});
+  try{ toast('내 목소리 벨소리를 삭제했어요'); }catch(e){}
+  syncSoundUI(); updateRecUI();
 }
 
 // 설정 모달 UI 동기화 (모드 버튼 + 음성 선택 하이라이트)
@@ -1734,6 +1827,7 @@ function syncSoundUI(){
   if(box) box.style.opacity=(n.mode==='sound')?'1':'0.45';
   var vt=document.getElementById('voiceSpeakToggle');
   if(vt) vt.classList.toggle('active', !!n.voiceSpeak);
+  try{ updateRecUI(); }catch(e){}   // 내 목소리 녹음 버튼/옵션 표시 갱신
 }
 
 // 작업3: 혼자 테스트 — 소리 + (권한 있으면)팝업 둘 다 즉시 확인
