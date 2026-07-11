@@ -15,8 +15,9 @@ test("talk-voice: 서버 음성 키 ↔ 클라 TALK_VOICE_MP3 1:1 일치", () =>
   const keys = Object.keys(VOICE_PHRASES);
   assert.ok(keys.length >= 6, "음성 6종 이상");
   for (const k of keys) {
-    assert.match(html, new RegExp("'" + k + "'\\s*:\\s*'/api/talk-voice\\?key=" + k + "'"), "TALK_VOICE_MP3 에 " + k + " 누락");
+    assert.match(html, new RegExp("'" + k + "'\\s*:\\s*'/api/talk-voice\\?key=" + k + "(&v=|')"), "TALK_VOICE_MP3 에 " + k + " 누락");
     assert.match(html, new RegExp("'" + k + "'\\s*:\\s*\\{emoji"), "TALK_VOICES 에 " + k + " 누락");
+    assert.match(html, new RegExp("\\b" + k + "\\s*:\\s*[0-9.]+"), "VOICE_RATE(피치) 에 " + k + " 누락");
   }
 });
 

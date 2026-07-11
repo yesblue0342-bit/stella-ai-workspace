@@ -297,7 +297,10 @@ export default async function handler(req, res) {
             const msgUid = String(messages[idx].userId || "");
             const msgSender = String(messages[idx].sender || "");
             const mine = (!msgUid && !msgSender) || owners.has(msgUid) || owners.has(msgSender);
-            if (!mine) throw httpError(403, "본인 메시지만 삭제할 수 있습니다.");
+            if (!mine) {
+              console.warn("[chat-room:delete-message] 소유자 불일치 — msg.userId=%j msg.sender=%j owners=%j", msgUid, msgSender, [...owners]);
+              throw httpError(403, "본인 메시지만 삭제할 수 있습니다.");
+            }
           }
           // soft delete: 내용은 지우되 "삭제된 메시지입니다" 표시 (카톡 방식)
           messages[idx] = { ...messages[idx], message: "", fileName: null, fileUrl: null, deleted: true, deletedAt: new Date().toISOString() };

@@ -485,7 +485,7 @@ body.theme-dark .theme-btn.active{background:#1e3a5f}
 const SK='stella_talk_rooms_v2';
 const ST='stella_talk_settings_v1';
 // ★자동 업데이트용 빌드 버전 — sw.js 의 CACHE('stella-vNNN')와 반드시 함께 올린다.
-const TALK_BUILD='v119';
+const TALK_BUILD='v120';
 let _rooms=[], _cur=null, _members=[], _inviteMembers=[], _attachFiles=[];
 
 // ── 설정 로드/저장 ──
@@ -1470,11 +1470,30 @@ var TALK_VOICES = {
 //   브라우저 TTS는 안드로이드에서 "최근 터치" 없으면 차단 → 수신 시 띠링만 나오고
 //   타이핑 중(방금 터치)에만 음성이 나오던 반대 증상의 근본 해결.
 //   파일 로드 실패(키 미설정 등) 시 Audio.play() 실패 → 멜로디 폴백(무해).
+// v= 캐시 버스트(브라우저 7일 캐시 무효화 — 옛 무서운 톤 파일 방지). 서버 CACHE_VER 와 함께 올린다.
+var VOICE_V='2';
 var TALK_VOICE_MP3 = {
-  's1':'/api/talk-voice?key=s1', 's2':'/api/talk-voice?key=s2',
-  'byeolping':'/api/talk-voice?key=byeolping', 'gongju':'/api/talk-voice?key=gongju',
-  'byeolha':'/api/talk-voice?key=byeolha', 'queen':'/api/talk-voice?key=queen'
+  's1':'/api/talk-voice?key=s1&v='+VOICE_V, 's2':'/api/talk-voice?key=s2&v='+VOICE_V,
+  'byeolping':'/api/talk-voice?key=byeolping&v='+VOICE_V, 'gongju':'/api/talk-voice?key=gongju&v='+VOICE_V,
+  'byeolha':'/api/talk-voice?key=byeolha&v='+VOICE_V, 'queen':'/api/talk-voice?key=queen&v='+VOICE_V
 };
+// ★재생 피치업 — mp3 를 조금 빠르게(preservesPitch=false) 재생해 톤을 올려 '귀여운 아이 목소리'로.
+//   원래 speechSynthesis pitch 감성(높음)을 파일 재생에서 재현. 값이 클수록 더 높고 어리게.
+var VOICE_RATE={ s1:1.40, s2:1.38, byeolping:1.45, gongju:1.30, byeolha:1.40, queen:1.18 };
+// 선택 음성 파일을 피치업해 재생. 성공 시 true(플레이 시작), 실패 시 false(호출부가 폴백).
+function playVoiceFile(key, onFail){
+  var mp3=TALK_VOICE_MP3 && TALK_VOICE_MP3[key];
+  if(!mp3) return false;
+  try{
+    var a=_voiceAudioCache[key]||(_voiceAudioCache[key]=new Audio(mp3));
+    try{ a.preservesPitch=false; a.mozPreservesPitch=false; a.webkitPreservesPitch=false; }catch(e){}
+    try{ a.playbackRate=VOICE_RATE[key]||1.35; }catch(e){}
+    a.currentTime=0;
+    var p=a.play();
+    if(p&&p.catch) p.catch(function(){ if(onFail) onFail(); });
+    return true;
+  }catch(e){ return false; }
+}
 var _voiceAudioCache = {};
 
 var _audioCtx = null;    // 비프음 폴백용 AudioContext
@@ -1626,16 +1645,8 @@ function playMelody(key){
 // quiet=true: 멜로디에 '얹어서' 재생하는 실알림 경로 — TTS 불가여도 비프음 폴백 생략(이중음 방지).
 function speakVoice(key, quiet){
   if(!TALK_VOICES[key]) key='s1';
-  var mp3=TALK_VOICE_MP3 && TALK_VOICE_MP3[key];
-  if(mp3){
-    try{
-      var a=_voiceAudioCache[key]||(_voiceAudioCache[key]=new Audio(mp3));
-      a.currentTime=0;
-      var p=a.play();
-      if(p&&p.catch) p.catch(function(){ ttsVoice(key, quiet); }); // 재생 실패 시 TTS 폴백
-      return;
-    }catch(e){ /* 폴백 진행 */ }
-  }
+  // 실수신과 동일하게 피치업 음성 파일 재생 → 실패 시에만 TTS 폴백(미리듣기=실동작 일치)
+  if(playVoiceFile(key, function(){ ttsVoice(key, quiet); })) return;
   ttsVoice(key, quiet);
 }
 function ttsVoice(key, quiet){
@@ -1672,19 +1683,15 @@ function playNotifySound(msgId){
     // 재생 직전 오디오 unlock 1회 + 큐 깨우기(자동재생 정책 / 다시 안 울림 방지)
     try{ unlockAudio(); }catch(e){}
     var key=getVoiceKey();
-    // ★수신 벨소리 = 설정한 음성 파일("스텔라~" 등, /api/talk-voice 서버 생성 mp3).
-    //   - 화면 보는 중 + 타이핑 아님 → 음성 파일 재생(실패 시 멜로디 폴백)
-    //   - 타이핑 중 → 짧은 멜로디만(입력 방해/키보드 이슈 방지 — "타이핑 중 스텔라 소리" 불만 해결)
-    //   - 백그라운드 → 멜로디(주 채널은 Web Push 시스템 팝업)
+    // ★수신 벨소리 = 항상 '설정한 음성 파일'(일관성). 랜덤/멜로디로 갈리지 않게 통일.
+    //   - 포그라운드(화면 보임): 선택 음성 파일 재생. (mp3 재생은 speechSynthesis와 달리 키보드를 닫지 않음)
+    //   - 재생 실패(키 미설정/네트워크)일 때만 멜로디 폴백.
+    //   - 백그라운드: 멜로디(주 채널은 Web Push 시스템 팝업). 여기선 화면 보일 때만 소리.
     function _emit(){
-      var mp3=TALK_VOICE_MP3 && TALK_VOICE_MP3[key];
-      var _typing=false;
-      try{ _typing=(document.activeElement===document.getElementById('chatInput')); }catch(e){}
-      if(mp3 && !_typing && document.visibilityState==='visible'){
-        try{ var a=_voiceAudioCache[key]||(_voiceAudioCache[key]=new Audio(mp3)); a.currentTime=0;
-          var p=a.play(); if(p&&p.catch) p.catch(function(){ playMelody(key); }); return; }catch(e){}
+      if(document.visibilityState==='visible'){
+        if(playVoiceFile(key, function(){ playMelody(key); })) return;  // 실패 시 콜백에서 멜로디
       }
-      playMelody(key);   // 타이핑 중/백그라운드/재생 실패: 짧은 멜로디
+      playMelody(key);   // 백그라운드/키없음: 멜로디
     }
     // ctx가 suspended면 resume 완료 후 재생(즉시 재생 시 무음 되는 레이스 수정) — #2 소리 안 남
     if(_audioCtx && _audioCtx.state==='suspended'){
@@ -2212,9 +2219,11 @@ async function deleteMessage(m){
     return;
   }
 
-  // 로컬에서 즉시 삭제 표시 (UI 즉각 반응)
+  // 로컬에서 즉시 삭제 표시 (UI 즉각 반응) — 원본은 보관했다가 서버 실패 시 되돌린다.
   const ridx = _cur.messages.findIndex(function(x){return x.id===m.id;});
+  var _orig=null;
   if(ridx !== -1){
+    _orig=Object.assign({}, _cur.messages[ridx]);   // 되돌리기용 백업
     _cur.messages[ridx].deleted = true;
     _cur.messages[ridx].type = 'deleted';
     _cur.messages[ridx].text = '';
@@ -2225,7 +2234,7 @@ async function deleteMessage(m){
     saveRooms();
     renderMessages(); // 즉시 화면 반영
   }
-  // 서버에도 반영 (백그라운드)
+  // 서버에도 반영 — 성공해야 상대 화면에도 삭제가 뜬다. 실패면 되돌리고 사유 표시(조용한 실패 금지).
   try{
     const r = await fetch('/api/chat-room?action=delete-message', {
       method: 'POST',
@@ -2234,12 +2243,26 @@ async function deleteMessage(m){
       body: JSON.stringify({ roomId: _cur.id, messageId: m.id, userId: getMyId(),
         altIds: [getMyName(), getMyEmail()].filter(function(x){ return x && x!=='나'; }) })
     });
-    const d = await r.json();
-    if(d.ok){
+    var d={}; try{ d=await r.json(); }catch(e){}
+    if(r.ok && d.ok){
+      try{ toast('메시지를 삭제했습니다'); }catch(e){}
       await syncRoomFromServer(false); // 서버 동기화 (스크롤 유지)
+    } else {
+      // 서버 거부(권한/없음/오류) → 낙관적 삭제 롤백 + 사유 안내 (되살아나는 유령삭제 방지)
+      if(_orig && ridx!==-1 && _cur){
+        var j=_cur.messages.findIndex(function(x){return x.id===m.id;});
+        if(j!==-1){ _cur.messages[j]=_orig; saveRooms(); renderMessages(); }
+      }
+      try{ toast('삭제 실패: '+((d&&d.message)||('서버 오류 '+r.status))); }catch(e){}
     }
-    // 실패해도 로컬은 이미 반영됨
-  }catch(e){ console.warn('서버 삭제 실패:', e.message); }
+  }catch(e){
+    // 네트워크 오류 → 롤백 + 재시도 안내
+    if(_orig && ridx!==-1 && _cur){
+      var j2=_cur.messages.findIndex(function(x){return x.id===m.id;});
+      if(j2!==-1){ _cur.messages[j2]=_orig; saveRooms(); renderMessages(); }
+    }
+    try{ toast('삭제 실패(네트워크) — 잠시 후 다시 시도하세요'); }catch(e){}
+  }
 }
 
 // ── 메시지 복사 ──

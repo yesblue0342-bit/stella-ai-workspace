@@ -11,15 +11,20 @@
  */
 import { readFile, writeFile, mkdir } from "fs/promises";
 
+// ★목소리 톤: 아주 어리고 귀여운 여자아이. (이전 'nova' 성인톤이 "공포스럽다" 피드백 → 밝고 높은 아이 톤으로)
+//   추가로 클라이언트가 재생 시 피치를 올려(playbackRate) 더 귀엽고 어리게 만든다.
+const CUTE = "아주 어리고 사랑스러운 5~7살 한국 여자아이 목소리. 톤은 높고 맑고 밝게, 애교 있고 상냥하게, 미소 지으며 말하듯 통통 튀는 느낌으로. 무섭거나 낮거나 어른스러운 느낌은 절대 금지.";
 export const VOICE_PHRASES = {
-  s1:        { text: "스텔라~",       inst: "밝고 귀엽고 명랑한 8살 한국 여자아이가 이름을 부르듯 상냥하게, 끝을 살짝 올려서" },
-  s2:        { text: "스텔라, 톡!",   inst: "밝고 귀여운 8살 한국 여자아이가 경쾌하게, '톡'은 짧고 통통 튀게" },
-  byeolping: { text: "우리 별핑~",    inst: "사랑스럽고 통통 튀는 한국 여자아이 톤, 끝을 길게 올려서" },
-  gongju:    { text: "별하 공주님~",  inst: "우아하면서 다정한 한국 여자아이 톤, 공주님을 부르듯 상냥하게" },
-  byeolha:   { text: "김별하~",       inst: "밝고 씩씩한 한국 여자아이가 친구 이름을 부르듯 명랑하게" },
-  queen:     { text: "앵쥬 왕비님~",  inst: "낮고 우아하고 부드러운 한국 여성 톤, 왕비님을 모시듯 정중하게" }
+  s1:        { text: "스텔라~",       inst: CUTE + " 이름을 반갑게 부르듯 끝을 살짝 올려서." },
+  s2:        { text: "스텔라, 톡!",   inst: CUTE + " 경쾌하게, '톡'은 짧고 통통 튀게." },
+  byeolping: { text: "우리 별핑~",    inst: CUTE + " 아주 사랑스럽게 끝을 길게 올려서." },
+  gongju:    { text: "별하 공주님~",  inst: CUTE + " 공주님을 부르듯 다정하고 상냥하게." },
+  byeolha:   { text: "김별하~",       inst: CUTE + " 친구 이름을 부르듯 명랑하고 씩씩하게." },
+  queen:     { text: "앵쥬 왕비님~",  inst: CUTE + " 왕비님을 부르듯 상냥하고 사랑스럽게(그래도 밝고 높은 아이 톤 유지)." }
 };
 
+// 캐시 버전 — 목소리/생성 파라미터를 바꾸면 올린다(옛 무서운 음성 재사용 방지). 클라 URL의 v= 와 함께.
+const CACHE_VER = "2";
 const CACHE_DIR = "/tmp/talk-voice";
 const mem = new Map();           // key -> Buffer
 const inflight = new Map();      // key -> Promise<Buffer>
@@ -28,18 +33,18 @@ async function generate(key) {
   const cfg = VOICE_PHRASES[key];
   const apiKey = String(process.env.OPENAI_API_KEY || "").trim();
   if (!apiKey) throw new Error("OPENAI_API_KEY 미설정");
-  // 1차: gpt-4o-mini-tts (instructions 로 톤 지정)
+  // 1차: gpt-4o-mini-tts (instructions 로 어린 아이 톤 지정). voice=shimmer(더 밝고 높은 여성 톤)
   let r = await fetch("https://api.openai.com/v1/audio/speech", {
     method: "POST",
     headers: { Authorization: "Bearer " + apiKey, "Content-Type": "application/json" },
-    body: JSON.stringify({ model: "gpt-4o-mini-tts", voice: "nova", input: cfg.text, instructions: cfg.inst, response_format: "mp3", speed: 1.0 })
+    body: JSON.stringify({ model: "gpt-4o-mini-tts", voice: "shimmer", input: cfg.text, instructions: cfg.inst, response_format: "mp3", speed: 1.0 })
   });
   if (!r.ok) {
-    // 2차: tts-1 (instructions 미지원 — input 만)
+    // 2차: tts-1 (instructions 미지원 — input 만). shimmer 로 밝은 톤 확보
     r = await fetch("https://api.openai.com/v1/audio/speech", {
       method: "POST",
       headers: { Authorization: "Bearer " + apiKey, "Content-Type": "application/json" },
-      body: JSON.stringify({ model: "tts-1", voice: "nova", input: cfg.text, response_format: "mp3", speed: 1.0 })
+      body: JSON.stringify({ model: "tts-1", voice: "shimmer", input: cfg.text, response_format: "mp3", speed: 1.0 })
     });
   }
   if (!r.ok) {
@@ -51,8 +56,8 @@ async function generate(key) {
 
 async function getVoice(key) {
   if (mem.has(key)) return mem.get(key);
-  // 디스크 캐시 (컨테이너 재시작 전까지 유지 — 재배포 시 재생성, 문구당 1회 소액)
-  const file = CACHE_DIR + "/" + key + ".mp3";
+  // 디스크 캐시 (버전 포함 파일명 — 옛 톤 캐시 재사용 방지). 재배포 시 재생성, 문구당 1회 소액.
+  const file = CACHE_DIR + "/" + key + "_v" + CACHE_VER + ".mp3";
   try {
     const buf = await readFile(file);
     if (buf.length > 1000) { mem.set(key, buf); return buf; }
