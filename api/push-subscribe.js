@@ -46,8 +46,10 @@ export default async function handler(req, res) {
       if (!keys) return res.status(200).json({ ok: false, enabled: false, message: "푸시 일시 비활성(키 준비 실패) — 잠시 후 재시도" });
       const userId = clean(req.body?.userId);
       const subscription = req.body?.subscription;
+      // 신원 별칭(이름/이메일 등) — 방 members 표기가 달라도 발송이 도달하도록 canonical 로 잇는다.
+      const altIds = (Array.isArray(req.body?.altIds) ? req.body.altIds : []).map(clean).filter(Boolean).slice(0, 6);
       if (!userId || !subscription) return res.status(400).json({ ok: false, message: "userId, subscription 필요" });
-      const r = await saveSubscription(userId, subscription);
+      const r = await saveSubscription(userId, subscription, altIds);
       return res.status(200).json({ ok: !!r.ok, ...r });
     }
     return res.status(405).json({ ok: false, message: "Method not allowed" });

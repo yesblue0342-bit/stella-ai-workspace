@@ -485,7 +485,7 @@ body.theme-dark .theme-btn.active{background:#1e3a5f}
 const SK='stella_talk_rooms_v2';
 const ST='stella_talk_settings_v1';
 // ★자동 업데이트용 빌드 버전 — sw.js 의 CACHE('stella-vNNN')와 반드시 함께 올린다.
-const TALK_BUILD='v121';
+const TALK_BUILD='v122';
 let _rooms=[], _cur=null, _members=[], _inviteMembers=[], _attachFiles=[];
 
 // ── 설정 로드/저장 ──
@@ -2857,20 +2857,48 @@ async function subscribePush(force){
     var reg=await navigator.serviceWorker.ready;
     var sub=await reg.pushManager.getSubscription();
     if(!sub){ sub=await reg.pushManager.subscribe({userVisibleOnly:true, applicationServerKey:_urlB64ToU8(kr.publicKey)}); }
-    var sr=await fetch('/api/push-subscribe',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({userId:myId, subscription:sub.toJSON?sub.toJSON():sub})}).then(function(r){return r.json();});
+    var altIds=[getMyName(), getMyEmail()].filter(function(x){ return x && x!=='나'; });  // 신원 별칭(멤버표기 불일치 대비)
+    var sr=await fetch('/api/push-subscribe',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({userId:myId, subscription:sub.toJSON?sub.toJSON():sub, altIds:altIds})}).then(function(r){return r.json();});
     if(!sr||!sr.ok){ _pushSubscribing=false; return _pushDiag('serverSave',false,(sr&&sr.message)||'서버 저장 실패'),'save-fail'; }
     _pushSubscribedAt=Date.now();
     _pushDiag('done',true,'구독 등록 완료 ('+(sr.count||1)+'개 기기)');
     // SW에 재구독용 설정 영속(브라우저가 구독을 회전시키는 pushsubscriptionchange 대비)
-    try{ swSend({type:'PUSH_CFG', publicKey:kr.publicKey, userId:myId}); }catch(e){}
+    try{ swSend({type:'PUSH_CFG', publicKey:kr.publicKey, userId:myId, altIds:altIds}); }catch(e){}
     return 'ok';
   }catch(e){ _pushDiag('subscribe',false,String(e&&e.message||e)); console.warn('[push] 구독 실패:', e); return 'error'; }
   finally{ _pushSubscribing=false; }
+}
+// ── 구독 자가치유: 만료/불일치로 서버에 내 구독이 사라지면 자동 재구독 ("시간 지나면 안 됨" 제거) ──
+//   근본원인②: pushsubscriptionchange 는 브라우저마다 안 오므로, 앱을 열 때/주기적으로 서버에
+//   내 구독이 실제로 남아있는지 확인하고, 없으면 낡은 브라우저 구독을 폐기 후 새로 만든다.
+var _healAt=0;
+async function ensurePushHealthy(force){
+  try{
+    if(!force && Date.now()-_healAt < 5*60*1000) return;   // 5분 쓰로틀
+    _healAt=Date.now();
+    var myId=getMyId(); if(!myId||myId==='나') return;
+    if(!('serviceWorker' in navigator)||!('PushManager' in window)) return;
+    if(!window.Notification || Notification.permission!=='granted') return;   // 권한은 배너/상태패널이 담당
+    var st=await fetch('/api/push-subscribe?action=status&userId='+encodeURIComponent(myId),{cache:'no-store'})
+      .then(function(r){return r.json();}).catch(function(){return null;});
+    if(!st||!st.enabled) return;   // 서버 푸시 자체 비활성이면 할 것 없음
+    if(Number(st.subs)>0){ await subscribePush(false); return; }   // 서버에 내 구독 있음 → 브라우저 구독만 보장
+    // 서버에 내 구독 0 = 미구독 또는 만료·정리됨 → 낡은 브라우저 구독 폐기 후 새로 발급
+    try{ var reg=await navigator.serviceWorker.ready; var old=await reg.pushManager.getSubscription(); if(old){ try{ await old.unsubscribe(); }catch(e){} } }catch(e){}
+    await subscribePush(true);
+  }catch(e){ /* 다음 주기에 재시도 */ }
 }
 // ── 백그라운드 알림 자가진단(설정 패널) — 어디서 끊겼는지 폰에서 바로 확인 ──
 async function checkPushStatus(){
   var box=document.getElementById('pushStatusBox'); if(box){ box.style.display='block'; box.textContent='확인 중...'; }
   var lines=[];
+  // iOS Safari 탭은 Web Push 미지원 — 홈 화면에 설치해야만 백그라운드 알림 가능(핵심 안내)
+  var ua=navigator.userAgent||'';
+  var isIOS=/iPad|iPhone|iPod/.test(ua) || (/Macintosh/.test(ua) && navigator.maxTouchPoints>1);
+  var standalone=(window.matchMedia&&window.matchMedia('(display-mode: standalone)').matches) || navigator.standalone===true;
+  if(isIOS && !standalone){
+    lines.push('❗ iPhone/iPad는 브라우저 탭에서 백그라운드 알림이 오지 않습니다.\n   공유(↑) → "홈 화면에 추가"로 설치한 뒤 그 앱에서 여세요.');
+  }
   var perm=(window.Notification&&Notification.permission)||'미지원';
   lines.push((perm==='granted'?'✅':'❌')+' 알림 권한: '+perm+(perm!=='granted'?' → 위 "알림 권한" 버튼을 누르세요':''));
   var swOk=false;
@@ -2994,6 +3022,9 @@ function initTalk(){
   setupPasteImage();     // STAGE 7: 클립보드 이미지 붙여넣기
   setupOnlineOffline();  // STAGE 7: 오프라인 배너 + 복구 시 재동기화/미전송 발송
   setupAutoUpdate();     // ★새 버전 배포 시 자동 새로고침(수동 '강제 업데이트' 불필요)
+  // ★구독 자가치유: 앱 열 때 + 30분 주기 — 만료·불일치로 끊긴 구독을 스스로 복구
+  setTimeout(function(){ try{ ensurePushHealthy(true); }catch(e){} }, 3000);
+  setInterval(function(){ try{ ensurePushHealthy(false); }catch(e){} }, 30*60*1000);
 }
 
 // ── 자동 업데이트: 서버 sw.js 의 버전(stella-vNNN)과 내 TALK_BUILD 를 비교, 다르면
@@ -3078,8 +3109,8 @@ function setupSWMessages(){
   }catch(e){}
   document.addEventListener('visibilitychange', function(){
     try{ swSyncState(); }catch(e){}
-    // 복귀 시 푸시 구독 상태 점검(서버가 방금 키를 활성화했을 수 있음 — 성공 후 10분 가드)
-    if(document.visibilityState==='visible'){ try{ subscribePush(); }catch(e){} }
+    // 복귀 시 구독 자가치유(서버에 내 구독이 사라졌으면 재구독) — "시간 지나면 안 됨" 제거
+    if(document.visibilityState==='visible'){ try{ ensurePushHealthy(false); }catch(e){} }
   });
   setTimeout(function(){ try{ swSyncState(); }catch(e){} }, 1500);   // SW 준비 후 초기 1회
 }

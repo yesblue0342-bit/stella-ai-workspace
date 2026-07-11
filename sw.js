@@ -1,4 +1,4 @@
-const CACHE = 'stella-v121';
+const CACHE = 'stella-v122';
 const KEEP_CACHES = [CACHE, 'stella-talk-prefs'];   // prefs(알림모드/뮤트)는 업데이트 때 지우지 않음
 
 self.addEventListener('install', e => self.skipWaiting());
@@ -135,7 +135,7 @@ self.addEventListener('message', e => {
     if (d.type === 'CURRENT_ROOM') _talkCurrentRoom = d.roomId || '';
     if (d.type === 'MUTES') { _talkMutes = d.mutes || {}; e.waitUntil ? e.waitUntil(_prefsPut('mutes', _talkMutes)) : _prefsPut('mutes', _talkMutes); }
     if (d.type === 'NOTIFY_MODE') { _talkNotifyMode = d.mode || 'sound'; e.waitUntil ? e.waitUntil(_prefsPut('mode', _talkNotifyMode)) : _prefsPut('mode', _talkNotifyMode); }
-    if (d.type === 'PUSH_CFG') { const cfg = { publicKey: d.publicKey || '', userId: d.userId || '' }; e.waitUntil ? e.waitUntil(_prefsPut('pushCfg', cfg)) : _prefsPut('pushCfg', cfg); }
+    if (d.type === 'PUSH_CFG') { const cfg = { publicKey: d.publicKey || '', userId: d.userId || '', altIds: Array.isArray(d.altIds) ? d.altIds : [] }; e.waitUntil ? e.waitUntil(_prefsPut('pushCfg', cfg)) : _prefsPut('pushCfg', cfg); }
   }
 });
 
@@ -155,7 +155,7 @@ self.addEventListener('pushsubscriptionchange', e => {
       if (!cfg || !cfg.publicKey || !cfg.userId) return;
       const sub = await self.registration.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: _b64ToU8(cfg.publicKey) });
       await fetch('/api/push-subscribe', { method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ userId: cfg.userId, subscription: sub.toJSON ? sub.toJSON() : sub }) });
+        body: JSON.stringify({ userId: cfg.userId, subscription: sub.toJSON ? sub.toJSON() : sub, altIds: cfg.altIds || [] }) });
     } catch (err) { /* 다음 앱 실행 시 subscribePush 가 복구 */ }
   })());
 });
