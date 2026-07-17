@@ -128,3 +128,20 @@ app.use((req, res) => res.status(404).send("Not Found"));
 app.listen(PORT, "0.0.0.0", () => {
   console.log(`✅ Stella AI Workspace (OCI) listening on :${PORT}`);
 });
+
+// ── 레거시 채팅(chatgpt/chats) → users/{uid}/chats 1회 이전 ──────────────
+// 멱등·베스트에포트: 이미 이전된 파일은 스킵, 실패해도 서버 구동에 영향 없음(fire-and-forget).
+// 비활성화: CHAT_MIGRATION=0
+if (process.env.CHAT_MIGRATION !== "0") {
+  (async () => {
+    try {
+      const { migrateChatsToUsers } = await import("./lib/chat/chat-drive.mjs");
+      const r = await migrateChatsToUsers({ log: (m) => console.warn("[chat-migrate]", m) });
+      if (r && (r.moved || r.deduped)) {
+        console.log(`✅ [chat-migrate] moved=${r.moved} deduped=${r.deduped} users=${r.users}`);
+      }
+    } catch (e) {
+      console.warn("[chat-migrate] 스킵:", e?.message || e);
+    }
+  })();
+}

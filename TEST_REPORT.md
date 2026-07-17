@@ -1,5 +1,46 @@
 # TEST_REPORT
 
+## Stella GPT: 채팅 목록 최신순 정렬 + 카테고리 기본 접힘 + 채팅 저장 위치 users/{id} 이전 (2026-07-17)
+
+### 요구사항 (사용자)
+1. **채팅 목록 정렬** — 채팅 카테고리에서 최신 내용이 가장 위로(바로 보이게).
+2. **채팅 카테고리 기본 접힘** — 목록이 항상 펼쳐져 있던 것을 접힘으로.
+3. **채팅 저장 위치** — Drive `StellaGPT/users/{아이디}/` 아래에 아이디별로 저장돼야 하는데 없음.
+   현재 다른 폴더에 저장되면 그 폴더를 찾아 `users/{아이디}` 로 이전, 아이디 폴더 없으면 생성, **중복 저장 방지**.
+
+### 원인 분석
+- **정렬**: `addMessage()` 는 이미 `r.updatedAt` 을 갱신하고 있으나 `renderChatTree()` 가 `rooms` 를
+  **배열 순서 그대로** 렌더 → 오래된 방에 새 메시지가 와도 위로 안 올라옴.
+- **접힘**: `exp()` 기본값이 `['all','none']`(펼침) → 채팅/미분류 카테고리가 항상 펼쳐짐.
+- **저장 위치**: `hybrid-chat-save` 가 `StellaGPT/chatgpt/chats/{uid}/{roomId}.json` 에 저장 중.
+  사용자가 원하는 `users/{uid}/` 가 아님(가입 시 `users/{id}/profile`·`settings` 는 만들어지지만 채팅은 별도 폴더).
+
+### 수정
+- **정렬(index.html)**: `_roomTime()`/`sortRoomsByRecent()` 헬퍼 신설 → `renderChatTree`·`renderProjectTree`
+  가 방 목록을 **최신 활동(updatedAt→마지막 메시지→createdAt) 내림차순**으로 렌더(원본 배열 불변, 표시만 정렬).
+  복원(지연) 채팅에 서버 `updated_at` 을 실어 서버 기준 최신순도 반영.
+- **접힘(index.html)**: `exp()` 기본값을 빈 세트로(펼침은 사용자가 누른 것만 저장). localStorage 키
+  `stella_exp_final_v82`→`v83` bump 으로 **기존 사용자도 접힘 기본** 적용(방/프로필 데이터는 무영향).
+- **저장 위치(lib/chat/chat-drive.mjs 신설 + api/hybrid-chat-save·read)**:
+  - 신규 저장/조회 경로 `users/{safeUser(uid)}/chats/{roomId}.json`(폴더 없으면 `ensurePath` 자동 생성).
+  - 조회는 `fileId`(위치 무관) → 신규 경로 → **레거시 `chatgpt/chats/{uid}` 폴백** 순.
+  - **중복 방지**: 신규 위치 저장 후 레거시 동일 채팅 파일은 휴지통(베스트에포트).
+  - **레거시 이전**: `migrateChatsToUsers()` — 레거시 파일을 `users/{uid}/chats` 로 **re-parent(부모만 이동,
+    fileId 불변)** → `chat_index.drive_file_id` 그대로 유효, 물리적 중복 0, 멱등. `scripts/migrate-chats-to-users.mjs`
+    (드라이런 기본, `--apply`) + **서버 부팅 시 1회 자동 이전**(fire-and-forget, 실패해도 서버 무영향, `CHAT_MIGRATION=0` 로 비활성).
+- 버전: sw.js `stella-v124`→`v125`, index.html 빌드 v115→v116, talk.html TALK_BUILD v124→v125(SW 공유 동기).
+
+### 테스트 (`node --test test/*.test.js`)
+- **전체 443 pass / 0 fail** (신규 10건 추가: 이전 433 → 443).
+- 신규 `test/chat-drive.test.js`(7): 경로 규칙, re-parent 이전, 멱등(2회차 이동 0), 중복정리(휴지통),
+  드라이런 무변경, 레거시 폴더 없음 처리 — fake Drive ops 주입.
+- 신규 `test/chat-sidebar-order.test.js`(3, jsdom): renderChatTree 최신순 정렬(updatedAt/마지막메시지),
+  카테고리 기본 접힘(exp 기본 비움 + v83 키).
+- 정적 검증: `node --check`(변경 .js/.mjs 전부), index.html 인라인 `new Function` 파싱 OK.
+- ※ 라이브 Drive 이전은 OCI 서버 자격증명으로 부팅 시 자동 실행(샌드박스에선 자격증명 없음 → 로직만 단위검증).
+
+---
+
 ## Stella GPT: 날씨 응답 + 채팅 저장/중복 수정 (2026-07-17)
 
 ### 배경 (실기기 피드백)
