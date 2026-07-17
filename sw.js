@@ -1,4 +1,4 @@
-const CACHE = 'stella-v123';
+const CACHE = 'stella-v124';
 const KEEP_CACHES = [CACHE, 'stella-talk-prefs'];   // prefs(알림모드/뮤트)는 업데이트 때 지우지 않음
 
 self.addEventListener('install', e => self.skipWaiting());

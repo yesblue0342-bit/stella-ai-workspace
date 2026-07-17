@@ -2,7 +2,7 @@
 // WMO 코드표가 두 벌로 갈라져 있던 중복을 하나로 합친 뒤의 회귀 방지.
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { wmoToKr, buildWeatherSummary, handleWeather, clearWeatherCaches } from "../lib/chat/weather.mjs";
+import { wmoToKr, buildWeatherSummary, handleWeather, clearWeatherCaches, parseWeatherQuery } from "../lib/chat/weather.mjs";
 
 test("wmoToKr: 주요 코드 매핑 + 미지 코드 폴백", () => {
   assert.equal(wmoToKr(0), "맑음");
@@ -33,6 +33,51 @@ test("buildWeatherSummary: 우산/바람/UV/습도 경고", () => {
   assert.ok(s.includes("자외선이 매우 강합니다"));
   assert.ok(s.includes("습도가 높아"));
   assert.ok(s.startsWith("> "), "인용문 블록으로 반환");
+});
+
+test("parseWeatherQuery: 시간 표현('내일')을 위치로 오인하지 않는다", () => {
+  // 과거 회귀: "내일 홋카이도 날씨"에서 첫 한글 토큰 "내일"을 위치로 잡아 '내일 위치를 찾을 수 없습니다' 반환
+  const a = parseWeatherQuery("내일 홋카이도 날씨 알려줘");
+  assert.equal(a.dayOffset, 1);
+  assert.equal(a.overseas, true);
+  assert.ok(a.locationName.includes("홋카이도") || a.locationName.includes("삿포로"));
+  assert.notEqual(a.locationName, "내일");
+
+  const b = parseWeatherQuery("내일 송도 날씨");
+  assert.equal(b.dayOffset, 1);
+  assert.equal(b.locationName, "송도");
+  assert.equal(b.overseas, false);
+
+  const c = parseWeatherQuery("모레 도쿄 날씨 어때");
+  assert.equal(c.dayOffset, 2);
+  assert.equal(c.overseas, true);
+
+  // 위치가 없으면 기본값(송도)로 폴백하되, 시간어를 위치로 쓰지 않는다
+  const d = parseWeatherQuery("오늘 날씨 알려줘");
+  assert.equal(d.dayOffset, 0);
+  assert.equal(d.locationName, "송도");
+});
+
+test("handleWeather: 해외 도시 + 내일 → 위치를 찾고 예보로 답한다(위치 못찾음 없음)", async () => {
+  clearWeatherCaches();
+  const realFetch = globalThis.fetch;
+  globalThis.fetch = async () => ({
+    ok: true,
+    json: async () => ({
+      current: { weather_code: 2, is_day: 1, temperature_2m: 5.2, apparent_temperature: 2.1, relative_humidity_2m: 60, wind_speed_10m: 3.0 },
+      daily: { weather_code: [2, 71, 3], temperature_2m_max: [7.1, 1.5, 4.0], temperature_2m_min: [-1.2, -5.0, -2.0], precipitation_probability_max: [10, 80, 30], uv_index_max: [3.1, 2.0, 2.5], wind_speed_10m_max: [12, 25, 18] },
+    }),
+  });
+  try {
+    const out = await handleWeather("내일 홋카이도 날씨 알려줘");
+    assert.ok(!out.includes("위치를 찾을 수 없"), "해외 지명은 위치 해석되어야 한다");
+    assert.ok(out.includes("내일"), "내일 예보로 답해야 한다");
+    assert.ok(out.includes("1.5°C") && out.includes("-5.0°C"), "내일(index 1) 일 예보를 사용");
+    assert.ok(out.includes("Google 날씨"), "해외는 Google 링크");
+  } finally {
+    globalThis.fetch = realFetch;
+    clearWeatherCaches();
+  }
 });
 
 test("handleWeather: 내장 좌표표 도시는 Open-Meteo를 캐시로 재사용한다", async () => {

@@ -1,3 +1,36 @@
+# TEST_REPORT
+
+## Stella GPT: 날씨 응답 + 채팅 저장/중복 수정 (2026-07-17)
+
+### 배경 (실기기 피드백)
+1. **날씨 "답변이 잘 안 나옴"** — "내일 홋카이도 날씨 알려줘" → `내일 위치를 찾을 수 없습니다`.
+   원인: `lib/chat/weather.mjs` 의 위치 추출 정규식이 첫 한글 토큰을 그대로 위치로 사용 →
+   시간 표현 **"내일"** 을 지명으로 오인. 해외 지명 사전도 없어 홋카이도/삿포로 미해석.
+2. **채팅 내역 저장 안 됨 / "0개 메시지"** — `hybrid-chat-list` 는 SQL 인덱스(메시지 없음)만 주는데
+   `loadChatHistoryFromDrive` 가 그 행을 `messages:[]` 빈 방으로 주입 → 복원 채팅이 전부 0개로 표시.
+3. **중복 채팅창** — `chat_index` 는 삭제해도 안 지워져, 지운 "송도 날씨" 등이 다음 로그인 때
+   0개 유령 방으로 부활 → 같은 제목이 여러 개.
+
+### 수정
+- **날씨(lib/chat/weather.mjs)**: `parseWeatherQuery()` 신설 — 시간어("내일/오늘/모레")·서술어("날씨/알려줘")를
+  제거 후 지명 추출, 해외 도시 사전(WORLD_CITIES, 홋카이도·도쿄·방콕·뉴욕 등 32곳) 우선 매칭.
+  오늘/내일/모레 예보 오프셋 지원(Open-Meteo `forecast_days=3`, 해외는 `timezone=auto`). 해외는 Google 링크.
+- **채팅 복원(index.html)**: 삭제 tombstone(`K.deletedRooms`)·인사말만(count≤1) 방은 복원 안 함(유령/중복 제거).
+  내용 있는 방은 `_lazyServer` 로 표시 후 **열 때** `/api/hybrid-chat-read` 로 Drive 백업에서 메시지 지연 로드.
+  사이드바/헤더는 서버 메시지 수(`_serverCount`) 표시. 지연 방은 workspace 저장에서 제외(빈 덮어쓰기 방지).
+- **신규 API**: `api/hybrid-chat-read.js`(단일 채팅 메시지 Drive 로드), `api/hybrid-chat-delete.js`(chat_index 행 삭제
+  + Drive 백업 trash → 부활 차단). 둘 다 항상 JSON, `requireOwner` 로 본인 채팅만 접근.
+- **삭제(index.html deleteRoom)**: tombstone 기록 + `/api/hybrid-chat-delete` 호출.
+- 버전: sw.js `stella-v124`, index.html 빌드 v115, talk.html TALK_BUILD v124(동기).
+
+### 검증
+- `npm test` **433/433 pass** (신규: 날씨 파싱/해외예보 2, 채팅 복원 지연로드/tombstone 4).
+- `node --check` 전 변경 파일 통과. index.html 인라인 스크립트 4개 `new Function` 파싱 통과.
+- jsdom 로 index.html 실제 함수 구동: 빈/삭제 방 미주입·지연 로드·형식변환·tombstone 확인.
+- 라이브 재현: "내일 홋카이도 날씨" → 삿포로(홋카이도) **내일** 예보 표 정상 출력(위치 못찾음 없음).
+
+---
+
 # TEST_REPORT — Stella Talk 메신저 품질 개선 (2026-07-08 ~ 07-11)
 
 ## 9차: 내 목소리(딸 목소리)로 벨소리 — 앱 내 직접 녹음 (2026-07-11)
