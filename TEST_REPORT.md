@@ -1,5 +1,30 @@
 # TEST_REPORT
 
+## Stella GPT: 앱 재진입 시 최신(마지막 보던) 채팅에서 시작 (2026-07-17)
+
+### 요구사항 (사용자)
+- 앱을 닫거나 나갔다 들어오면 **최신(이전에 보던) 채팅에서 시작**해야 하는데, 매번 오래된
+  "매번 Stella GPT에 로그인할 때, 가입했을 때…" 채팅이 열림.
+
+### 원인
+- `activeRoomId` 가 저장되지 않아 재진입 때 항상 `rooms[0]` 로 열림. `rooms[0]` 은 서버 병합 전
+  로컬 배열의 첫 방(대개 오래된 채팅). 직전 커밋의 **목록 최신순 정렬(sortRoomsByRecent)** 은
+  표시 순서만 바꿀 뿐 `activeRoomId` 선택에는 영향이 없어 여전히 옛 채팅이 열렸다.
+
+### 수정 (index.html)
+- `pickInitialRoom()` 신설: **마지막 보던 채팅(`K.lastRoom`)** 이 살아있으면 재개, 없으면
+  **활동(`_roomTime`=updatedAt→마지막 메시지→createdAt)이 가장 최근인 채팅** 선택(tombstone 제외).
+- `showApp`·`restoreAllData` 의 `rooms[0]` 기본값을 `pickInitialRoom()` 으로 대체. 서버 병합이
+  끝난 뒤 재선택하되, 사용자가 복원 중 직접 고른 채팅(`_userPicked`)은 덮어쓰지 않음.
+- 활성 채팅을 `bindRoomClick`·검색 열기·`saveRooms`(복원 후) 에서 `rememberActiveRoom()` 로 기억.
+- 버전: sw `stella-v126` / index 빌드 v117 / talk TALK_BUILD v126(동기).
+
+### 검증
+- `node --test test/*.test.js` **446/446 pass**(신규 초기채팅 선택 3건: 최신 선택/마지막 재개/부재·tombstone 폴백).
+- index.html 인라인 스크립트 4개 `new Function` 파싱 OK. 날씨 라이브 재검증(해외 예보 정상) 유지.
+
+---
+
 ## Stella GPT: 채팅 목록 최신순 정렬 + 카테고리 기본 접힘 + 채팅 저장 위치 users/{id} 이전 (2026-07-17)
 
 ### 요구사항 (사용자)
